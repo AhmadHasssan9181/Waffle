@@ -1,6 +1,10 @@
 package com.noobdev.waffle.api
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -9,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -31,52 +36,88 @@ import org.maplibre.android.maps.MapView
     * to display maps and location data.
 * */
 
+val apikey: String = "U7fg3KGqTysSBCZJpaNH"
+val mapTilerStyles = mapOf(
+    "Basic" to "https://api.maptiler.com/maps/basic/style.json?key=$apikey",
+    "Streets" to "https://api.maptiler.com/maps/streets/style.json?key=$apikey",
+    "Outdoor" to "https://api.maptiler.com/maps/outdoor/style.json?key=$apikey",
+    "Bright" to "https://api.maptiler.com/maps/bright/style.json?key=$apikey",
+    "Dark" to "https://api.maptiler.com/maps/darkmatter/style.json?key=$apikey",
+    "Satellite" to "https://api.maptiler.com/maps/satellite/style.json?key=$apikey",
+    "Hybrid" to "https://api.maptiler.com/maps/hybrid/style.json?key=$apikey",
+    "Topo" to "https://api.maptiler.com/maps/topo/style.json?key=$apikey"
+)
 
 @OptIn(ExperimentalStdlibApi::class, ExperimentalPermissionsApi::class)
 @Composable
-fun LocationAwareMap() {
+fun LocationAwareMap(currentStyleIndex: Int) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var mapview by remember { mutableStateOf<MapView?>(null) }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
+    var mapboxMap by remember { mutableStateOf<org.maplibre.android.maps.MapLibreMap?>(null) }
     MapLibre.getInstance(context)
-    val locationPermissions= listOf(
+    val locationPermissions = listOf(
         android.Manifest.permission.ACCESS_FINE_LOCATION,
         android.Manifest.permission.ACCESS_COARSE_LOCATION
     )
     val permissionState = rememberMultiplePermissionsState(locationPermissions)
     val hasLocationPermission = permissionState.allPermissionsGranted
     LaunchedEffect(Unit) {
-        if(!hasLocationPermission){
+        if (!hasLocationPermission) {
             permissionState.launchMultiplePermissionRequest()
         }
     }
+
+    LaunchedEffect(currentStyleIndex) {
+        mapboxMap?.setStyle(mapTilerStyles.values.elementAt(currentStyleIndex)) { style ->
+
+            if (hasLocationPermission) {
+                try {
+                    val options = LocationComponentActivationOptions
+                        .builder(context, style)
+                        .useDefaultLocationEngine(true)
+                        .build()
+
+                    mapboxMap?.locationComponent?.apply {
+                        activateLocationComponent(options)
+                        isLocationComponentEnabled = true
+                        cameraMode = CameraMode.TRACKING
+                        renderMode = RenderMode.COMPASS
+                    }
+
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
     AndroidView(
-        factory = {
-            ctx ->
-            MapView(ctx).also {mv->
+        factory = { ctx ->
+            MapView(ctx).also { mv ->
                 mv.onCreate(null)
                 mv.getMapAsync { map ->
-                    map.setStyle("https://tiles.planetiler.com/dark-matter/style.json") { style ->
-
+                    mapboxMap = map
+                    map.setStyle(
+                        mapTilerStyles.values.elementAt(currentStyleIndex)
+                    ) { style ->
                         if (hasLocationPermission) {
                             try {
                                 val options = LocationComponentActivationOptions
                                     .builder(ctx, style)
                                     .useDefaultLocationEngine(true)
                                     .build()
-
-                                map.locationComponent.activateLocationComponent(options)
-                                map.locationComponent.isLocationComponentEnabled = true
-                                map.locationComponent.cameraMode = CameraMode.TRACKING
-                                map.locationComponent.renderMode = RenderMode.COMPASS
-
-                            } catch (e: SecurityException) {
-                                e.printStackTrace()
-                            }
+                                map.locationComponent.apply {
+                                    activateLocationComponent(options)
+                                    isLocationComponentEnabled = true
+                                    cameraMode = CameraMode.TRACKING
+                                    renderMode = RenderMode.COMPASS
+                                }
+                            }catch (e: SecurityException) {
+                                e.printStackTrace()}
                         }
                     }
                 }
-                mapview = mv
+                mapView = mv
             }
         },
         modifier = Modifier.fillMaxSize()
@@ -84,11 +125,11 @@ fun LocationAwareMap() {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> mapview?.onStart()
-                Lifecycle.Event.ON_RESUME -> mapview?.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapview?.onPause()
-                Lifecycle.Event.ON_STOP -> mapview?.onStop()
-                Lifecycle.Event.ON_DESTROY -> mapview?.onDestroy()
+                Lifecycle.Event.ON_START -> mapView?.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView?.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView?.onPause()
+                Lifecycle.Event.ON_STOP -> mapView?.onStop()
+                Lifecycle.Event.ON_DESTROY -> mapView?.onDestroy()
                 else -> {}
             }
         }

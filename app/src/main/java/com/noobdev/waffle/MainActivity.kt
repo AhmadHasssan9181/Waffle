@@ -17,7 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.noobdev.waffle.map.ParentMapScreen
 import com.noobdev.waffle.ui.theme.WaffleTheme
+import kotlinx.coroutines.GlobalScope.coroutineContext
+import org.maplibre.android.MapLibre
+import org.maplibre.android.WellKnownTileServer
+import kotlin.coroutines.coroutineContext
 
 class MainActivity : ComponentActivity() {
 
@@ -27,10 +32,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MapLibre.getInstance(
+            this,
+            "U7fg3KGqTysSBCZJpaNH",
+            WellKnownTileServer.MapLibre
+        )
         enableEdgeToEdge()
         setContent {
             WaffleTheme {
                 LocationPermissionScreen()
+                ParentMapScreen()
             }
         }
     }
