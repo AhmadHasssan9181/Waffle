@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Cloud
@@ -21,11 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BrushPainter
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 
 @Composable
-fun Home()
+fun Home(navController: NavController)
 {
 
     Column (modifier = Modifier
@@ -42,6 +45,44 @@ fun Home()
         EarthquakeCard()
         FloodCard()
         WildfireCard()
+    }
+}
+
+
+@Composable
+fun ActiveDisastersCard()
+{
+    Card (
+        modifier = Modifier
+            .background(color = Color(0xFFE1A8A1)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            )
+            {
+                //The plan here is to make a mutable list of active disasters then pass that info into map then just display
+                //There might be contextual loss but its fine for now
+                val disasters = mapOf(
+                    "Earthquakes" to "",
+                    "Floods" to "",
+                    "Wildfires" to ""
+                )
+                Text("Active Disasters")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            )
+            {
+                //pass the value from open cage after reverse geocoding
+                Text("Your location = "+"" )
+            }
+        }
     }
 }
 @Composable
@@ -91,5 +132,5 @@ fun weather()
 @Composable
 fun pewpew()
 {
-    Home()
+    ActiveDisastersCard()
 }
