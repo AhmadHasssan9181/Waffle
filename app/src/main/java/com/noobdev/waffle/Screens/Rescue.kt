@@ -1,8 +1,5 @@
 package com.noobdev.waffle.Screens
 
-import android.R
-import android.net.Uri
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -138,7 +135,7 @@ fun Rescue(navController: NavController) {
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = Color.LightGray
                 ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(150.dp)
             )
 
             Spacer(Modifier.height(24.dp))

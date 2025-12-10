@@ -26,6 +26,7 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 
 // MapLibre API call and data classes with a location aware map setup
@@ -50,7 +51,8 @@ val mapTilerStyles = mapOf(
 
 @OptIn(ExperimentalStdlibApi::class, ExperimentalPermissionsApi::class)
 @Composable
-fun LocationAwareMap(currentStyleIndex: Int) {
+fun LocationAwareMap(currentStyleIndex: Int,modifier: Modifier = Modifier,
+                     onMapReady:(MapLibreMap) -> Unit={}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView by remember { mutableStateOf<MapView?>(null) }
@@ -115,6 +117,7 @@ fun LocationAwareMap(currentStyleIndex: Int) {
                             }catch (e: SecurityException) {
                                 e.printStackTrace()}
                         }
+                        onMapReady(map)
                     }
                 }
                 mapView = mv

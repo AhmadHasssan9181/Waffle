@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.noobdev.waffle.Sketching.HeatmapDemoScreen
 import com.noobdev.waffle.map.ParentMapScreen
 import com.noobdev.waffle.ui.theme.WaffleTheme
 import kotlinx.coroutines.GlobalScope.coroutineContext
@@ -40,8 +41,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             WaffleTheme {
-                LocationPermissionScreen()
-                ParentMapScreen()
+                //LocationPermissionScreen()
+                HeatmapDemoScreen()
+                //ParentMapScreen()
             }
         }
     }

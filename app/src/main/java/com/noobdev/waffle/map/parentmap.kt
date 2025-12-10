@@ -49,6 +49,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.noobdev.waffle.api.LocationAwareMap
 import com.noobdev.waffle.api.mapTilerStyles
+import org.maplibre.android.maps.MapLibreMap
 
 /*
 * i am making a parent map screen here
@@ -57,7 +58,7 @@ import com.noobdev.waffle.api.mapTilerStyles
 * --be creative with it don't modify the parent func just the params*/
 
 @Composable
-fun ParentMapScreen() {
+fun ParentMapScreen(mapConfiguration : (MapLibreMap) ->Unit = {}) {
 
     var currentStyleIndex by remember { mutableStateOf(1) }
     val styleCount = mapTilerStyles.size
@@ -72,7 +73,7 @@ fun ParentMapScreen() {
         Column(
             modifier = Modifier
         ) {
-            LocationAwareMap(currentStyleIndex)
+            LocationAwareMap(currentStyleIndex=currentStyleIndex, onMapReady = mapConfiguration)
         }
     }
     Column (modifier = Modifier.fillMaxSize()
