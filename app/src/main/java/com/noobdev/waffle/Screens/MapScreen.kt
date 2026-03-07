@@ -85,6 +85,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // Map instance
         var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
 
+        // Direct reference to the route GeoJsonSource for fast in-place updates (vanishing trail)
+        var routeSource by remember { mutableStateOf<GeoJsonSource?>(null) }
+
         // Screen state
         var screenState by remember { mutableStateOf(MapScreenState.IDLE) }
 
@@ -105,12 +108,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
 
-        // Navigation
+        // Navigation - keep last non-null route to prevent crash during exit animation
         var currentInstructionIndex by remember { mutableStateOf(0) }
         var navigationInstructions by remember { mutableStateOf<List<String>>(emptyList()) }
         var remainingDistance by remember { mutableStateOf(0.0) }
         var remainingDuration by remember { mutableStateOf(0.0) }
         var currentBearing by remember { mutableStateOf(0.0) }
+        // Holds the last non-null route so NavigationModeUI never crashes during exit animation
+        var lastNavigationRoute by remember { mutableStateOf<RouteResult?>(null) }
 
         // Camera & User Interaction
         var isUserPanMode by remember { mutableStateOf(false) }
@@ -200,15 +205,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 if (snapResult.matchedIndex != -1 &&
                                                                                 activeRoute != null
                                                                 ) {
-                                                                        mapInstance?.let { map ->
-                                                                                updateRouteSource(
-                                                                                        map,
-                                                                                        activeRoute
-                                                                                                .coordinates,
-                                                                                        snapResult
-                                                                                                .matchedIndex
-                                                                                )
-                                                                        }
+                                                                        trimRouteSource(
+                                                                                routeSource,
+                                                                                activeRoute.coordinates,
+                                                                                snapResult.matchedIndex
+                                                                        )
                                                                 }
 
                                                                 // Update instruction index based on
@@ -346,18 +347,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         currentBearing = simBearing
                         hasLocation = true
 
-                        // Update route source for vanishing trail
+                        // Update route source for vanishing trail – use direct source ref
                         val activeRoute =
                                 if (selectedProfile == "driving-car") routeResult
                                 else (walkRouteResult ?: routeResult)
                         if (activeRoute != null && simSegmentIndex >= 0) {
-                                mapInstance?.let { map ->
-                                        updateRouteSource(
-                                                map,
-                                                activeRoute.coordinates,
-                                                simSegmentIndex
-                                        )
-                                }
+                                trimRouteSource(
+                                        routeSource,
+                                        activeRoute.coordinates,
+                                        simSegmentIndex
+                                )
                         }
 
                         // Update instruction index based on simulator segment index
@@ -458,21 +457,41 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        // Draw route when available
+        // Draw route when available – stores direct source reference for fast updates
         LaunchedEffect(routeResult) {
                 routeResult?.let { result ->
                         if (result.success && result.coordinates.isNotEmpty()) {
                                 mapInstance?.getStyle { style ->
-                                        // Remove existing route layer if any
+                                        // Remove existing route layer/source if any
                                         try {
                                                 style.removeLayer("route-layer")
                                                 style.removeSource("route-source")
                                         } catch (e: Exception) {}
+                                        routeSource = null
 
-                                        // Draw route initially
-                                        updateRouteSource(mapInstance!!, result.coordinates, 0)
+                                        // Build GeoJSON for the full route
+                                        val coordsStr =
+                                                result.coordinates.joinToString(",") {
+                                                        "[${it.second},${it.first}]"
+                                                }
+                                        val geoJson =
+                                                """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coordsStr]}}"""
 
-                                        // Animate camera to show route
+                                        val newSource = GeoJsonSource("route-source", geoJson)
+                                        style.addSource(newSource)
+                                        val layer = LineLayer("route-layer", "route-source")
+                                        layer.setProperties(
+                                                lineColor(AndroidColor.parseColor("#4285F4")),
+                                                lineWidth(6f),
+                                                lineOpacity(0.9f),
+                                                lineCap(Property.LINE_CAP_ROUND),
+                                                lineJoin(Property.LINE_JOIN_ROUND)
+                                        )
+                                        style.addLayer(layer)
+                                        // Store reference for direct future updates
+                                        routeSource = newSource
+
+                                        // Animate camera to show full route bounds
                                         if (result.coordinates.size >= 2) {
                                                 val bounds =
                                                         org.maplibre.android.geometry.LatLngBounds
@@ -485,13 +504,29 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 mapInstance?.animateCamera(
                                                         CameraUpdateFactory.newLatLngBounds(
                                                                 bounds.build(),
-                                                                200 // padding
+                                                                200
                                                         ),
                                                         1500
                                                 )
                                         }
                                 }
                         }
+                }
+        }
+
+        // Cleanup: remove route from map and reset camera when this composable leaves composition
+        DisposableEffect(Unit) {
+                onDispose {
+                        mapInstance?.getStyle { style ->
+                                try {
+                                        style.removeLayer("route-layer")
+                                } catch (_: Exception) {}
+                                try {
+                                        style.removeSource("route-source")
+                                } catch (_: Exception) {}
+                        }
+                        mapInstance?.setPadding(0, 0, 0, 0)
+                        routeSource = null
                 }
         }
 
@@ -510,8 +545,19 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         ),
                                         1000
                                 )
-                        }
-                )
+                                // Detect user panning to show re-center button
+                                 map.addOnCameraMoveStartedListener { reason ->
+                                         if (reason ==
+                                                         MapLibreMap.OnCameraMoveStartedListener
+                                                                 .REASON_API_GESTURE &&
+                                                         screenState == MapScreenState.NAVIGATING
+                                         ) {
+                                                 isUserPanMode = true
+                                                 lastPanTime = System.currentTimeMillis()
+                                         }
+                                 }
+                         }
+                 )
 
                 // === GOOGLE MAPS-STYLE SEARCH BAR (Top) ===
                 AnimatedVisibility(
@@ -728,6 +774,19 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         navigationInstructions =
                                                 activeRoute?.instructions ?: emptyList()
 
+                                        // Snapshot initial remaining values
+                                        remainingDistance = activeRoute?.distanceMeters ?: 0.0
+                                        remainingDuration = activeRoute?.durationSeconds ?: 0.0
+
+                                        // Save route so NavigationModeUI never sees null
+                                        // during the exit animation
+                                        activeRoute?.let { lastNavigationRoute = it }
+
+                                        // Reset the route source to show full route from start
+                                        activeRoute?.let { r ->
+                                                trimRouteSource(routeSource, r.coordinates, 0)
+                                        }
+
                                         // Execute swoop transition
                                         mapInstance?.let { map ->
                                                 val nextWaypoint =
@@ -781,13 +840,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // === NAVIGATION MODE (Full turn-by-turn) ===
+        // Keep a stable reference: update lastNavigationRoute whenever routeResult becomes
+        // non-null.
+        // This prevents NavigationModeUI from crashing during the exit fade animation.
+        LaunchedEffect(routeResult) { routeResult?.let { lastNavigationRoute = it } }
+
         AnimatedVisibility(
                 visible = screenState == MapScreenState.NAVIGATING,
                 enter = fadeIn(),
                 exit = fadeOut()
         ) {
+                // Safe: lastNavigationRoute is only set to non-null, never cleared while visible
+                val safeRoute = lastNavigationRoute ?: return@AnimatedVisibility
                 NavigationModeUI(
-                        routeResult = routeResult!!,
+                        routeResult = safeRoute,
+                        remainingDistance = remainingDistance,
+                        remainingDuration = remainingDuration,
                         currentInstruction =
                                 navigationInstructions.getOrNull(currentInstructionIndex) ?: "",
                         currentIndex = currentInstructionIndex,
@@ -802,7 +870,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 routeSimulator.stopSimulation()
                                 isSimulationMode = false
 
-                                // Reset camera to normal mode
+                                // Reset camera to normal top-down mode
                                 mapInstance?.let { map ->
                                         CameraTransitionManager.exitNavigationMode(
                                                 map,
@@ -810,12 +878,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         )
                                 }
 
+                                // Clear route from map
                                 mapInstance?.getStyle { style ->
                                         try {
                                                 style.removeLayer("route-layer")
+                                        } catch (_: Exception) {}
+                                        try {
                                                 style.removeSource("route-source")
                                         } catch (_: Exception) {}
                                 }
+                                routeSource = null
                                 routeResult = null
                                 walkRouteResult = null
                                 selectedDestination = null
@@ -1575,6 +1647,8 @@ fun RoutePreviewCard(
 @Composable
 fun NavigationModeUI(
         routeResult: RouteResult,
+        remainingDistance: Double,
+        remainingDuration: Double,
         currentInstruction: String,
         currentIndex: Int,
         totalInstructions: Int,
@@ -1632,12 +1706,18 @@ fun NavigationModeUI(
                         ) {
                                 Column {
                                         Text(
-                                                formatDuration(routeResult.durationSeconds),
+                                                formatDuration(
+                                                        if (remainingDuration > 0) remainingDuration
+                                                        else routeResult.durationSeconds
+                                                ),
                                                 style = MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                                "${formatDistance(routeResult.distanceMeters)} remaining",
+                                                "${formatDistance(
+                                                        if (remainingDistance > 0) remainingDistance
+                                                        else routeResult.distanceMeters
+                                                )} remaining",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1866,4 +1946,24 @@ fun updateRouteSource(map: MapLibreMap, coordinates: List<Pair<Double, Double>>,
                         style.addLayer(layer)
                 }
         }
+}
+
+/**
+ * Fast direct update of the route GeoJsonSource for vanishing trail effect. Unlike
+ * updateRouteSource, this skips the async getStyle() callback by using the already-stored source
+ * reference – crucial for smooth 1-second updates during navigation.
+ */
+fun trimRouteSource(
+        source: GeoJsonSource?,
+        coordinates: List<Pair<Double, Double>>,
+        startIndex: Int
+) {
+        if (source == null || coordinates.size <= startIndex) return
+        val remainingCoords = coordinates.subList(max(0, startIndex), coordinates.size)
+        if (remainingCoords.isEmpty()) return
+
+        val coordsString = remainingCoords.joinToString(",") { "[${it.second},${it.first}]" }
+        val geoJson =
+                """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coordsString]}}"""
+        source.setGeoJson(geoJson)
 }
