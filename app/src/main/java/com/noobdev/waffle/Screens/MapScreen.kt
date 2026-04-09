@@ -52,6 +52,7 @@ import com.noobdev.waffle.navigation.CameraTransitionManager
 import com.noobdev.waffle.navigation.NavigationManager
 import com.noobdev.waffle.navigation.RouteSimulator
 import com.noobdev.waffle.navigation.SimulationSpeed
+import com.noobdev.waffle.routing.OfflineRoutingManager
 import com.noobdev.waffle.ui.theme.*
 import kotlin.math.max
 import kotlinx.coroutines.delay
@@ -107,6 +108,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var selectedProfile by remember { mutableStateOf("driving-car") }
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
+        var offlineRouteDebugMessage by remember { mutableStateOf<String?>(null) }
 
         // Navigation - keep last non-null route to prevent crash during exit animation
         var currentInstructionIndex by remember { mutableStateOf(0) }
@@ -641,6 +643,121 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         .padding(bottom = 80.dp)
                 ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FloatingActionButton(
+                                        onClick = {
+                                                scope.launch {
+                                                        isLoadingRoute = true
+                                                        offlineRouteDebugMessage = null
+
+                                                        val offlineEngine =
+                                                                OfflineRoutingManager
+                                                                        .getEngineOrNull()
+
+                                                        if (offlineEngine == null) {
+                                                                offlineRouteDebugMessage =
+                                                                        "Offline engine is not ready"
+                                                                isLoadingRoute = false
+                                                                return@launch
+                                                        }
+
+                                                        runCatching {
+                                                                        offlineEngine.calculateRoute(
+                                                                                startLat =
+                                                                                        33.6844,
+                                                                                startLng =
+                                                                                        73.0479,
+                                                                                endLat =
+                                                                                        33.7294,
+                                                                                endLng =
+                                                                                        73.0931
+                                                                        )
+                                                                }
+                                                                .onSuccess { response ->
+                                                                        if (response.hasErrors()) {
+                                                                                offlineRouteDebugMessage =
+                                                                                        "Offline route failed"
+                                                                        } else {
+                                                                                val bestPath =
+                                                                                        response.best
+                                                                                val coordinates =
+                                                                                        bestPath.points
+                                                                                                .map { point ->
+                                                                                                        Pair(
+                                                                                                                point.lat,
+                                                                                                                point.lon
+                                                                                                        )
+                                                                                                }
+
+                                                                                if (coordinates.isEmpty()) {
+                                                                                        offlineRouteDebugMessage =
+                                                                                                "Offline route returned no points"
+                                                                                } else {
+                                                                                        routeResult =
+                                                                                                RouteResult(
+                                                                                                        distanceMeters =
+                                                                                                                bestPath.distance,
+                                                                                                        durationSeconds =
+                                                                                                                bestPath.time /
+                                                                                                                        1000.0,
+                                                                                                        coordinates =
+                                                                                                                coordinates,
+                                                                                                        instructions =
+                                                                                                                listOf(
+                                                                                                                        "Offline route test"
+                                                                                                                ),
+                                                                                                        success =
+                                                                                                                true
+                                                                                                )
+                                                                                        walkRouteResult =
+                                                                                                null
+                                                                                        navigationInstructions =
+                                                                                                listOf(
+                                                                                                        "Offline route test"
+                                                                                                )
+                                                                                        currentInstructionIndex =
+                                                                                                0
+                                                                                        selectedDestination =
+                                                                                                GeoSearchResult(
+                                                                                                        name =
+                                                                                                                "Offline Test Route",
+                                                                                                        address =
+                                                                                                                "GraphHopper test",
+                                                                                                        lat =
+                                                                                                                33.7294,
+                                                                                                        lng =
+                                                                                                                73.0931,
+                                                                                                        type =
+                                                                                                                "debug"
+                                                                                                )
+                                                                                        searchQuery =
+                                                                                                "Offline Test Route"
+                                                                                        screenState =
+                                                                                                MapScreenState
+                                                                                                        .ROUTE_PREVIEW
+                                                                                        offlineRouteDebugMessage =
+                                                                                                "Offline route rendered"
+                                                                                }
+                                                                        }
+                                                                }
+                                                                .onFailure {
+                                                                        offlineRouteDebugMessage =
+                                                                                "Offline route crashed: ${it.message}"
+                                                                }
+
+                                                        isLoadingRoute = false
+                                                }
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(48.dp)
+                                ) {
+                                        Icon(
+                                                Icons.Default.CloudOff,
+                                                "Test Offline Route",
+                                                modifier = Modifier.size(22.dp)
+                                        )
+                                }
+
                                 // Layers button
                                 FloatingActionButton(
                                         onClick = { screenState = MapScreenState.LAYERS },
@@ -1085,6 +1202,28 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                         Text("Finding route...")
                                 }
+                        }
+                }
+        }
+
+        offlineRouteDebugMessage?.let { message ->
+                Box(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp)
+                ) {
+                        Card(
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                                shape = RoundedCornerShape(12.dp),
+                                colors =
+                                        CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surface
+                                        )
+                        ) {
+                                Text(
+                                        text = message,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodyMedium
+                                )
                         }
                 }
         }
