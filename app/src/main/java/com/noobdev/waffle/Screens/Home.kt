@@ -34,6 +34,9 @@ import com.noobdev.waffle.ui.components.*
 import com.noobdev.waffle.ui.theme.*
 import com.noobdev.waffle.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
+import com.noobdev.waffle.database.WaffleClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +44,9 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
         val uiState by viewModel.uiState.collectAsState()
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
+
+        // Database connection test state
+        var dbConnectionStatus by remember { mutableStateOf("Testing connection...") }
 
         // State for dynamic data
         var temperature by remember { mutableStateOf("--") }
@@ -52,6 +58,18 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
 
         // OpenCage API key - replace with actual
         val openCageKey = "YOUR_OPENCAGE_KEY"
+
+        // Test FastAPI backend connection
+        LaunchedEffect(Unit) {
+            try {
+                withContext(Dispatchers.IO) {
+                    val data = WaffleClient.api.getMapClosures()
+                    dbConnectionStatus = "✅ Connected! Map data length: ${data.length} chars"
+                }
+            } catch (e: Exception) {
+                dbConnectionStatus = "❌ Connection Failed: ${e.localizedMessage}"
+            }
+        }
 
         // Get location and weather on first load
         LaunchedEffect(Unit) {
@@ -104,20 +122,51 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
                                                                                         "Light Rain"
                                                                                 temp > 35 -> "Hot"
                                                                                 temp < 10 -> "Cold"
-                                                                                else -> "Clear"
+                                                                                else -> "Mild"
                                                                         }
                                                         }
                                                 }
                                         }
                                 }
-                        } catch (e: SecurityException) {}
+                        } catch (e: Exception) {
+                                e.printStackTrace()
+                        }
                 }
         }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Scaffold(
+                topBar = {
+                        TopAppBar(
+                                title = {
+                                        Column {
+                                                Text(
+                                                        "Good ${uiState.greeting}, Waffle",
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                )
+                                                Text(
+                                                        "Current location: $locationName",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                        }
+                                },
+                                actions = {
+                                        IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Settings,
+                                                        contentDescription = "Settings",
+                                                        tint = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                        }
+                                }
+                        )
+                }
+        ) { paddingValues ->
                 Column(
                         modifier =
-                                Modifier.fillMaxSize()
+                                Modifier
+                                        .fillMaxSize()
+                                        .padding(paddingValues)
                                         .verticalScroll(rememberScrollState())
                                         .padding(16.dp)
                 ) {
@@ -125,6 +174,30 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
                         GreetingSection(greeting = uiState.greeting, locationName = locationName)
 
                         Spacer(modifier = Modifier.height(20.dp))
+
+                        // FAST API BACKEND TEST UI
+                        Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                        containerColor = if (dbConnectionStatus.contains("✅"))
+                                                Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                                )
+                        ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                                text = "Backend Database Status",
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black
+                                        )
+                                        Text(
+                                                text = dbConnectionStatus,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = Color.Black
+                                        )
+                                }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // === PAKISTAN ALERT BANNER ===
                         PakistanAlertBanner()
