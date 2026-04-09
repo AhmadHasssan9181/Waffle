@@ -7,4 +7,3 @@ interface WaffleApi {
     @GET("/api/v1/map/closures")
     suspend fun getMapClosures(): String
 }
-
