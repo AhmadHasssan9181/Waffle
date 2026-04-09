@@ -143,7 +143,7 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
 @Composable
 fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
     val borderColor =
-            when (alert.status) {
+            when (alert.status ?: StatusLevel.MONITORING) {
                 StatusLevel.CRITICAL -> DangerRed
                 StatusLevel.WARNING -> WarningOrange
                 StatusLevel.MONITORING -> InfoBlue
@@ -168,19 +168,19 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-            ) {
-                DisasterTypeBadge(type = alert.type)
-                StatusBadge(status = alert.status)
-            }
+              Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+              ) {
+                  DisasterTypeBadge(type = alert.type ?: "alert")
+                  StatusBadge(status = alert.status ?: StatusLevel.MONITORING)
+              }
 
-            Spacer(modifier = Modifier.height(12.dp))
+              Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                    text = alert.title,
+              Text(
+                      text = alert.title ?: "System Alert",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -198,21 +198,23 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                        text = alert.location,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                                        val location = alert.location ?: "Unknown Location"
+                                        Text(
+                                                text = location,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Details section
-            if (alert.details.isNotEmpty()) {
+            val safeDetails = alert.details ?: emptyMap()
+            if (safeDetails.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                alert.details.forEach { (key, value) ->
+                safeDetails.forEach { (key, value) ->
                     Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -240,7 +242,7 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                        text = alert.timestamp,
+                        text = alert.timestamp ?: "Just now",
                         style = WaffleTextStyles.timestamp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
