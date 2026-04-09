@@ -2,7 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.10"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.20"
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -80,4 +81,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
+    implementation("com.google.firebase:firebase-analytics")
 }

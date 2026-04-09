@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "123719265473",
+    "project_id": "waffle-eda32",
+    "storage_bucket": "waffle-eda32.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123719265473:android:c8e2ea85b7c128c1bff840",
+        "android_client_info": {
+          "package_name": "com.noobdev.waffle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn5awzjdnPmJlty0fvL1bYvjfis0RxE4o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
