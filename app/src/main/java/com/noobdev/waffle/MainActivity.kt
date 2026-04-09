@@ -19,9 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.noobdev.waffle.routing.OfflineRoutingManager
 import com.noobdev.waffle.ui.theme.AppTheme
 import com.noobdev.waffle.ui.theme.WaffleTheme
-import com.noobdev.waffle.utils.AssetCopier
 import com.noobdev.waffle.utils.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -49,15 +49,12 @@ class MainActivity : ComponentActivity() {
         preferencesManager = PreferencesManager(applicationContext)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { AssetCopier.copyGraphCacheToStorage(applicationContext) }
-                    .onSuccess { graphDir ->
-                        Log.d(
-                                TAG,
-                                "Offline graph asset verification complete at ${graphDir.absolutePath}"
-                        )
+            runCatching { OfflineRoutingManager.initialize(applicationContext) }
+                    .onSuccess {
+                        Log.d(TAG, "Offline routing engine verification complete")
                     }
                     .onFailure { throwable ->
-                        Log.e(TAG, "Offline graph asset verification failed", throwable)
+                        Log.e(TAG, "Offline routing engine verification failed", throwable)
                     }
         }
 

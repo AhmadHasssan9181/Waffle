@@ -3,6 +3,7 @@ package com.noobdev.waffle.routing
 import com.graphhopper.GraphHopper
 import com.graphhopper.GHRequest
 import com.graphhopper.GHResponse
+import com.graphhopper.config.CHProfile
 import com.graphhopper.config.Profile
 
 class LocalRoutingEngine(graphFolderAbsolutePath: String) {
@@ -11,18 +12,14 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
 
     init {
         hopper = GraphHopper().apply {
-            // Point GraphHopper to the internal storage folder
             setGraphHopperLocation(graphFolderAbsolutePath)
-
-            // Set up the exact car profile we baked on Fedora
+            // v1.0 safe profile
             setProfiles(Profile("car").setVehicle("car").setWeighting("fastest"))
-
-            // Load the offline map into the phone's RAM!
+            getCHPreparationHandler().setCHProfiles(CHProfile("car"))
             importOrLoad()
         }
     }
 
-    // Call this to get a route instantly
     fun calculateRoute(startLat: Double, startLng: Double, endLat: Double, endLng: Double): GHResponse {
         val request = GHRequest(startLat, startLng, endLat, endLng).apply {
             profile = "car"
