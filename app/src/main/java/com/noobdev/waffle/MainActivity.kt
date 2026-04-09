@@ -50,8 +50,34 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { OfflineRoutingManager.initialize(applicationContext) }
-                    .onSuccess {
+                    .onSuccess { routingEngine ->
                         Log.d(TAG, "Offline routing engine verification complete")
+
+                        runCatching {
+                            routingEngine.calculateRoute(
+                                    startLat = 33.6844,
+                                    startLng = 73.0479,
+                                    endLat = 33.7294,
+                                    endLng = 73.0931
+                            )
+                        }
+                                .onSuccess { response ->
+                                    if (response.hasErrors()) {
+                                        Log.e(
+                                                TAG,
+                                                "Offline route test failed with errors: ${response.errors}"
+                                        )
+                                    } else {
+                                        val bestPath = response.best
+                                        Log.d(
+                                                TAG,
+                                                "Offline route test success distanceMeters=${bestPath.distance} timeMs=${bestPath.time} pointCount=${bestPath.points.size()}"
+                                        )
+                                    }
+                                }
+                                .onFailure { throwable ->
+                                    Log.e(TAG, "Offline route test threw an exception", throwable)
+                                }
                     }
                     .onFailure { throwable ->
                         Log.e(TAG, "Offline routing engine verification failed", throwable)
