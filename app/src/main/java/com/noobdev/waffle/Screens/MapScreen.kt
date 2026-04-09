@@ -57,6 +57,7 @@ import com.noobdev.waffle.ui.theme.*
 import kotlin.math.max
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -109,6 +110,26 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
         var offlineRouteDebugMessage by remember { mutableStateOf<String?>(null) }
+
+        fun offlineResponseToRouteResult(
+                response: com.graphhopper.GHResponse
+        ): RouteResult? {
+                if (response.hasErrors()) return null
+
+                val bestPath = response.best
+                val coordinates =
+                        bestPath.points.map { point -> Pair(point.lat, point.lon) }
+
+                if (coordinates.isEmpty()) return null
+
+                return RouteResult(
+                        distanceMeters = bestPath.distance,
+                        durationSeconds = bestPath.time / 1000.0,
+                        coordinates = coordinates,
+                        instructions = listOf("Offline route"),
+                        success = true
+                )
+        }
 
         // Navigation - keep last non-null route to prevent crash during exit animation
         var currentInstructionIndex by remember { mutableStateOf(0) }
@@ -614,17 +635,54 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         // Calculate route
                                         scope.launch {
                                                 isLoadingRoute = true
-                                                val route =
-                                                        NavigationManager.calculateSmartRoute(
+                                                offlineRouteDebugMessage = null
+
+                                                val offlineEngine =
+                                                        OfflineRoutingManager.getEngineOrNull()
+
+                                                if (offlineEngine == null) {
+                                                        offlineRouteDebugMessage =
+                                                                "Offline engine is not ready"
+                                                        isLoadingRoute = false
+                                                        return@launch
+                                                }
+
+                                                runCatching {
+                                                        offlineEngine.calculateRoute(
                                                                 startLat = currentLat,
                                                                 startLng = currentLng,
                                                                 endLat = result.lat,
                                                                 endLng = result.lng
                                                         )
-                                                if (route.success) {
-                                                        routeResult = route
-                                                        navigationInstructions = route.instructions
-                                                        screenState = MapScreenState.ROUTE_PREVIEW
+                                                }
+                                                        .onSuccess { response ->
+                                                                val route =
+                                                                        offlineResponseToRouteResult(
+                                                                                response
+                                                                        )
+
+                                                                if (route != null) {
+                                                                        routeResult = route
+                                                                        walkRouteResult = null
+                                                                        navigationInstructions =
+                                                                                route.instructions
+                                                                        currentInstructionIndex = 0
+                                                                        screenState =
+                                                                                MapScreenState
+                                                                                        .ROUTE_PREVIEW
+                                                                        offlineRouteDebugMessage =
+                                                                                "Offline route rendered"
+                                                                } else {
+                                                                        offlineRouteDebugMessage =
+                                                                                "Offline route failed"
+                                                                }
+                                                        }
+                                                        .onFailure { error ->
+                                                                offlineRouteDebugMessage =
+                                                                        "Offline route crashed: ${error.message}"
+                                                        }
+                                                if (screenState != MapScreenState.ROUTE_PREVIEW) {
+                                                        routeResult = null
                                                 }
                                                 isLoadingRoute = false
                                         }
@@ -661,87 +719,56 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         }
 
                                                         runCatching {
-                                                                        offlineEngine.calculateRoute(
-                                                                                startLat =
-                                                                                        33.6844,
-                                                                                startLng =
-                                                                                        73.0479,
-                                                                                endLat =
-                                                                                        33.7294,
-                                                                                endLng =
-                                                                                        73.0931
-                                                                        )
-                                                                }
+                                                                offlineEngine.calculateRoute(
+                                                                        startLat = 33.6844,
+                                                                        startLng = 73.0479,
+                                                                        endLat = 33.7294,
+                                                                        endLng = 73.0931
+                                                                )
+                                                        }
                                                                 .onSuccess { response ->
-                                                                        if (response.hasErrors()) {
+                                                                        val route =
+                                                                                offlineResponseToRouteResult(
+                                                                                        response
+                                                                                )
+
+                                                                        if (route == null) {
                                                                                 offlineRouteDebugMessage =
                                                                                         "Offline route failed"
                                                                         } else {
-                                                                                val bestPath =
-                                                                                        response.best
-                                                                                val coordinates =
-                                                                                        bestPath.points
-                                                                                                .map { point ->
-                                                                                                        Pair(
-                                                                                                                point.lat,
-                                                                                                                point.lon
-                                                                                                        )
-                                                                                                }
-
-                                                                                if (coordinates.isEmpty()) {
-                                                                                        offlineRouteDebugMessage =
-                                                                                                "Offline route returned no points"
-                                                                                } else {
-                                                                                        routeResult =
-                                                                                                RouteResult(
-                                                                                                        distanceMeters =
-                                                                                                                bestPath.distance,
-                                                                                                        durationSeconds =
-                                                                                                                bestPath.time /
-                                                                                                                        1000.0,
-                                                                                                        coordinates =
-                                                                                                                coordinates,
-                                                                                                        instructions =
-                                                                                                                listOf(
-                                                                                                                        "Offline route test"
-                                                                                                                ),
-                                                                                                        success =
-                                                                                                                true
-                                                                                                )
-                                                                                        walkRouteResult =
-                                                                                                null
-                                                                                        navigationInstructions =
-                                                                                                listOf(
-                                                                                                        "Offline route test"
-                                                                                                )
-                                                                                        currentInstructionIndex =
-                                                                                                0
-                                                                                        selectedDestination =
-                                                                                                GeoSearchResult(
-                                                                                                        name =
-                                                                                                                "Offline Test Route",
-                                                                                                        address =
-                                                                                                                "GraphHopper test",
-                                                                                                        lat =
-                                                                                                                33.7294,
-                                                                                                        lng =
-                                                                                                                73.0931,
-                                                                                                        type =
-                                                                                                                "debug"
-                                                                                                )
-                                                                                        searchQuery =
-                                                                                                "Offline Test Route"
-                                                                                        screenState =
-                                                                                                MapScreenState
-                                                                                                        .ROUTE_PREVIEW
-                                                                                        offlineRouteDebugMessage =
-                                                                                                "Offline route rendered"
-                                                                                }
+                                                                                routeResult = route
+                                                                                walkRouteResult = null
+                                                                                navigationInstructions =
+                                                                                        listOf(
+                                                                                                "Offline route test"
+                                                                                        )
+                                                                                currentInstructionIndex =
+                                                                                        0
+                                                                                selectedDestination =
+                                                                                        GeoSearchResult(
+                                                                                                name =
+                                                                                                        "Offline Test Route",
+                                                                                                address =
+                                                                                                        "GraphHopper test",
+                                                                                                lat =
+                                                                                                        33.7294,
+                                                                                                lng =
+                                                                                                        73.0931,
+                                                                                                type =
+                                                                                                        "debug"
+                                                                                        )
+                                                                                searchQuery =
+                                                                                        "Offline Test Route"
+                                                                                screenState =
+                                                                                        MapScreenState
+                                                                                                .ROUTE_PREVIEW
+                                                                                offlineRouteDebugMessage =
+                                                                                        "Offline route rendered"
                                                                         }
                                                                 }
-                                                                .onFailure {
+                                                                .onFailure { error ->
                                                                         offlineRouteDebugMessage =
-                                                                                "Offline route crashed: ${it.message}"
+                                                                                "Offline route crashed: ${error.message}"
                                                                 }
 
                                                         isLoadingRoute = false
@@ -845,114 +872,105 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // === ROUTE PREVIEW CARD (Bottom - shows when route calculated) ===
-        Box(modifier = Modifier.fillMaxSize()) {
-                AnimatedVisibility(
-                        visible =
-                                screenState == MapScreenState.ROUTE_PREVIEW && routeResult != null,
-                        enter = slideInVertically { it },
-                        exit = slideOutVertically { it },
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                ) {
-                        RoutePreviewCard(
-                                destination = selectedDestination,
-                                routeResult = routeResult!!,
-                                selectedProfile = selectedProfile,
-                                walkRouteResult = walkRouteResult,
-                                isLoadingWalk = isLoadingWalk,
-                                onProfileChange = { profile ->
-                                        selectedProfile = profile
-                                        if (profile == "foot-walking" &&
-                                                        walkRouteResult == null &&
-                                                        selectedDestination != null
-                                        ) {
-                                                scope.launch {
-                                                        isLoadingWalk = true
-                                                        walkRouteResult =
-                                                                getRoute(
-                                                                        startLat = currentLat,
-                                                                        startLng = currentLng,
-                                                                        endLat =
-                                                                                selectedDestination!!
-                                                                                        .lat,
-                                                                        endLng =
-                                                                                selectedDestination!!
-                                                                                        .lng,
-                                                                        profile = "foot-walking"
-                                                                )
-                                                        isLoadingWalk = false
+        routeResult?.let { currentRouteResult ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                        AnimatedVisibility(
+                                visible = screenState == MapScreenState.ROUTE_PREVIEW,
+                                enter = slideInVertically { it },
+                                exit = slideOutVertically { it },
+                                modifier = Modifier.align(Alignment.BottomCenter)
+                        ) {
+                                RoutePreviewCard(
+                                        destination = selectedDestination,
+                                        routeResult = currentRouteResult,
+                                        selectedProfile = selectedProfile,
+                                        walkRouteResult = walkRouteResult,
+                                        isLoadingWalk = isLoadingWalk,
+                                        onProfileChange = { profile ->
+                                                selectedProfile = profile
+                                                if (profile == "foot-walking" &&
+                                                                walkRouteResult == null &&
+                                                                selectedDestination != null
+                                                ) {
+                                                        scope.launch {
+                                                                isLoadingWalk = true
+                                                                walkRouteResult =
+                                                                        getRoute(
+                                                                                startLat = currentLat,
+                                                                                startLng = currentLng,
+                                                                                endLat =
+                                                                                        selectedDestination!!
+                                                                                                .lat,
+                                                                                endLng =
+                                                                                        selectedDestination!!
+                                                                                                .lng,
+                                                                                profile = "foot-walking"
+                                                                        )
+                                                                isLoadingWalk = false
+                                                        }
                                                 }
-                                        }
-                                },
-                                onStartNavigation = {
-                                        currentInstructionIndex = 0
-                                        val activeRoute =
-                                                if (selectedProfile == "driving-car") routeResult
-                                                else (walkRouteResult ?: routeResult)
-                                        navigationInstructions =
-                                                activeRoute?.instructions ?: emptyList()
+                                        },
+                                        onStartNavigation = {
+                                                currentInstructionIndex = 0
+                                                val activeRoute =
+                                                        if (selectedProfile == "driving-car") {
+                                                                currentRouteResult
+                                                        } else {
+                                                                walkRouteResult ?: currentRouteResult
+                                                        }
+                                                navigationInstructions = activeRoute.instructions
 
-                                        // Snapshot initial remaining values
-                                        remainingDistance = activeRoute?.distanceMeters ?: 0.0
-                                        remainingDuration = activeRoute?.durationSeconds ?: 0.0
+                                                mapInstance?.let { map ->
+                                                        val nextWaypoint =
+                                                                activeRoute.coordinates.getOrNull(1)
+                                                                        ?.let {
+                                                                                LatLng(
+                                                                                        it.first,
+                                                                                        it.second
+                                                                                )
+                                                                        }
+                                                        CameraTransitionManager
+                                                                .executeNavigationStartTransition(
+                                                                        map = map,
+                                                                        currentPosition =
+                                                                                LatLng(
+                                                                                        currentLat,
+                                                                                        currentLng
+                                                                                ),
+                                                                        nextWaypoint = nextWaypoint
+                                                                )
+                                                }
 
-                                        // Save route so NavigationModeUI never sees null
-                                        // during the exit animation
-                                        activeRoute?.let { lastNavigationRoute = it }
-
-                                        // Reset the route source to show full route from start
-                                        activeRoute?.let { r ->
-                                                trimRouteSource(routeSource, r.coordinates, 0)
-                                        }
-
-                                        // Execute swoop transition
-                                        mapInstance?.let { map ->
-                                                val nextWaypoint =
-                                                        activeRoute?.coordinates?.getOrNull(1)
-                                                                ?.let {
-                                                                        LatLng(it.first, it.second)
-                                                                }
-                                                CameraTransitionManager
-                                                        .executeNavigationStartTransition(
-                                                                map = map,
-                                                                currentPosition =
-                                                                        LatLng(
-                                                                                currentLat,
-                                                                                currentLng
-                                                                        ),
-                                                                nextWaypoint = nextWaypoint
+                                                if (isSimulationMode) {
+                                                        routeSimulator.startSimulation(
+                                                                coordinates = activeRoute.coordinates,
+                                                                speedMps = selectedSimSpeed.speedMps,
+                                                                scope = scope
                                                         )
-                                        }
+                                                }
 
-                                        // Start simulation if enabled
-                                        if (isSimulationMode && activeRoute != null) {
-                                                routeSimulator.startSimulation(
-                                                        coordinates = activeRoute.coordinates,
-                                                        speedMps = selectedSimSpeed.speedMps,
-                                                        scope = scope
-                                                )
-                                        }
-
-                                        screenState = MapScreenState.NAVIGATING
-                                },
-                                onClose = {
-                                        mapInstance?.getStyle { style ->
-                                                try {
-                                                        style.removeLayer("route-layer")
-                                                        style.removeSource("route-source")
-                                                } catch (_: Exception) {}
-                                        }
-                                        routeResult = null
-                                        walkRouteResult = null
-                                        selectedDestination = null
-                                        selectedProfile = "driving-car"
-                                        searchQuery = ""
-                                        screenState = MapScreenState.IDLE
-                                },
-                                isSimulationMode = isSimulationMode,
-                                onSimulationModeChange = { isSimulationMode = it },
-                                selectedSimSpeed = selectedSimSpeed,
-                                onSimSpeedChange = { selectedSimSpeed = it }
-                        )
+                                                screenState = MapScreenState.NAVIGATING
+                                        },
+                                        onClose = {
+                                                mapInstance?.getStyle { style ->
+                                                        try {
+                                                                style.removeLayer("route-layer")
+                                                                style.removeSource("route-source")
+                                                        } catch (_: Exception) {}
+                                                }
+                                                routeResult = null
+                                                walkRouteResult = null
+                                                selectedDestination = null
+                                                selectedProfile = "driving-car"
+                                                searchQuery = ""
+                                                screenState = MapScreenState.IDLE
+                                        },
+                                        isSimulationMode = isSimulationMode,
+                                        onSimulationModeChange = { isSimulationMode = it },
+                                        selectedSimSpeed = selectedSimSpeed,
+                                        onSimSpeedChange = { selectedSimSpeed = it }
+                                )
+                        }
                 }
         }
 
@@ -1014,7 +1032,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         }
                 )
         }
-
         // === SIMULATION CONTROLS (shown during navigation when sim active) ===
         Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
@@ -1374,8 +1391,13 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                         suggestions = getQuickCitySuggestions()
                 } else if (query.length >= 2) {
                         isLoading = true
-                        suggestions = searchLocations(query)
+                        suggestions =
+                                withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                        OfflineGeocoder.search(query)
+                                }
                         isLoading = false
+                } else {
+                        suggestions = emptyList()
                 }
         }
 
@@ -1415,6 +1437,30 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                         )
                                 }
                                 HorizontalDivider()
+                        }
+
+                        if (isLoading) {
+                                Box(
+                                        modifier =
+                                                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                        contentAlignment = Alignment.Center
+                                ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                        } else if (suggestions.isEmpty() && query.isNotBlank()) {
+                                Box(
+                                        modifier =
+                                                Modifier.fillMaxWidth().padding(
+                                                        horizontal = 16.dp,
+                                                        vertical = 24.dp
+                                                )
+                                ) {
+                                        Text(
+                                                text = "No offline matches found",
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.bodyMedium
+                                        )
+                                }
                         }
 
                         // Results

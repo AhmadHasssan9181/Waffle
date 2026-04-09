@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.noobdev.waffle.api.OfflineGeocoder
 import com.noobdev.waffle.routing.OfflineRoutingManager
 import com.noobdev.waffle.ui.theme.AppTheme
 import com.noobdev.waffle.ui.theme.WaffleTheme
@@ -49,6 +50,8 @@ class MainActivity : ComponentActivity() {
         preferencesManager = PreferencesManager(applicationContext)
 
         lifecycleScope.launch(Dispatchers.IO) {
+            OfflineGeocoder.load(applicationContext)
+
             runCatching { OfflineRoutingManager.initialize(applicationContext) }
                     .onSuccess { routingEngine ->
                         Log.d(TAG, "Offline routing engine verification complete")
