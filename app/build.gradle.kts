@@ -85,4 +85,8 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-analytics")
+
+    //graphHopper offline routing engine ke lia 2 dependencies
+    implementation("com.graphhopper:graphhopper-core:8.0")
+    implementation("org.slf4j:slf4j-android:1.7.36")
 }

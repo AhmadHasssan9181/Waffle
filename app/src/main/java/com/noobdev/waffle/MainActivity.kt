@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -17,13 +18,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.noobdev.waffle.ui.theme.AppTheme
 import com.noobdev.waffle.ui.theme.WaffleTheme
+import com.noobdev.waffle.utils.AssetCopier
 import com.noobdev.waffle.utils.PreferencesManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import org.maplibre.android.WellKnownTileServer
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val TAG = "MainActivity"
+    }
 
     private val locationPermission = Manifest.permission.ACCESS_FINE_LOCATION
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -39,6 +47,19 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Preferences Manager
         preferencesManager = PreferencesManager(applicationContext)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { AssetCopier.copyGraphCacheToStorage(applicationContext) }
+                    .onSuccess { graphDir ->
+                        Log.d(
+                                TAG,
+                                "Offline graph asset verification complete at ${graphDir.absolutePath}"
+                        )
+                    }
+                    .onFailure { throwable ->
+                        Log.e(TAG, "Offline graph asset verification failed", throwable)
+                    }
+        }
 
         enableEdgeToEdge()
 
