@@ -251,11 +251,11 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
                         } else {
                                 uiState.activeAlerts.take(3).forEach { alert ->
                                         DisasterAlertCard(
-                                                title = alert.title,
+                                                title = alert.title ?: "System Alert",
                                                 location = alert.location,
-                                                status = alert.status,
-                                                disasterType = alert.type,
-                                                timestamp = alert.timestamp,
+                                                status = alert.status ?: StatusLevel.MONITORING,
+                                                disasterType = alert.type ?: "alert",
+                                                timestamp = alert.timestamp ?: "Just now",
                                                 onClick = {
                                                         navController.navigate(Screen.Map.route)
                                                 }

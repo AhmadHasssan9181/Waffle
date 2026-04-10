@@ -11,21 +11,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.noobdev.waffle.database.WaffleClient
+import android.util.Log
 
 // ============================================
 // DATA MODELS
 // ============================================
 
 data class DisasterAlert(
-        val id: String,
-        val title: String,
-        val location: String,
-        val type: String, // earthquake, flood, wildfire, storm
-        val status: StatusLevel,
-        val timestamp: String,
-        val latitude: Double,
-        val longitude: Double,
-        val details: Map<String, String> = emptyMap()
+        val id: String?,
+        val title: String?,
+        val location: String?, // Make location nullable to prevent crashes if backend drops it
+        val type: String?, // earthquake, flood, wildfire, storm
+        val status: StatusLevel?,
+        val timestamp: String?,
+        val latitude: Double?,
+        val longitude: Double?,
+        val details: Map<String, String>? = emptyMap()
 )
 
 data class HomeUiState(
@@ -86,32 +88,47 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
             _uiState.value = _uiState.value.copy(greeting = greeting)
 
-            // Load mock alerts for now
-            val mockAlerts =
-                    listOf(
-                            DisasterAlert(
-                                    id = "1",
-                                    title = "Flash Flood Warning",
-                                    location = "Valencia, Spain",
-                                    type = "flood",
-                                    status = StatusLevel.CRITICAL,
-                                    timestamp = "2 hours ago",
-                                    latitude = 39.4699,
-                                    longitude = -0.3763
-                            ),
-                            DisasterAlert(
-                                    id = "2",
-                                    title = "Earthquake Detected",
-                                    location = "Kobe Region, Japan",
-                                    type = "earthquake",
-                                    status = StatusLevel.WARNING,
-                                    timestamp = "5 hours ago",
-                                    latitude = 34.6901,
-                                    longitude = 135.1956
-                            )
-                    )
+            // Try to fetch alerts dynamically from the network database
+            try {
+                val alerts = WaffleClient.api.getAlerts()
+                _uiState.value = _uiState.value.copy(
+                    activeAlerts = alerts,
+                    isLoading = false
+                )
+                Log.d("HomeViewModel", "Loaded ${alerts.size} alerts from network.")
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Failed to fetch alerts from network: ${e.message}")
 
-            _uiState.value = _uiState.value.copy(activeAlerts = mockAlerts, isLoading = false)
+                // Load fallback mock alerts if network fails
+                val mockAlerts =
+                        listOf(
+                                DisasterAlert(
+                                        id = "1",
+                                        title = "Flash Flood Warning",
+                                        location = "Valencia, Spain",
+                                        type = "flood",
+                                        status = StatusLevel.CRITICAL,
+                                        timestamp = "2 hours ago",
+                                        latitude = 39.4699,
+                                        longitude = -0.3763
+                                ),
+                                DisasterAlert(
+                                        id = "2",
+                                        title = "Earthquake Detected",
+                                        location = "Kobe Region, Japan",
+                                        type = "earthquake",
+                                        status = StatusLevel.WARNING,
+                                        timestamp = "5 hours ago",
+                                        latitude = 34.6901,
+                                        longitude = 135.1956
+                                )
+                        )
+                _uiState.value = _uiState.value.copy(
+                    activeAlerts = mockAlerts,
+                    isLoading = false,
+                    error = "Using offline data: ${e.localizedMessage}"
+                )
+            }
         }
     }
 
@@ -172,6 +189,14 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
+            // Try loading from live Fast API backend database first
+            try {
+                val alerts = WaffleClient.api.getAlerts()
+                _uiState.value = _uiState.value.copy(alerts = alerts, isLoading = false)
+                Log.d("AlertsViewModel", "Loaded ${alerts.size} alerts from network.")
+            } catch (e: Exception) {
+                Log.e("AlertsViewModel", "Failed to fetch alerts, using mock fallback: ${e.message}")
+                
             // Mock data - in production would fetch from API/database
             val alerts =
                     listOf(
@@ -241,7 +266,8 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
                             )
                     )
 
-            _uiState.value = _uiState.value.copy(alerts = alerts, isLoading = false)
+            _uiState.value = _uiState.value.copy(alerts = alerts, isLoading = false, error = "Using offline data: ${e.localizedMessage}")
+            }
         }
     }
 
