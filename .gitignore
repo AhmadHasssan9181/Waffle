@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Large binary assets
+app/src/main/assets/graph-cache/
+app/src/main/assets/offline_places.json
+
+# Codex rescue/temp files
+.codex
