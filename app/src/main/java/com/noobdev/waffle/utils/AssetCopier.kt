@@ -5,6 +5,13 @@ import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 
+
+
+//This shit is for when app starts like when
+// boots up it capies the graph-cache into device internal storage and shit
+
+
+
 object AssetCopier {
     private const val TAG = "AssetCopier"
 

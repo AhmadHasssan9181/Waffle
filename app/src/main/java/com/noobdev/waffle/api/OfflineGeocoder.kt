@@ -6,6 +6,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
+
+
+//this is used in the searching of the local data storage od locations it runs the entire json which
+//is called offline_place.json or something it has everything go throughts it and instatnly return
+//the top match on the list
+
+
 object OfflineGeocoder {
     private const val TAG = "OfflineGeocoder"
     private val places = mutableListOf<GeoSearchResult>()
