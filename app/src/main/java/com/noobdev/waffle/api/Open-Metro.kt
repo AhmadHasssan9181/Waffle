@@ -15,6 +15,7 @@ import retrofit2.http.Query
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import kotlinx.serialization.ExperimentalSerializationApi
 
 /*
 * Metro Weather Service (Open-Metro)
@@ -63,6 +64,7 @@ object OpenMetroRetrofitInstance {
             .build()
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
     val api: OpenMetroApiService by lazy {
         Retrofit.Builder()
             .baseUrl("https://api.open-meteo.com/")

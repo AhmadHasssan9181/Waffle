@@ -642,31 +642,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 isLoadingRoute = true
                                                 offlineRouteDebugMessage = null
 
-                                                val offlineEngine =
-                                                        OfflineRoutingManager.getEngineOrNull()
-
-                                                if (offlineEngine == null) {
-                                                        offlineRouteDebugMessage =
-                                                                "Offline engine is not ready"
-                                                        isLoadingRoute = false
-                                                        return@launch
-                                                }
-
                                                 runCatching {
-                                                        offlineEngine.calculateRoute(
+                                                        com.noobdev.waffle.api.getRoute(
                                                                 startLat = currentLat,
                                                                 startLng = currentLng,
                                                                 endLat = result.lat,
                                                                 endLng = result.lng
                                                         )
                                                 }
-                                                        .onSuccess { response ->
-                                                                val route =
-                                                                        offlineResponseToRouteResult(
-                                                                                response
-                                                                        )
-
-                                                                if (route != null) {
+                                                        .onSuccess { route ->
+                                                                if (route.success) {
                                                                         routeResult = route
                                                                         walkRouteResult = null
                                                                         navigationInstructions =
@@ -676,16 +661,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                 MapScreenState
                                                                                         .ROUTE_PREVIEW
                                                                         offlineRouteDebugMessage =
-                                                                                "Offline route rendered"
+                                                                                "Online route rendered"
                                                                 } else {
                                                                         offlineRouteDebugMessage =
-                                                                                "Offline route failed"
+                                                                                "Online route failed: ${route.errorMessage}"
                                                                 }
                                                         }
                                                         .onFailure { error ->
                                                                 offlineRouteDebugMessage =
-                                                                        "Offline route crashed: ${error.message}"
+                                                                        "Online route crashed: ${error.message}"
                                                         }
+
                                                 if (screenState != MapScreenState.ROUTE_PREVIEW) {
                                                         routeResult = null
                                                 }
@@ -712,70 +698,31 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         isLoadingRoute = true
                                                         offlineRouteDebugMessage = null
 
-                                                        val offlineEngine =
-                                                                OfflineRoutingManager
-                                                                        .getEngineOrNull()
-
-                                                        if (offlineEngine == null) {
-                                                                offlineRouteDebugMessage =
-                                                                        "Offline engine is not ready"
-                                                                isLoadingRoute = false
-                                                                return@launch
-                                                        }
-
                                                         runCatching {
-                                                                offlineEngine.calculateRoute(
+                                                                com.noobdev.waffle.api.getRoute(
                                                                         startLat = 33.6844,
                                                                         startLng = 73.0479,
                                                                         endLat = 33.7294,
                                                                         endLng = 73.0931
                                                                 )
                                                         }
-                                                                .onSuccess { response ->
-                                                                        val route =
-                                                                                offlineResponseToRouteResult(
-                                                                                        response
-                                                                                )
-
-                                                                        if (route == null) {
-                                                                                offlineRouteDebugMessage =
-                                                                                        "Offline route failed"
+                                                                .onSuccess { route ->
+                                                                        if (!route.success) {
+                                                                                offlineRouteDebugMessage = "Online route failed: ${route.errorMessage}"
                                                                         } else {
                                                                                 routeResult = route
                                                                                 walkRouteResult = null
                                                                                 navigationInstructions =
-                                                                                        listOf(
-                                                                                                "Offline route test"
-                                                                                        )
-                                                                                currentInstructionIndex =
-                                                                                        0
-                                                                                selectedDestination =
-                                                                                        GeoSearchResult(
-                                                                                                name =
-                                                                                                        "Offline Test Route",
-                                                                                                address =
-                                                                                                        "GraphHopper test",
-                                                                                                lat =
-                                                                                                        33.7294,
-                                                                                                lng =
-                                                                                                        73.0931,
-                                                                                                type =
-                                                                                                        "debug"
-                                                                                        )
-                                                                                searchQuery =
-                                                                                        "Offline Test Route"
-                                                                                screenState =
-                                                                                        MapScreenState
-                                                                                                .ROUTE_PREVIEW
-                                                                                offlineRouteDebugMessage =
-                                                                                        "Offline route rendered"
+                                                                                        route.instructions
+                                                                                currentInstructionIndex = 0
+                                                                                screenState = MapScreenState.ROUTE_PREVIEW
+                                                                                offlineRouteDebugMessage = "Online route rendered"
                                                                         }
                                                                 }
                                                                 .onFailure { error ->
                                                                         offlineRouteDebugMessage =
-                                                                                "Offline route crashed: ${error.message}"
+                                                                                "Online route crashed: ${error.message}"
                                                                 }
-
                                                         isLoadingRoute = false
                                                 }
                                         },
