@@ -30,8 +30,7 @@ data class DisasterAlert(
         val id: String? = null,
         val title: String? = null,
         @SerializedName("location_name")
-        @get:PropertyName("location_name")
-        @set:PropertyName("location_name")
+        @PropertyName("location_name")
         var locationName: String? = null,
         val type: String? = null, // earthquake, flood, wildfire, storm
         val status: StatusLevel? = null,
@@ -124,17 +123,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     if (!isFirstLoad) {
-                        // Check for newly added documents to trigger notifications
-                        for (change in snapshots.documentChanges) {
-                            if (change.type == DocumentChange.Type.ADDED) {
-                                try {
-                                    val newAlert = change.document.toObject(DisasterAlert::class.java)
-                                    notificationHelper.showDisasterAlertNotification(newAlert)
-                                } catch (ex: Exception) {
-                                    Log.e("HomeViewModel", "Error parsing new alert for notification", ex)
-                                }
-                            }
-                        }
+                        // Notifications are now handled centrally in AlertRepository via WaffleApplication
                     }
 
                     isFirstLoad = false

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("org.jetbrains.kotlin.plugin.serialization") version "2.1.20"
     id("com.google.gms.google-services")
+    id("com.google.devtools.ksp") version "2.1.20-1.0.32"
 }
 
 android {
@@ -85,8 +86,16 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-firestore")
 
     //graphHopper offline routing engine ke lia 2 dependencies
     implementation("com.graphhopper:graphhopper-core:1.0")
     implementation("org.slf4j:slf4j-android:1.7.36")
+
+    // Room Database
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
 }
