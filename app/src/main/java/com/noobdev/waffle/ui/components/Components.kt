@@ -28,7 +28,7 @@ import com.noobdev.waffle.ui.theme.*
 enum class StatusLevel {
     CRITICAL,
     WARNING,
-    MONITORING,
+    INFO,
     SAFE
 }
 
@@ -38,7 +38,7 @@ fun StatusBadge(status: StatusLevel, modifier: Modifier = Modifier) {
             when (status) {
                 StatusLevel.CRITICAL -> Triple(DangerRed, Color.White, "CRITICAL")
                 StatusLevel.WARNING -> Triple(WarningOrange, Color.Black, "WARNING")
-                StatusLevel.MONITORING -> Triple(InfoBlue, Color.White, "MONITORING")
+                StatusLevel.INFO -> Triple(InfoBlue, Color.White, "INFO")
                 StatusLevel.SAFE -> Triple(SafeGreen, Color.White, "SAFE")
             }
 
@@ -114,19 +114,24 @@ fun WaffleCard(
 
 @Composable
 fun DisasterAlertCard(
-        title: String,
+        title: String?,
         location: String?, // Now accepts null
-        status: StatusLevel,
-        disasterType: String,
-        timestamp: String,
+        status: StatusLevel?,
+        disasterType: String?,
+        timestamp: String?,
         onClick: () -> Unit,
         modifier: Modifier = Modifier
 ) {
+    val safeStatus = status ?: StatusLevel.INFO
+    val safeType = disasterType ?: "unknown"
+    val safeTitle = title ?: "Alert"
+    val safeTimestamp = timestamp ?: ""
+
     val borderColor =
-            when (status) {
+            when (safeStatus) {
                 StatusLevel.CRITICAL -> DangerRed
                 StatusLevel.WARNING -> WarningOrange
-                StatusLevel.MONITORING -> InfoBlue
+                StatusLevel.INFO -> InfoBlue
                 StatusLevel.SAFE -> SafeGreen
             }
 
@@ -145,8 +150,8 @@ fun DisasterAlertCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
             ) {
-                DisasterTypeBadge(type = disasterType)
-                StatusBadge(status = status)
+                DisasterTypeBadge(type = safeType)
+                StatusBadge(status = safeStatus)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -155,7 +160,7 @@ fun DisasterAlertCard(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                         Text(
-                                text = title,
+                                text = safeTitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -183,7 +188,7 @@ fun DisasterAlertCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                    text = timestamp,
+                    text = safeTimestamp,
                     style = WaffleTextStyles.timestamp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )

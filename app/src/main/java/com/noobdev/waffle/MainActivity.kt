@@ -103,6 +103,28 @@ class MainActivity : ComponentActivity() {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else if (hasRequiredPermissions) {
+            // Request Notification Permission on Android 13+ (Non-blocking)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                var notificationRequested by remember { mutableStateOf(false) }
+                val notifLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { isGranted ->
+                    // Notification permission is optional, proceed either way
+                }
+
+                val hasNotif = ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+
+                LaunchedEffect(Unit) {
+                    if (!hasNotif && !notificationRequested) {
+                        notificationRequested = true
+                        notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }
+
             // Permission granted, show main content
             content()
         } else {
