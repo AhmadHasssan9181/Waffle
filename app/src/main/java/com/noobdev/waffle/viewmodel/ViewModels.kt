@@ -11,21 +11,33 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.util.Log
+import com.google.gson.annotations.SerializedName
+import com.google.firebase.firestore.PropertyName
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.DocumentChange
+import com.noobdev.waffle.notifications.NotificationHelper
 
 // ============================================
 // DATA MODELS
 // ============================================
 
 data class DisasterAlert(
-        val id: String,
-        val title: String,
-        val location: String,
-        val type: String, // earthquake, flood, wildfire, storm
-        val status: StatusLevel,
-        val timestamp: String,
-        val latitude: Double,
-        val longitude: Double,
-        val details: Map<String, String> = emptyMap()
+        val id: String? = null,
+        val title: String? = null,
+        @SerializedName("location_name")
+        @PropertyName("location_name")
+        var locationName: String? = null,
+        val type: String? = null, // earthquake, flood, wildfire, storm
+        val status: StatusLevel? = null,
+        val timestamp: String? = null,
+        val latitude: Double? = null,
+        val longitude: Double? = null,
+        val details: Map<String, Any>? = emptyMap()
 )
 
 data class HomeUiState(
@@ -51,10 +63,19 @@ data class MapUiState(
 
 data class AlertsUiState(
         val isLoading: Boolean = true,
+        val isPaginating: Boolean = false,
+        val hasMore: Boolean = true,
         val alerts: List<DisasterAlert> = emptyList(),
         val filterType: String? = null, // null = all
+        val sortOrder: AlertSortOrder = AlertSortOrder.DATE_DESC,
         val error: String? = null
 )
+
+enum class AlertSortOrder(val displayName: String) {
+    DATE_DESC("Newest First"),
+    DATE_ASC("Oldest First"),
+    SEVERITY_DESC("Highest Severity")
+}
 
 // ============================================
 // HOME VIEW MODEL
@@ -64,12 +85,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val preferencesManager = PreferencesManager(application)
     private val openCageApiKey = "YOUR_OPENCAGE_API_KEY" // Replace with actual key
+    private val notificationHelper = NotificationHelper(application)
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    private val db = FirebaseFirestore.getInstance()
+    private var alertsListener: ListenerRegistration? = null
+    private var isFirstLoad = true
+
     init {
         loadInitialData()
+        listenToAlerts()
+    }
+
+    private fun listenToAlerts() {
+        alertsListener = db.collection("disaster_alerts")
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    Log.w("HomeViewModel", "Listen failed.", e)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Failed to fetch alerts: ${e.message}"
+                    )
+                    return@addSnapshotListener
+                }
+
+                if (snapshots != null) {
+                    val alerts = ArrayList<DisasterAlert>()
+                    for (doc in snapshots.documents) {
+                        try {
+                            val alert = doc.toObject(DisasterAlert::class.java)
+                            if (alert != null) alerts.add(alert)
+                        } catch (ex: Exception) {
+                            Log.e("HomeViewModel", "Error parsing doc: ${doc.id}", ex)
+                        }
+                    }
+
+                    if (!isFirstLoad) {
+                        // Notifications are now handled centrally in AlertRepository via WaffleApplication
+                    }
+
+                    isFirstLoad = false
+
+                    _uiState.value = _uiState.value.copy(
+                        activeAlerts = alerts,
+                        isLoading = false
+                    )
+                    Log.d("HomeViewModel", "Loaded ${alerts.size} alerts from Firestore.")
+                }
+            }
     }
 
     fun loadInitialData() {
@@ -85,33 +150,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         else -> "Good Evening"
                     }
             _uiState.value = _uiState.value.copy(greeting = greeting)
-
-            // Load mock alerts for now
-            val mockAlerts =
-                    listOf(
-                            DisasterAlert(
-                                    id = "1",
-                                    title = "Flash Flood Warning",
-                                    location = "Valencia, Spain",
-                                    type = "flood",
-                                    status = StatusLevel.CRITICAL,
-                                    timestamp = "2 hours ago",
-                                    latitude = 39.4699,
-                                    longitude = -0.3763
-                            ),
-                            DisasterAlert(
-                                    id = "2",
-                                    title = "Earthquake Detected",
-                                    location = "Kobe Region, Japan",
-                                    type = "earthquake",
-                                    status = StatusLevel.WARNING,
-                                    timestamp = "5 hours ago",
-                                    latitude = 34.6901,
-                                    longitude = 135.1956
-                            )
-                    )
-
-            _uiState.value = _uiState.value.copy(activeAlerts = mockAlerts, isLoading = false)
         }
     }
 
@@ -153,6 +191,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value.longitude?.let { lng -> updateLocation(lat, lng) }
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        alertsListener?.remove()
+    }
 }
 
 // ============================================
@@ -164,102 +207,121 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiState = MutableStateFlow(AlertsUiState())
     val uiState: StateFlow<AlertsUiState> = _uiState.asStateFlow()
 
+    private val db = FirebaseFirestore.getInstance()
+
+    // We will use standard pagination fetching over a real-time listener for infinite scroll
+    private var lastVisibleDoc: DocumentSnapshot? = null
+    private val pageSize: Long = 10
+
     init {
-        loadAlerts()
+        loadPage(isRefresh = true)
     }
 
-    fun loadAlerts() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-
-            // Mock data - in production would fetch from API/database
-            val alerts =
-                    listOf(
-                            DisasterAlert(
-                                    id = "1",
-                                    title = "Severe Flash Flood Warning",
-                                    location = "Valencia Region, Spain",
-                                    type = "flood",
-                                    status = StatusLevel.CRITICAL,
-                                    timestamp = "2024-01-17 14:30",
-                                    latitude = 39.4699,
-                                    longitude = -0.3763,
-                                    details =
-                                            mapOf(
-                                                    "Water Level" to "2.5m",
-                                                    "Affected Area" to "450 km²",
-                                                    "Duration" to "Ongoing"
-                                            )
-                            ),
-                            DisasterAlert(
-                                    id = "2",
-                                    title = "Earthquake M5.2",
-                                    location = "Kobe Region, Japan",
-                                    type = "earthquake",
-                                    status = StatusLevel.WARNING,
-                                    timestamp = "2024-01-17 09:15",
-                                    latitude = 34.6901,
-                                    longitude = 135.1956,
-                                    details =
-                                            mapOf(
-                                                    "Magnitude" to "5.2",
-                                                    "Depth" to "12 km",
-                                                    "Intensity" to "Moderate"
-                                            )
-                            ),
-                            DisasterAlert(
-                                    id = "3",
-                                    title = "Wildfire Risk Elevated",
-                                    location = "California, USA",
-                                    type = "wildfire",
-                                    status = StatusLevel.MONITORING,
-                                    timestamp = "2024-01-17 08:00",
-                                    latitude = 36.7783,
-                                    longitude = -119.4179,
-                                    details =
-                                            mapOf(
-                                                    "Risk Level" to "High",
-                                                    "Wind Speed" to "45 km/h",
-                                                    "Humidity" to "15%"
-                                            )
-                            ),
-                            DisasterAlert(
-                                    id = "4",
-                                    title = "Tropical Storm Watch",
-                                    location = "Manila Bay, Philippines",
-                                    type = "storm",
-                                    status = StatusLevel.WARNING,
-                                    timestamp = "2024-01-16 22:00",
-                                    latitude = 14.5995,
-                                    longitude = 120.9842,
-                                    details =
-                                            mapOf(
-                                                    "Wind Speed" to "95 km/h",
-                                                    "Pressure" to "990 hPa",
-                                                    "Movement" to "NW at 20 km/h"
-                                            )
-                            )
-                    )
-
-            _uiState.value = _uiState.value.copy(alerts = alerts, isLoading = false)
+    fun loadPage(isRefresh: Boolean = false) {
+        if (isRefresh) {
+            _uiState.value = _uiState.value.copy(isLoading = true, hasMore = true)
+            lastVisibleDoc = null
+        } else {
+            if (!_uiState.value.hasMore || _uiState.value.isPaginating) return
+            _uiState.value = _uiState.value.copy(isPaginating = true)
         }
+
+        var query = db.collection("disaster_alerts")
+            .orderBy("timestamp", Query.Direction.DESCENDING) // Sort by date first to avoid missing composite index
+            .limit(pageSize)
+
+        lastVisibleDoc?.let {
+            query = query.startAfter(it)
+        }
+
+        query.get()
+            .addOnSuccessListener { snapshots ->
+                val newAlerts = ArrayList<DisasterAlert>()
+                for (doc in snapshots) {
+                    try {
+                        val alert = doc.toObject(DisasterAlert::class.java)
+                        newAlerts.add(alert)
+                    } catch (ex: Exception) {
+                        Log.e("AlertsViewModel", "Error parsing doc: ${doc.id}", ex)
+                    }
+                }
+
+                if (snapshots.documents.isNotEmpty()) {
+                    lastVisibleDoc = snapshots.documents[snapshots.size() - 1]
+                }
+
+                val hasMore = snapshots.size() >= pageSize
+
+                if (isRefresh) {
+                    _uiState.value = _uiState.value.copy(
+                        alerts = newAlerts,
+                        isLoading = false,
+                        isPaginating = false,
+                        hasMore = hasMore
+                    )
+                } else {
+                    val currentAlerts = _uiState.value.alerts.toMutableList()
+                    currentAlerts.addAll(newAlerts)
+                    _uiState.value = _uiState.value.copy(
+                        alerts = currentAlerts,
+                        isPaginating = false,
+                        hasMore = hasMore
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w("AlertsViewModel", "Fetch failed.", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isPaginating = false,
+                    error = "Failed to fetch alerts: ${e.message}"
+                )
+            }
     }
 
     fun setFilter(type: String?) {
         _uiState.value = _uiState.value.copy(filterType = type)
     }
 
+    fun setSortOrder(order: AlertSortOrder) {
+        _uiState.value = _uiState.value.copy(sortOrder = order)
+    }
+
     fun getFilteredAlerts(): List<DisasterAlert> {
         val filter = _uiState.value.filterType
-        return if (filter == null) {
+
+        // Filter
+        val filtered = if (filter == null) {
             _uiState.value.alerts
         } else {
             _uiState.value.alerts.filter { it.type == filter }
         }
+
+        // Sort locally
+        return when (_uiState.value.sortOrder) {
+            AlertSortOrder.DATE_DESC -> filtered.sortedByDescending { it.timestamp ?: "" }
+            AlertSortOrder.DATE_ASC -> filtered.sortedBy { it.timestamp ?: "" }
+            AlertSortOrder.SEVERITY_DESC -> {
+                // Critical (highest priority) -> Safe (lowest)
+                filtered.sortedBy { alert ->
+                    when (alert.status) {
+                        StatusLevel.CRITICAL -> 1
+                        StatusLevel.WARNING -> 2
+                        StatusLevel.INFO -> 3
+                        StatusLevel.SAFE -> 4
+                        null -> 5
+                    }
+                }
+            }
+        }
     }
 
     fun refresh() {
-        loadAlerts()
+        loadPage(isRefresh = true)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
     }
 }
 

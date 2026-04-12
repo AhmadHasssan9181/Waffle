@@ -23,12 +23,34 @@ import com.noobdev.waffle.ui.components.*
 import com.noobdev.waffle.ui.theme.*
 import com.noobdev.waffle.viewmodel.AlertsViewModel
 import com.noobdev.waffle.viewmodel.DisasterAlert
+import com.noobdev.waffle.viewmodel.AlertSortOrder
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    // Infinite scroll detection
+    val isScrollToEnd by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItemsNumber = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = (layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) + 1
+
+            // Load more when we are 2 items away from the end
+            lastVisibleItemIndex > (totalItemsNumber - 2)
+        }
+    }
+
+    LaunchedEffect(isScrollToEnd) {
+        if (isScrollToEnd && !uiState.isLoading && !uiState.isPaginating && uiState.hasMore) {
+            viewModel.loadPage()
+        }
+    }
 
     val filterOptions =
             listOf(
@@ -90,6 +112,56 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // === SORT TOGGLE ===
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Sort By: ${uiState.sortOrder.displayName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Sort,
+                                    contentDescription = "Sort Options",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                AlertSortOrder.values().forEach { order ->
+                                    DropdownMenuItem(
+                                        text = { Text(order.displayName) },
+                                        onClick = {
+                                            viewModel.setSortOrder(order)
+                                            showSortMenu = false
+                                        },
+                                        trailingIcon = {
+                                            if (uiState.sortOrder == order) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -119,6 +191,7 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
                         )
                     } else {
                         LazyColumn(
+                                state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -128,6 +201,17 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
                                         alert = alert,
                                         onClick = { /* Navigate to detail */}
                                 )
+                            }
+
+                            if (uiState.isPaginating) {
+                                item {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
                             }
 
                             // Bottom padding for nav bar
@@ -142,11 +226,16 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
 
 @Composable
 fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
+    val safeStatus = alert.status ?: StatusLevel.INFO
+    val safeType = alert.type ?: "unknown"
+    val safeTitle = alert.title ?: "Alert"
+    val safeTimestamp = alert.timestamp ?: ""
+
     val borderColor =
-            when (alert.status) {
+            when (safeStatus) {
                 StatusLevel.CRITICAL -> DangerRed
                 StatusLevel.WARNING -> WarningOrange
-                StatusLevel.MONITORING -> InfoBlue
+                StatusLevel.INFO -> InfoBlue
                 StatusLevel.SAFE -> SafeGreen
             }
 
@@ -173,14 +262,14 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
             ) {
-                DisasterTypeBadge(type = alert.type)
-                StatusBadge(status = alert.status)
+                DisasterTypeBadge(type = safeType)
+                StatusBadge(status = safeStatus)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                    text = alert.title,
+                    text = safeTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -198,17 +287,18 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                        text = alert.location,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                                        val location = alert.locationName ?: "Unknown Location"
+                                        Text(
+                                                text = location,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Details section
-            if (alert.details.isNotEmpty()) {
+            if (alert.details?.isNotEmpty() == true) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -223,7 +313,7 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                                text = value,
+                                text = value.toString(),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -240,7 +330,7 @@ fun AlertDetailCard(alert: DisasterAlert, onClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                        text = alert.timestamp,
+                        text = safeTimestamp,
                         style = WaffleTextStyles.timestamp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

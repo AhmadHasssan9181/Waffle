@@ -34,7 +34,6 @@ import com.noobdev.waffle.ui.components.*
 import com.noobdev.waffle.ui.theme.*
 import com.noobdev.waffle.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
-import com.noobdev.waffle.database.WaffleClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,7 +45,7 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
         val scope = rememberCoroutineScope()
 
         // Database connection test state
-        var dbConnectionStatus by remember { mutableStateOf("Testing connection...") }
+        var dbConnectionStatus by remember { mutableStateOf("Firebase running in background") }
 
         // State for dynamic data
         var temperature by remember { mutableStateOf("--") }
@@ -58,18 +57,6 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
 
         // OpenCage API key - replace with actual
         val openCageKey = "YOUR_OPENCAGE_KEY"
-
-        // Test FastAPI backend connection
-        LaunchedEffect(Unit) {
-            try {
-                withContext(Dispatchers.IO) {
-                    val data = WaffleClient.api.getMapClosures()
-                    dbConnectionStatus = "✅ Connected! Map data length: ${data.length} chars"
-                }
-            } catch (e: Exception) {
-                dbConnectionStatus = "❌ Connection Failed: ${e.localizedMessage}"
-            }
-        }
 
         // Get location and weather on first load
         LaunchedEffect(Unit) {
@@ -175,17 +162,16 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // FAST API BACKEND TEST UI
+                        // BACKEND STATUS UI
                         Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
-                                        containerColor = if (dbConnectionStatus.contains("✅"))
-                                                Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                                        containerColor = Color(0xFFE8F5E9)
                                 )
                         ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                         Text(
-                                                text = "Backend Database Status",
+                                                text = "Database Status",
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color.Black
                                         )
@@ -252,7 +238,7 @@ fun Home(navController: NavController, viewModel: HomeViewModel = viewModel()) {
                                 uiState.activeAlerts.take(3).forEach { alert ->
                                         DisasterAlertCard(
                                                 title = alert.title,
-                                                location = alert.location,
+                                                location = alert.locationName,
                                                 status = alert.status,
                                                 disasterType = alert.type,
                                                 timestamp = alert.timestamp,
