@@ -90,6 +90,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // Screen state
         var screenState by remember { mutableStateOf(MapScreenState.IDLE) }
+        
+        // Track the current flood sector for cycling
+        var currentFloodSectorIndex by remember { mutableStateOf(0) }
 
         // Map style - this will be passed up to change the map
         var selectedStyleIndex by remember { mutableStateOf(currentStyleIndex) }
@@ -208,7 +211,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         trimRouteSource(
                                                                                 routeSource,
                                                                                 activeRoute.coordinates,
-                                                                                snapResult.matchedIndex
+                                                                                snapResult.matchedIndex,
+                                                                                LatLng(currentLat, currentLng)
                                                                         )
                                                                 }
 
@@ -355,7 +359,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 trimRouteSource(
                                         routeSource,
                                         activeRoute.coordinates,
-                                        simSegmentIndex
+                                        simSegmentIndex,
+                                        LatLng(currentLat, currentLng)
                                 )
                         }
 
@@ -870,12 +875,46 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 routeSimulator.stopSimulation()
                                 isSimulationMode = false
 
-                                // Reset camera to normal top-down mode
-                                mapInstance?.let { map ->
-                                        CameraTransitionManager.exitNavigationMode(
-                                                map,
-                                                LatLng(currentLat, currentLng)
-                                        )
+                                // Fetch actual user location to prevent routing from stale simulation position
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                                        val handleLocation = { locLat: Double, locLng: Double ->
+                                                currentLat = locLat
+                                                currentLng = locLng
+                                                mapInstance?.let { map ->
+                                                        // Force the blip icon itself to immediately return to user's real location
+                                                        val snapLoc = android.location.Location("instant").apply {
+                                                            latitude = locLat
+                                                            longitude = locLng
+                                                            time = System.currentTimeMillis()
+                                                        }
+                                                        map.locationComponent?.forceLocationUpdate(snapLoc)
+                                                        CameraTransitionManager.exitNavigationMode(
+                                                                map,
+                                                                LatLng(currentLat, currentLng)
+                                                        )
+                                                }
+                                        }
+
+                                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                                if (location != null) {
+                                                        handleLocation(location.latitude, location.longitude)
+                                                } else {
+                                                        fusedLocationClient.getCurrentLocation(
+                                                                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 
+                                                                null
+                                                        ).addOnSuccessListener { currLoc ->
+                                                                currLoc?.let { handleLocation(it.latitude, it.longitude) }
+                                                        }
+                                                }
+                                        }
+                                } else {
+                                        // Reset camera to normal top-down mode using current state if permissions fail
+                                        mapInstance?.let { map ->
+                                                CameraTransitionManager.exitNavigationMode(
+                                                        map,
+                                                        LatLng(currentLat, currentLng)
+                                                )
+                                        }
                                 }
 
                                 // Clear route from map
@@ -1042,7 +1081,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 onFloodHistory = {
                                         screenState = MapScreenState.IDLE
                                         // Load flood data
-                                        sectors.firstOrNull()?.let { sector ->
+                                        if (sectors.isNotEmpty()) {
+                                                val sector = sectors[currentFloodSectorIndex]
                                                 mapInstance?.let { map ->
                                                         map.animateCamera(
                                                                 CameraUpdateFactory.newLatLngZoom(
@@ -1056,6 +1096,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         )
                                                         loadSectorData(context, map, sector)
                                                 }
+                                                // Cycle to the next sector for the next click
+                                                currentFloodSectorIndex = (currentFloodSectorIndex + 1) % sectors.size
                                         }
                                 },
                                 onClose = { screenState = MapScreenState.IDLE }
@@ -1956,11 +1998,25 @@ fun updateRouteSource(map: MapLibreMap, coordinates: List<Pair<Double, Double>>,
 fun trimRouteSource(
         source: GeoJsonSource?,
         coordinates: List<Pair<Double, Double>>,
-        startIndex: Int
+        startIndex: Int,
+        currentLatLng: LatLng? = null
 ) {
         if (source == null || coordinates.size <= startIndex) return
-        val remainingCoords = coordinates.subList(max(0, startIndex), coordinates.size)
-        if (remainingCoords.isEmpty()) return
+        
+        val safeStartIndex = max(0, startIndex)
+        val remainingCoords = if (safeStartIndex + 1 < coordinates.size) {
+            coordinates.subList(safeStartIndex + 1, coordinates.size).toMutableList()
+        } else {
+            mutableListOf()
+        }
+        
+        if (currentLatLng != null) {
+            remainingCoords.add(0, Pair(currentLatLng.latitude, currentLatLng.longitude))
+        } else {
+            remainingCoords.add(0, coordinates[safeStartIndex])
+        }
+
+        if (remainingCoords.size < 2) return
 
         val coordsString = remainingCoords.joinToString(",") { "[${it.second},${it.first}]" }
         val geoJson =

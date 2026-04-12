@@ -29,7 +29,7 @@ class RouteSimulator {
         const val SPEED_VARIABLE = -1f // Use auto-variable speed
 
         // Update interval
-        const val UPDATE_INTERVAL_MS = 1000L // 1 second updates
+        const val UPDATE_INTERVAL_MS = 100L // 10 updates per second for smooth rendering
     }
 
     // Simulation state
