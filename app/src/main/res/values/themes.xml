@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.Waffle" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- The window background paints before Compose draws, so it must match the app's
+         light theme to avoid a flash of white/black on cold start. -->
+    <style name="Theme.Waffle" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/cream</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

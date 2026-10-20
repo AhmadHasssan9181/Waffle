@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Waffle"
 include(":app")
+include(":tools:graph-builder")

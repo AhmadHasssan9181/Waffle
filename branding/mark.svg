@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="waffle-batter" cx="40%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="55%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </radialGradient>
+    <linearGradient id="fuselage-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="55%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+    <filter id="drone-pop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="-6" dy="12" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="waffle-rotor-clip">
+      <circle cx="0" cy="0" r="40"/>
+    </clipPath>
+
+    <g id="waffle-propeller">
+      <circle cx="0" cy="5" r="44" fill="#78350f" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="0" r="44" fill="url(#waffle-batter)" stroke="#0f172a" stroke-width="4.5"/>
+      <g clip-path="url(#waffle-rotor-clip)">
+        <g fill="#92400e" stroke="#78350f" stroke-width="1.5">
+          <rect x="-38" y="-38" width="14" height="14" rx="2.5"/><rect x="-18" y="-38" width="14" height="14" rx="2.5"/><rect x="2" y="-38" width="14" height="14" rx="2.5"/><rect x="22" y="-38" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="-18" width="14" height="14" rx="2.5"/><rect x="-18" y="-18" width="14" height="14" rx="2.5"/><rect x="2" y="-18" width="14" height="14" rx="2.5"/><rect x="22" y="-18" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="2" width="14" height="14" rx="2.5"/><rect x="-18" y="2" width="14" height="14" rx="2.5"/><rect x="2" y="2" width="14" height="14" rx="2.5"/><rect x="22" y="2" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="22" width="14" height="14" rx="2.5"/><rect x="-18" y="22" width="14" height="14" rx="2.5"/><rect x="2" y="22" width="14" height="14" rx="2.5"/><rect x="22" y="22" width="14" height="14" rx="2.5"/>
+        </g>
+        <g fill="#b45309">
+          <rect x="-36" y="-34" width="12" height="10" rx="1.5"/><rect x="-16" y="-34" width="12" height="10" rx="1.5"/><rect x="4" y="-34" width="12" height="10" rx="1.5"/><rect x="24" y="-34" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="-14" width="12" height="10" rx="1.5"/><rect x="-16" y="-14" width="12" height="10" rx="1.5"/><rect x="4" y="-14" width="12" height="10" rx="1.5"/><rect x="24" y="-14" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="6" width="12" height="10" rx="1.5"/><rect x="-16" y="6" width="12" height="10" rx="1.5"/><rect x="4" y="6" width="12" height="10" rx="1.5"/><rect x="24" y="6" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="26" width="12" height="10" rx="1.5"/><rect x="-16" y="26" width="12" height="10" rx="1.5"/><rect x="4" y="26" width="12" height="10" rx="1.5"/><rect x="24" y="26" width="12" height="10" rx="1.5"/>
+        </g>
+      </g>
+      <circle cx="0" cy="0" r="40" fill="none" stroke="#fef08a" stroke-width="2" opacity="0.7"/>
+      <g transform="rotate(-30)">
+        <path d="M -38 -4 C -15 -9, -6 -3, 0 0 C 6 3, 15 9, 38 4 C 41 1, 41 -1, 38 -4 C 15 -2, 6 -2, 0 0 C -6 2, -15 2, -38 4 Z" fill="#38bdf8" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round"/>
+      </g>
+      <circle cx="0" cy="0" r="10" fill="#0f172a"/>
+      <circle cx="0" cy="0" r="6" fill="#38bdf8"/>
+      <circle cx="-2" cy="-2" r="2" fill="#ffffff"/>
+    </g>
+  </defs>
+
+  <g transform="translate(256 256) scale(1.62) rotate(-18)" filter="url(#drone-pop)">
+    <g stroke="#0f172a" stroke-width="16" stroke-linecap="round">
+      <line x1="-88" y1="-68" x2="88" y2="68"/>
+      <line x1="88" y1="-68" x2="-88" y2="68"/>
+    </g>
+    <g stroke="#0ea5e9" stroke-width="8" stroke-linecap="round">
+      <line x1="-88" y1="-68" x2="88" y2="68"/>
+      <line x1="88" y1="-68" x2="-88" y2="68"/>
+    </g>
+
+    <use href="#waffle-propeller" x="-92" y="-72"/>
+    <use href="#waffle-propeller" x="92" y="-72"/>
+    <use href="#waffle-propeller" x="-92" y="72"/>
+    <use href="#waffle-propeller" x="92" y="72"/>
+
+    <g transform="translate(-44, 18) rotate(35)">
+      <rect x="-16" y="-24" width="32" height="44" rx="10" fill="#0d9488" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="14" r="13" fill="#e2e8f0" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="14" r="7" fill="#0f172a"/>
+      <circle cx="-2" cy="12" r="2.5" fill="#38bdf8"/>
+    </g>
+
+    <g>
+      <rect x="-34" y="-56" width="68" height="118" rx="22" fill="#9a3412" stroke="#0f172a" stroke-width="4.5"/>
+      <rect x="-34" y="-64" width="68" height="114" rx="22" fill="url(#fuselage-grad)" stroke="#0f172a" stroke-width="4.5"/>
+      <rect x="-20" y="-46" width="40" height="72" rx="12" fill="#2dd4bf" stroke="#0f172a" stroke-width="3.5"/>
+      <rect x="-12" y="-12" width="24" height="28" rx="5" fill="#0f172a"/>
+      <line x1="-7" y1="-4" x2="7" y2="-4" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-7" y1="3" x2="3" y2="3" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-7" y1="10" x2="7" y2="10" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="0" cy="-28" r="7" fill="#fef08a" stroke="#0f172a" stroke-width="3"/>
+      <rect x="-18" y="38" width="36" height="22" rx="8" fill="#38bdf8" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="49" r="8" fill="#0f172a"/>
+      <circle cx="0" cy="49" r="4" fill="#38bdf8"/>
+      <circle cx="-1.5" cy="47.5" r="1.5" fill="#ffffff"/>
+    </g>
+  </g>
+</svg>

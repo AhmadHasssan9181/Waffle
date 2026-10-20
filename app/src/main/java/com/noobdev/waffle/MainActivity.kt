@@ -19,11 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.noobdev.waffle.api.OfflineGeocoder
-import com.noobdev.waffle.routing.OfflineRoutingManager
-import com.noobdev.waffle.ui.theme.AppTheme
-import com.noobdev.waffle.ui.theme.WaffleTheme
-import com.noobdev.waffle.utils.PreferencesManager
+import com.noobdev.waffle.data.remote.OfflineGeocoder
+import com.noobdev.waffle.core.navigation.GeoPoint
+import com.noobdev.waffle.feature.offline.OfflineMapManager
+import com.noobdev.waffle.core.routing.OfflineRoutingManager
+import com.noobdev.waffle.design.brand.WaffleLockup
+import com.noobdev.waffle.design.components.WaffleLoadingSpinner
+import com.noobdev.waffle.design.components.WafflePrimaryButton
+import com.noobdev.waffle.design.theme.AppTheme
+import com.noobdev.waffle.design.theme.WaffleTheme
+import com.noobdev.waffle.core.prefs.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
@@ -44,7 +49,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Initialize MapLibre
-        MapLibre.getInstance(this, "U7fg3KGqTysSBCZJpaNH", WellKnownTileServer.MapLibre)
+        MapLibre.getInstance(this, BuildConfig.MAPTILER_API_KEY, WellKnownTileServer.MapLibre)
 
         // Initialize Preferences Manager
         preferencesManager = PreferencesManager(applicationContext)
@@ -52,46 +57,40 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             OfflineGeocoder.load(applicationContext)
 
-            runCatching { OfflineRoutingManager.initialize(applicationContext) }
-                    .onSuccess { routingEngine ->
-                        Log.d(TAG, "Offline routing engine verification complete")
+            // Load the installed offline-layer list early so an offline cold start can pick the
+            // right cached map style instead of defaulting to a style the user never downloaded.
+            OfflineMapManager.refresh(applicationContext)
 
-                        runCatching {
+            val routingEngine = OfflineRoutingManager.initialize(applicationContext)
+            if (routingEngine != null) {
+                runCatching {
                             routingEngine.calculateRoute(
-                                    startLat = 33.6844,
-                                    startLng = 73.0479,
-                                    endLat = 33.7294,
-                                    endLng = 73.0931
+                                    start = GeoPoint(33.6844, 73.0479),
+                                    end = GeoPoint(33.7294, 73.0931)
                             )
                         }
-                                .onSuccess { response ->
-                                    if (response.hasErrors()) {
-                                        Log.e(
-                                                TAG,
-                                                "Offline route test failed with errors: ${response.errors}"
-                                        )
-                                    } else {
-                                        val bestPath = response.best
-                                        Log.d(
-                                                TAG,
-                                                "Offline route test success distanceMeters=${bestPath.distance} timeMs=${bestPath.time} pointCount=${bestPath.points.size()}"
-                                        )
-                                    }
-                                }
-                                .onFailure { throwable ->
-                                    Log.e(TAG, "Offline route test threw an exception", throwable)
-                                }
-                    }
-                    .onFailure { throwable ->
-                        Log.e(TAG, "Offline routing engine verification failed", throwable)
-                    }
+                        .onSuccess { response ->
+                            if (response.hasErrors()) {
+                                Log.e(TAG, "Offline route test failed: ${response.errors}")
+                            } else {
+                                val bestPath = response.best
+                                Log.d(
+                                        TAG,
+                                        "Offline route test success distanceMeters=${bestPath.distance} timeMs=${bestPath.time} pointCount=${bestPath.points.size()}"
+                                )
+                            }
+                        }
+                        .onFailure { throwable ->
+                            Log.e(TAG, "Offline route test threw an exception", throwable)
+                        }
+            }
         }
 
         enableEdgeToEdge()
 
         setContent {
             // Collect theme preference
-            val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.DEFAULT)
+            val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.SYSTEM)
 
             WaffleTheme(appTheme = appTheme) {
                 LocationPermissionWrapper { WaffleApp(preferencesManager = preferencesManager) }
@@ -140,14 +139,14 @@ class MainActivity : ComponentActivity() {
             permissionChecked = true
         }
 
-        val hasRequiredPermissions =
-                hasFineLocation &&
-                        (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || hasBackgroundLocation)
+        // Background location is requested alongside the foreground permission, but the app is
+        // fully usable without it (alerts still sync while the app is open). Blocking the whole
+        // app on "Allow all the time" is hostile, so only the foreground grant is mandatory.
+        val hasRequiredPermissions = hasFineLocation
 
         if (!permissionChecked) {
-            // Loading state
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                WaffleLoadingSpinner(size = 34.dp)
             }
         } else if (hasRequiredPermissions) {
             // Request Notification Permission on Android 13+ (Non-blocking)
@@ -184,49 +183,46 @@ class MainActivity : ComponentActivity() {
     fun LocationPermissionScreen(onRequestPermission: () -> Unit) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
             ) {
-                Text(text = "📍", style = MaterialTheme.typography.displayLarge)
+                WaffleLockup(markSize = 104.dp)
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(28.dp))
 
                 Text(
-                        text = "Location Access Required",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground
+                        text = "Stay found.",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
                 Text(
                         text =
-                                "Waffle needs your location to detect nearby hazards, show relevant disaster alerts, and help rescue services find you in emergencies.",
+                                "Waffle warns you about floods, earthquakes and fires near you — and keeps working when the signal doesn't.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
                 Spacer(Modifier.height(32.dp))
 
-                Button(
+                WafflePrimaryButton(
+                        text = "Allow location",
                         onClick = onRequestPermission,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                            text = "Grant Location Permission",
-                            style = MaterialTheme.typography.labelLarge
-                    )
-                }
+                        modifier = Modifier.fillMaxWidth()
+                )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
                 Text(
-                        text = "Your location data is never shared without your consent.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Your coordinates stay on this phone unless you send an SOS.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         }

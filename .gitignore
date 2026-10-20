@@ -4,14 +4,26 @@
 .idea/
 .DS_Store
 /build
+/build/
+build/
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+.kotlin/
 
-# Large binary assets
-app/src/main/assets/graph-cache/
-app/src/main/assets/offline_places.json
+# Build/verification logs
+build_*.txt
+graph_*.txt
+kapt_error*.txt
+*.log
+
+# Large Overpass extracts (regenerate with the queries in the same folder)
+tools/graph-builder/data/*.osm
+tools/graph-builder/out/
+
+# Bundled assets: app/src/main/assets/graph-cache/ (offline routing graph) and
+# app/src/main/assets/offline_places.json (offline geocoding) are tracked on purpose.
 
 # Codex rescue/temp files
 .codex
