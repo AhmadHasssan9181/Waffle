@@ -1,5 +1,6 @@
 package com.noobdev.waffle.core.routing
 
+import com.noobdev.waffle.data.remote.NavigationStep
 import com.noobdev.waffle.data.remote.RouteResult
 import com.noobdev.waffle.data.remote.getRouteVia
 import com.noobdev.waffle.core.navigation.GeoPoint
@@ -109,4 +110,75 @@ object RouteRepository {
                 "bike", "cycling-regular", "cycling", "bicycle" -> "cycling-regular"
                 else -> "driving-car"
             }
+
+    /**
+     * Plans start -> stops -> end by planning each leg separately and stitching the results.
+     *
+     * Each leg gets the same hazard avoidance, so a fuel stop does not quietly route through a
+     * flood zone. The legs share their boundary coordinate, which is removed from the next leg so
+     * the drawn line has no duplicate point.
+     */
+    suspend fun planWithStops(
+            start: GeoPoint,
+            end: GeoPoint,
+            stops: List<GeoPoint>,
+            profile: String = "car",
+            hazards: List<HazardZone> = emptyList(),
+            preferOffline: Boolean = true
+    ): RoutePlan {
+        if (stops.isEmpty()) return plan(start, end, profile, hazards, preferOffline)
+
+        val legs = ArrayList<RoutePlan>(stops.size + 1)
+        var from = start
+        for (to in stops + end) {
+            val leg = plan(from, to, profile, hazards, preferOffline)
+            if (!leg.success) return leg
+            legs += leg
+            from = to
+        }
+        return mergeRoutePlans(legs)
+    }
+
+    internal fun mergeRoutePlans(legs: List<RoutePlan>): RoutePlan {
+        require(legs.isNotEmpty()) { "Cannot merge an empty list of legs" }
+
+        val coordinates = mutableListOf<Pair<Double, Double>>()
+        val instructions = mutableListOf<String>()
+        val steps = mutableListOf<NavigationStep>()
+        val avoided = mutableListOf<HazardZone>()
+        var distance = 0.0
+        var duration = 0.0
+        var source = RouteSource.OFFLINE
+
+        for (leg in legs) {
+            val result = leg.result
+            val sharedFirst =
+                    coordinates.isNotEmpty() &&
+                            result.coordinates.isNotEmpty() &&
+                            coordinates.last() == result.coordinates.first()
+            val offset = if (sharedFirst) coordinates.size - 1 else coordinates.size
+            coordinates += if (sharedFirst) result.coordinates.drop(1) else result.coordinates
+            instructions += result.instructions
+            steps += result.steps.map { it.copy(wayPointIndex = it.wayPointIndex + offset) }
+            distance += result.distanceMeters
+            duration += result.durationSeconds
+            if (leg.source == RouteSource.ONLINE) source = RouteSource.ONLINE
+            avoided += leg.avoidedHazards
+        }
+
+        return RoutePlan(
+                result =
+                        RouteResult(
+                                distanceMeters = distance,
+                                durationSeconds = duration,
+                                coordinates = coordinates,
+                                instructions = instructions,
+                                steps = steps,
+                                success = true
+                        ),
+                source = source,
+                waypoints = legs.flatMap { it.waypoints },
+                avoidedHazards = avoided.distinctBy { it.id }
+        )
+    }
 }

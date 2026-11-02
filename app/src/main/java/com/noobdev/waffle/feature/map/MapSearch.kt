@@ -86,7 +86,8 @@ fun GoogleSearchBar(
         onBack: () -> Unit,
         onVoice: () -> Unit,
         onProfile: () -> Unit,
-        onClick: () -> Unit
+        onClick: () -> Unit,
+        placeholder: String = "Search here"
 ) {
         val focusRequester = remember { FocusRequester() }
         val focusManager = LocalFocusManager.current
@@ -122,7 +123,7 @@ fun GoogleSearchBar(
                                 OutlinedTextField(
                                         value = query,
                                         onValueChange = onQueryChange,
-                                        placeholder = { Text("Search here") },
+                                        placeholder = { Text(placeholder) },
                                         modifier =
                                                 Modifier.weight(1f).focusRequester(focusRequester),
                                         colors =
@@ -140,7 +141,7 @@ fun GoogleSearchBar(
                                 )
                         } else {
                                 Text(
-                                        text = if (query.isEmpty()) "Search here" else query,
+                                        text = if (query.isEmpty()) placeholder else query,
                                         modifier =
                                                 Modifier.weight(1f)
                                                         .clickable { onClick() }

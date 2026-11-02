@@ -87,6 +87,7 @@ fun NavigationModeUI(
         totalInstructions: Int,
         navigationNotice: String? = null,
         isRerouting: Boolean = false,
+        wrongWay: Boolean = false,
         onNext: () -> Unit,
         onExit: () -> Unit
 ) {
@@ -101,6 +102,41 @@ fun NavigationModeUI(
                                 )
                 ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                                AnimatedVisibility(
+                                        visible = wrongWay,
+                                        enter = fadeIn() + expandVertically(),
+                                        exit = fadeOut() + shrinkVertically()
+                                ) {
+                                        Row(
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .background(
+                                                                        DangerRed.copy(alpha = 0.12f)
+                                                                )
+                                                                .padding(
+                                                                        horizontal = 12.dp,
+                                                                        vertical = 10.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Warning,
+                                                        contentDescription = null,
+                                                        tint = DangerRed,
+                                                        modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(Modifier.width(10.dp))
+                                                Text(
+                                                        "Wrong way — turn around",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        color = DangerRed,
+                                                        fontWeight = FontWeight.Bold
+                                                )
+                                        }
+                                }
+                                if (wrongWay) Spacer(Modifier.height(12.dp))
+
                                 Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically

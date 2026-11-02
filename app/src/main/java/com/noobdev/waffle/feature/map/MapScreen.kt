@@ -96,6 +96,12 @@ enum class MapScreenState {
         LAYERS // Layer/style picker open
 }
 
+/** Whether the current search result becomes the destination or an intermediate stop. */
+enum class SearchPurpose {
+        DESTINATION,
+        STOP
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(navController: NavController, currentStyleIndex: Int) {
@@ -108,7 +114,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var shopFilter by remember { mutableStateOf<ShopCategory?>(null) }
         val visibleShops =
                 remember(mapShops, shopFilter) {
-                        if (shopFilter == null) mapShops
+                        if (shopFilter == null) emptyList()
                         else mapShops.filter { it.category == shopFilter }
                 }
 
@@ -141,6 +147,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // Search & Routing
         var searchQuery by remember { mutableStateOf("") }
         var selectedDestination by remember { mutableStateOf<GeoSearchResult?>(null) }
+        var routeStops by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
+        var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
         var routeResult by remember { mutableStateOf<RouteResult?>(null) }
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
@@ -158,6 +166,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val offRouteMonitor = remember { OffRouteMonitor() }
         var isRerouting by remember { mutableStateOf(false) }
         var navigationNotice by remember { mutableStateOf<String?>(null) }
+        var wrongWayDetected by remember { mutableStateOf(false) }
         // Incremented on every start/exit so a slow reroute from a previous trip cannot land in a
         // new navigation session.
         var navigationSessionId by remember { mutableStateOf(0) }
@@ -219,60 +228,155 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
          * Shared "take me there" action: closes the sheet/search, plans with hazards avoided and
          * shows the route preview. Used by search results and by a tapped shop pin.
          */
+        /**
+         * Plans the current destination with the current intermediate stops. Car and walk are
+         * planned separately, but both include the same stops.
+         */
+        fun planTrip(profile: String) {
+                val destination = selectedDestination ?: return
+                val stops = routeStops
+                val walking = profile == "foot-walking"
+
+                scope.launch {
+                        if (walking) isLoadingWalk = true else isLoadingRoute = true
+                        offlineRouteDebugMessage = null
+
+                        val plan =
+                                planRouteOffMain(
+                                        startLat = currentLat,
+                                        startLng = currentLng,
+                                        destinationLat = destination.lat,
+                                        destinationLng = destination.lng,
+                                        profile = if (walking) "foot" else "car",
+                                        hazards = HazardRegistry.active(),
+                                        stops = stops.map { GeoPoint(it.lat, it.lng) }
+                                )
+
+                        if (plan != null && plan.success) {
+                                selectedProfile = profile
+                                if (walking) {
+                                        walkRouteResult = plan.result
+                                } else {
+                                        routeResult = plan.result
+                                        walkRouteResult = null
+                                }
+                                activeRouteSource = plan.source
+                                avoidedHazardCount = plan.avoidedHazards.size
+                                navigationInstructions = plan.result.instructions
+                                currentInstructionIndex = 0
+                                screenState = MapScreenState.ROUTE_PREVIEW
+                                offlineRouteDebugMessage =
+                                        buildString {
+                                                append(
+                                                        if (plan.source == RouteSource.OFFLINE)
+                                                                "Offline route"
+                                                        else "Online route"
+                                                )
+                                                if (stops.isNotEmpty()) {
+                                                        append(" · ${stops.size} stop(s)")
+                                                }
+                                                if (plan.avoidedHazards.isNotEmpty()) {
+                                                        append(
+                                                                " · avoiding ${plan.avoidedHazards.size} hazard(s)"
+                                                        )
+                                                }
+                                        }
+                        } else {
+                                offlineRouteDebugMessage =
+                                        "Route failed: ${plan?.result?.errorMessage ?: "no route"}"
+                        }
+
+                        if (walking) isLoadingWalk = false else isLoadingRoute = false
+                }
+        }
+
+        fun addStop(result: GeoSearchResult) {
+                val destination = selectedDestination ?: return
+                val point = GeoPoint(result.lat, result.lng)
+                if (result.lat == destination.lat && result.lng == destination.lng) return
+                if (GeoGeometry.haversineMeters(GeoPoint(currentLat, currentLng), point) < 50.0) return
+                if (routeStops.any {
+                                GeoGeometry.haversineMeters(
+                                        GeoPoint(it.lat, it.lng),
+                                        point
+                                ) < 50.0
+                        }
+                ) {
+                        return
+                }
+                routeStops = routeStops + result
+                planTrip(selectedProfile)
+        }
+
+        fun removeStop(stop: GeoSearchResult) {
+                routeStops = routeStops - stop
+                planTrip(selectedProfile)
+        }
+
+        /**
+         * Adds the closest cached shop of [category] that sits reasonably near the current route.
+         * This is the "I need fuel on the way" shortcut; search remains available for anything
+         * more specific.
+         */
+        fun addQuickStop(category: ShopCategory) {
+                val activeRoute =
+                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
+                        else routeResult
+                if (activeRoute == null || activeRoute.coordinates.size < 2) return
+
+                val candidates =
+                        mapShops.filter { shop ->
+                                shop.category == category &&
+                                        routeStops.none {
+                                                it.lat == shop.lat && it.lng == shop.lon
+                                        }
+                        }
+                if (candidates.isEmpty()) {
+                        offlineRouteDebugMessage =
+                                "No ${category.shortLabel.lowercase()} found nearby"
+                        return
+                }
+
+                val routePoints = activeRoute.coordinates.map { GeoPoint(it.first, it.second) }
+                val closest =
+                        candidates.minByOrNull { shop ->
+                                val point = GeoPoint(shop.lat, shop.lon)
+                                routePoints.minOf { GeoGeometry.haversineMeters(point, it) }
+                        } ?: return
+                val detour =
+                        routePoints.minOf {
+                                GeoGeometry.haversineMeters(
+                                        GeoPoint(closest.lat, closest.lon),
+                                        it
+                                )
+                        }
+                if (detour > 2_500.0) {
+                        offlineRouteDebugMessage =
+                                "No ${category.shortLabel.lowercase()} near this route"
+                        return
+                }
+
+                addStop(
+                        GeoSearchResult(
+                                name = closest.name,
+                                address = closest.address ?: "",
+                                lat = closest.lat,
+                                lng = closest.lon,
+                                type = "shop"
+                        )
+                )
+        }
+
         val planRouteTo: (GeoSearchResult) -> Unit = { result ->
                 selectedDestination = result
+                routeStops = emptyList()
+                searchPurpose = SearchPurpose.DESTINATION
                 searchQuery = result.name
                 screenState = MapScreenState.IDLE
                 navigationNotice = null
                 isRerouting = false
                 offRouteMonitor.reset()
-                scope.launch {
-                        isLoadingRoute = true
-                        offlineRouteDebugMessage = null
-                        runCatching {
-                                        RouteRepository.plan(
-                                                start = GeoPoint(currentLat, currentLng),
-                                                end = GeoPoint(result.lat, result.lng),
-                                                profile = "car",
-                                                hazards = HazardRegistry.active()
-                                        )
-                                }
-                                .onSuccess { plan ->
-                                        if (plan.success) {
-                                                routeResult = plan.result
-                                                activeRouteSource = plan.source
-                                                avoidedHazardCount = plan.avoidedHazards.size
-                                                walkRouteResult = null
-                                                navigationInstructions = plan.result.instructions
-                                                currentInstructionIndex = 0
-                                                screenState = MapScreenState.ROUTE_PREVIEW
-                                                offlineRouteDebugMessage =
-                                                        buildString {
-                                                                append(
-                                                                        if (plan.source ==
-                                                                                        RouteSource
-                                                                                                .OFFLINE
-                                                                                )
-                                                                                "Offline route"
-                                                                        else "Online route"
-                                                                )
-                                                                if (plan.avoidedHazards.isNotEmpty()) {
-                                                                        append(
-                                                                                " · avoiding ${plan.avoidedHazards.size} hazard(s)"
-                                                                        )
-                                                                }
-                                                        }
-                                        } else {
-                                                offlineRouteDebugMessage =
-                                                        "Route failed: ${plan.result.errorMessage}"
-                                        }
-                                }
-                                .onFailure { error ->
-                                        offlineRouteDebugMessage =
-                                                "Route crashed: ${error.message}"
-                                }
-                        isLoadingRoute = false
-                }
+                planTrip("driving-car")
         }
 
         // Shops around the current fix: dots on the map, tap for the same sheet as Nearby.
@@ -287,6 +391,21 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 styleIndex = selectedStyleIndex,
                 shops = if (screenState == MapScreenState.NAVIGATING) emptyList() else visibleShops
         )
+
+        // Choosing a category should reveal it, not leave the user hunting at city zoom.
+        LaunchedEffect(shopFilter, mapInstance, mapShops.size) {
+                val map = mapInstance ?: return@LaunchedEffect
+                val category = shopFilter ?: return@LaunchedEffect
+                if (screenState != MapScreenState.IDLE) return@LaunchedEffect
+                val shops = mapShops.filter { it.category == category }
+                if (shops.isEmpty()) return@LaunchedEffect
+                val bounds = org.maplibre.android.geometry.LatLngBounds.Builder()
+                shops.forEach { shop -> bounds.include(LatLng(shop.lat, shop.lon)) }
+                map.animateCamera(
+                        CameraUpdateFactory.newLatLngBounds(bounds.build(), 180),
+                        900
+                )
+        }
 
         // Tapping a marker (or a card elsewhere) opens the shared shop sheet.
         selectedShop?.let { shop ->
@@ -315,13 +434,41 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         /**
+         * Stops that are still ahead of the driver on [route]. Used when a reroute must not throw
+         * away a fuel stop the driver has not reached yet.
+         */
+        fun remainingStops(
+                route: RouteResult?,
+                currentIndex: Int
+        ): List<GeoSearchResult> {
+                if (routeStops.isEmpty()) return emptyList()
+                if (route == null || currentIndex < 0) return routeStops
+                return routeStops.filter { stop ->
+                        val nearest =
+                                route.coordinates.indices.minByOrNull { index ->
+                                        val point = route.coordinates[index]
+                                        GeoGeometry.haversineMeters(
+                                                GeoPoint(stop.lat, stop.lng),
+                                                GeoPoint(point.first, point.second)
+                                        )
+                                } ?: return@filter true
+                        nearest > currentIndex + 1
+                }
+        }
+
+        /**
          * Re-plan from the live fix after the driver leaves the line.
          *
          * The start point is the raw GPS fix, not the snapped route point: the whole point of this
          * route is to get back from where the car actually is. The resulting route replaces the
          * active one, so the next location callback snaps to the new geometry.
          */
-        fun rerouteFromDeviation(rawLat: Double, rawLng: Double) {
+        fun rerouteFromDeviation(
+                rawLat: Double,
+                rawLng: Double,
+                wrongWay: Boolean = false,
+                viaStops: List<GeoSearchResult> = emptyList()
+        ) {
                 if (isRerouting) return
                 val destination = selectedDestination ?: return
                 val walk = selectedProfile == "foot-walking"
@@ -329,7 +476,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val session = navigationSessionId
 
                 isRerouting = true
-                navigationNotice = "Off route · finding a new way…"
+                if (wrongWay) wrongWayDetected = true
+                navigationNotice =
+                        if (wrongWay) "Wrong way · turn around…"
+                        else "Off route · finding a new way…"
 
                 scope.launch {
                         val plan =
@@ -339,7 +489,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         destinationLat = destination.lat,
                                         destinationLng = destination.lng,
                                         profile = if (walk) "foot" else "car",
-                                        hazards = activeHazards
+                                        hazards = activeHazards,
+                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) }
                                 )
 
                         // The driver may have exited or started a new trip while we were planning.
@@ -360,11 +511,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 currentInstructionIndex = 0
                                 activeRouteSource = plan.source
                                 avoidedHazardCount = plan.avoidedHazards.size
+                                routeStops = viaStops
                                 remainingDistance = plan.result.distanceMeters
                                 remainingDuration = plan.result.durationSeconds
                                 navigationNotice =
-                                        "New route · ${formatDistance(plan.result.distanceMeters)} · ${formatDuration(plan.result.durationSeconds)}"
-                                offlineRouteDebugMessage = "Rerouted from current location"
+                                        if (wrongWay) "Wrong way · turn around"
+                                        else
+                                                "New route · ${formatDistance(plan.result.distanceMeters)} · ${formatDuration(plan.result.durationSeconds)}"
+                                offlineRouteDebugMessage =
+                                        if (wrongWay) "Wrong-way reroute"
+                                        else "Rerouted from current location"
                                 plan.avoidedHazards.firstOrNull()?.let {
                                         lastAutoReroutedHazardId = it.id
                                 }
@@ -378,7 +534,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 }
                         } else {
                                 pendingSimulationRestart = false
-                                navigationNotice = "Off route · no new route found"
+                                navigationNotice =
+                                        if (wrongWay) "Wrong way · no new route"
+                                        else "Off route · no new route found"
                                 offlineRouteDebugMessage =
                                         "Reroute failed: ${plan?.result?.errorMessage ?: "no route"}"
                         }
@@ -476,7 +634,97 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         }
                 }
 
-                rerouteFromDeviation(deviated.latitude, deviated.longitude)
+                rerouteFromDeviation(
+                        deviated.latitude,
+                        deviated.longitude,
+                        viaStops = remainingStops(route, index)
+                )
+        }
+
+        /**
+         * Test hook for simulation mode: pretend the car is still on the route but pointing the
+         * wrong way (a U-turn or a one-way entered backwards). The distance-to-line is zero, so
+         * this exercises the bearing half of [OffRouteMonitor] and the wrong-way warning.
+         */
+        fun simulateWrongWay() {
+                if (!isSimulationMode || screenState != MapScreenState.NAVIGATING) return
+                if (isRerouting) return
+                if (selectedDestination == null) return
+                val position = simPosition ?: return
+                val route =
+                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
+                        else routeResult
+                if (route == null || route.coordinates.size < 2) return
+
+                val index = simSegmentIndex.coerceIn(0, route.coordinates.size - 2)
+                val a = route.coordinates[index]
+                val b = route.coordinates[index + 1]
+                val routeBearing =
+                        CameraTransitionManager.calculateBearing(
+                                LatLng(a.first, a.second),
+                                LatLng(b.first, b.second)
+                        )
+                val wrongBearing = (routeBearing + 180.0) % 360.0
+                val testSpeed = maxOf(selectedSimSpeed.speedMps, 5f)
+
+                offRouteMonitor.reset()
+                var decision =
+                        offRouteMonitor.onFix(
+                                distanceMeters = 0.0,
+                                accuracyMeters = 5f,
+                                routeBearingDegrees = routeBearing,
+                                travelBearingDegrees = wrongBearing,
+                                speedMps = testSpeed
+                        )
+                repeat(3) {
+                        decision =
+                                offRouteMonitor.onFix(
+                                        distanceMeters = 0.0,
+                                        accuracyMeters = 5f,
+                                        routeBearingDegrees = routeBearing,
+                                        travelBearingDegrees = wrongBearing,
+                                        speedMps = testSpeed
+                                )
+                }
+                if (!decision.shouldReroute) {
+                        navigationNotice = "Wrong-way test · not enough movement"
+                        return
+                }
+
+                routeSimulator.stopSimulation()
+                pendingSimulationRestart = true
+                currentLat = position.latitude
+                currentLng = position.longitude
+                currentBearing = wrongBearing
+                hasLocation = true
+                wrongWayDetected = true
+
+                val mockLocation =
+                        android.location.Location("simulated-wrong-way").apply {
+                                latitude = position.latitude
+                                longitude = position.longitude
+                                bearing = wrongBearing.toFloat()
+                                speed = testSpeed
+                                accuracy = 5f
+                                time = System.currentTimeMillis()
+                        }
+                mapInstance?.locationComponent?.forceLocationUpdate(mockLocation)
+                if (!isUserPanMode) {
+                        mapInstance?.let { map ->
+                                CameraTransitionManager.updateNavigationCamera(
+                                        map,
+                                        LatLng(position.latitude, position.longitude),
+                                        wrongBearing
+                                )
+                        }
+                }
+
+                rerouteFromDeviation(
+                        position.latitude,
+                        position.longitude,
+                        wrongWay = true,
+                        viaStops = remainingStops(route, index)
+                )
         }
 
         // Live location tracking during navigation (real GPS or simulation)
@@ -522,6 +770,40 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                         ?: routeResult)
                                                                         else routeResult
 
+                                                                // Heading comes from the raw GPS
+                                                                // movement, not the snapped points:
+                                                                // after a reroute the snap can jump
+                                                                // to another road and would spin
+                                                                // the camera.
+                                                                val movedMeters =
+                                                                        calculateDistance(
+                                                                                previousLat,
+                                                                                previousLng,
+                                                                                location.latitude,
+                                                                                location.longitude
+                                                                        )
+                                                                val travelBearing =
+                                                                        when {
+                                                                                location.hasBearing() &&
+                                                                                                location.speed >
+                                                                                                                1.0f ->
+                                                                                        location.bearing
+                                                                                                .toDouble()
+                                                                                movedMeters > 5.0 ->
+                                                                                        CameraTransitionManager
+                                                                                                .calculateBearing(
+                                                                                                        LatLng(
+                                                                                                                previousLat,
+                                                                                                                previousLng
+                                                                                                        ),
+                                                                                                        LatLng(
+                                                                                                                location.latitude,
+                                                                                                                location.longitude
+                                                                                                        )
+                                                                                                )
+                                                                                else -> currentBearing
+                                                                        }
+
                                                                 // Apply road snapping if we have a
                                                                 // route
                                                                 val snapResult =
@@ -542,17 +824,70 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                         )
 
                                                                 // Deviation is judged on the raw
-                                                                // fix, never the snapped one.
+                                                                // fix, never the snapped one. The
+                                                                // route bearing lets us catch a
+                                                                // wrong-way/U-turn even when the car
+                                                                // never leaves the line.
                                                                 if (activeRoute != null) {
+                                                                        val routeBearing =
+                                                                                if (snapResult.matchedIndex in
+                                                                                                0 until
+                                                                                                        activeRoute
+                                                                                                                .coordinates
+                                                                                                                .size -
+                                                                                                                1
+                                                                                ) {
+                                                                                        val a =
+                                                                                                activeRoute
+                                                                                                        .coordinates[
+                                                                                                        snapResult
+                                                                                                                .matchedIndex]
+                                                                                        val b =
+                                                                                                activeRoute
+                                                                                                        .coordinates[
+                                                                                                        snapResult
+                                                                                                                .matchedIndex +
+                                                                                                                1]
+                                                                                        CameraTransitionManager
+                                                                                                .calculateBearing(
+                                                                                                        LatLng(
+                                                                                                                a.first,
+                                                                                                                a.second
+                                                                                                        ),
+                                                                                                        LatLng(
+                                                                                                                b.first,
+                                                                                                                b.second
+                                                                                                        )
+                                                                                                )
+                                                                                } else null
                                                                         val decision =
                                                                                 offRouteMonitor.onFix(
-                                                                                        snapResult.distanceMeters,
-                                                                                        location.accuracy
+                                                                                        distanceMeters =
+                                                                                                snapResult
+                                                                                                        .distanceMeters,
+                                                                                        accuracyMeters =
+                                                                                                location.accuracy,
+                                                                                        routeBearingDegrees =
+                                                                                                routeBearing,
+                                                                                        travelBearingDegrees =
+                                                                                                travelBearing,
+                                                                                        speedMps =
+                                                                                                location.speed
                                                                                 )
+                                                                        wrongWayDetected =
+                                                                                decision.isWrongWay
                                                                         if (decision.shouldReroute) {
                                                                                 rerouteFromDeviation(
                                                                                         location.latitude,
-                                                                                        location.longitude
+                                                                                        location.longitude,
+                                                                                        wrongWay =
+                                                                                                decision.isWrongWay,
+                                                                                        viaStops =
+                                                                                                remainingStops(
+                                                                                                        activeRoute,
+                                                                                                        snapResult
+                                                                                                                .matchedIndex
+                                                                                                )
                                                                                 )
                                                                         }
                                                                 }
@@ -610,40 +945,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         }
                                                                 }
 
-                                                                // Heading comes from the raw GPS
-                                                                // movement, not the snapped points:
-                                                                // after a reroute the snap can jump
-                                                                // to a different road and would spin
-                                                                // the camera.
-                                                                val movedMeters =
-                                                                        calculateDistance(
-                                                                                previousLat,
-                                                                                previousLng,
-                                                                                location.latitude,
-                                                                                location.longitude
-                                                                        )
-                                                                val newBearing =
-                                                                        when {
-                                                                                location.hasBearing() &&
-                                                                                                location.speed >
-                                                                                                                1.0f ->
-                                                                                        location.bearing
-                                                                                                .toDouble()
-                                                                                movedMeters > 5.0 ->
-                                                                                        CameraTransitionManager
-                                                                                                .calculateBearing(
-                                                                                                        LatLng(
-                                                                                                                previousLat,
-                                                                                                                previousLng
-                                                                                                        ),
-                                                                                                        LatLng(
-                                                                                                                location.latitude,
-                                                                                                                location.longitude
-                                                                                                        )
-                                                                                                )
-                                                                                else -> currentBearing
-                                                                        }
-                                                                currentBearing = newBearing
+                                                                // Reuse the raw travel bearing computed
+                                                                // above; it was already used for
+                                                                // wrong-way detection.
+                                                                currentBearing = travelBearing
                                                                 previousLat = location.latitude
                                                                 previousLng = location.longitude
 
@@ -732,7 +1037,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                                         snapResult
                                                                                                                 .snappedLng
                                                                                                 ),
-                                                                                                newBearing
+                                                                                                travelBearing
                                                                                         )
                                                                         }
                                                                 }
@@ -949,6 +1254,78 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
+        // === INTERMEDIATE STOPS (fuel / food / hotel on the way) ===
+        LaunchedEffect(routeStops, mapInstance, selectedStyleIndex) {
+                val map = mapInstance ?: return@LaunchedEffect
+                map.getStyle { style ->
+                        runCatching {
+                                val features = JSONArray()
+                                routeStops.forEach { stop ->
+                                        features.put(
+                                                JSONObject()
+                                                        .put("type", "Feature")
+                                                        .put(
+                                                                "geometry",
+                                                                JSONObject()
+                                                                        .put("type", "Point")
+                                                                        .put(
+                                                                                "coordinates",
+                                                                                JSONArray()
+                                                                                        .put(stop.lng)
+                                                                                        .put(stop.lat)
+                                                                        )
+                                                        )
+                                                        .put(
+                                                                "properties",
+                                                                JSONObject()
+                                                                        .put("name", stop.name)
+                                                        )
+                                        )
+                                }
+                                val geoJson =
+                                        JSONObject()
+                                                .put("type", "FeatureCollection")
+                                                .put("features", features)
+                                                .toString()
+
+                                val existing =
+                                        style.getSourceAs<GeoJsonSource>("stops-source")
+                                if (existing != null) {
+                                        existing.setGeoJson(geoJson)
+                                        style.getLayer("stops-marker")
+                                                ?.setProperties(
+                                                        visibility(
+                                                                if (routeStops.isEmpty())
+                                                                        Property.NONE
+                                                                else Property.VISIBLE
+                                                        )
+                                                )
+                                } else if (routeStops.isNotEmpty()) {
+                                        style.addSource(
+                                                GeoJsonSource("stops-source", geoJson)
+                                        )
+                                        style.addLayer(
+                                                CircleLayer("stops-marker", "stops-source")
+                                                        .withProperties(
+                                                                circleColor(
+                                                                        AndroidColor.WHITE
+                                                                ),
+                                                                circleRadius(6f),
+                                                                circleStrokeWidth(3f),
+                                                                circleStrokeColor(
+                                                                        AndroidColor.parseColor(
+                                                                                "#F2A33C"
+                                                                        )
+                                                                ),
+                                                                circleOpacity(0.98f)
+                                                        )
+                                                        .apply { minZoom = 8f }
+                                        )
+                                }
+                        }
+                }
+        }
+
         // === ACTIVE HAZARD ZONES (blast radius circles) ===
         LaunchedEffect(hazards, selectedStyleIndex, mapInstance) {
                 val map = mapInstance ?: return@LaunchedEffect
@@ -1123,6 +1500,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
+        // In a simulation the route-follower is restarted on the correct heading immediately, so
+        // the wrong-way warning is a timed demo. In real GPS each fix refreshes it instead.
+        LaunchedEffect(wrongWayDetected, isSimulationMode) {
+                if (isSimulationMode && wrongWayDetected) {
+                        delay(10_000)
+                        wrongWayDetected = false
+                }
+        }
+
         // === HAZARD CHECK: does the active route cut through a danger zone? ===
         LaunchedEffect(hazards, routeResult, walkRouteResult, selectedProfile) {
                 val activeRoute =
@@ -1159,6 +1545,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 val destination = selectedDestination ?: return@LaunchedEffect
                 val isWalking = selectedProfile == "foot-walking"
+                val activeRoute =
+                        if (isWalking) (walkRouteResult ?: routeResult) else routeResult
+                val currentIndex =
+                        activeRoute?.coordinates?.indices?.minByOrNull { index ->
+                                val point = activeRoute.coordinates[index]
+                                GeoGeometry.haversineMeters(
+                                        GeoPoint(currentLat, currentLng),
+                                        GeoPoint(point.first, point.second)
+                                )
+                        } ?: -1
+                val viaStops = remainingStops(activeRoute, currentIndex)
 
                 isRerouting = true
                 navigationNotice = "Hazard ahead · finding a safe detour…"
@@ -1170,7 +1567,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         destinationLat = destination.lat,
                                         destinationLng = destination.lng,
                                         profile = if (isWalking) "foot" else "car",
-                                        hazards = hazards
+                                        hazards = hazards,
+                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) }
                                 )
 
                         if (plan != null && plan.success) {
@@ -1184,6 +1582,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 currentInstructionIndex = 0
                                 activeRouteSource = plan.source
                                 avoidedHazardCount = plan.avoidedHazards.size
+                                routeStops = viaStops
                                 remainingDistance = plan.result.distanceMeters
                                 remainingDuration = plan.result.durationSeconds
                                 lastAutoReroutedHazardId = hazard.id
@@ -1209,6 +1608,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 try {
                                         style.removeSource("route-source")
                                 } catch (_: Exception) {}
+                                try {
+                                        style.removeLayer("stops-marker")
+                                } catch (_: Exception) {}
+                                try {
+                                        style.removeSource("stops-source")
+                                } catch (_: Exception) {}
                         }
                         mapInstance?.setPadding(0, 0, 0, 0)
                         routeSource = null
@@ -1228,7 +1633,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 map.addOnMapClickListener { latLng ->
                                         val point = map.projection.toScreenLocation(latLng)
                                         val shopId =
-                                                map.queryRenderedFeatures(point, "shops-dot")
+                                                map.queryRenderedFeatures(point, "shops-symbol")
                                                         .firstOrNull()
                                                         ?.properties()
                                                         ?.get("shopId")
@@ -1307,15 +1712,28 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 isSearching = screenState == MapScreenState.SEARCHING,
                                 onClear = {
                                         searchQuery = ""
-                                        screenState = MapScreenState.IDLE
+                                        if (searchPurpose == SearchPurpose.DESTINATION) {
+                                                screenState = MapScreenState.IDLE
+                                        }
                                 },
                                 onBack = {
-                                        searchQuery = ""
-                                        screenState = MapScreenState.IDLE
+                                        if (searchPurpose == SearchPurpose.STOP &&
+                                                        selectedDestination != null
+                                        ) {
+                                                searchPurpose = SearchPurpose.DESTINATION
+                                                searchQuery = selectedDestination?.name ?: ""
+                                                screenState = MapScreenState.ROUTE_PREVIEW
+                                        } else {
+                                                searchQuery = ""
+                                                screenState = MapScreenState.IDLE
+                                        }
                                 },
                                 onVoice = { /* Voice search */},
                                 onProfile = { /* Profile */},
-                                onClick = { screenState = MapScreenState.SEARCHING }
+                                onClick = { screenState = MapScreenState.SEARCHING },
+                                placeholder =
+                                        if (searchPurpose == SearchPurpose.STOP) "Add a stop"
+                                        else "Search here"
                         )
                 }
 
@@ -1349,66 +1767,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         SearchResultsCard(
                                 query = searchQuery,
                                 onResultClick = { result ->
-                                        selectedDestination = result
-                                        searchQuery = result.name
-                                        screenState = MapScreenState.IDLE
-
-                                        // Calculate route: offline first, online fallback, hazards avoided
-                                        scope.launch {
-                                                isLoadingRoute = true
-                                                offlineRouteDebugMessage = null
-
-                                                runCatching {
-                                                        RouteRepository.plan(
-                                                                start = GeoPoint(currentLat, currentLng),
-                                                                end = GeoPoint(result.lat, result.lng),
-                                                                profile = "car",
-                                                                hazards = HazardRegistry.active()
-                                                        )
-                                                }
-                                                        .onSuccess { plan ->
-                                                                if (plan.success) {
-                                                                        routeResult = plan.result
-                                                                        activeRouteSource = plan.source
-                                                                        avoidedHazardCount =
-                                                                                plan.avoidedHazards.size
-                                                                        walkRouteResult = null
-                                                                        navigationInstructions =
-                                                                                plan.result.instructions
-                                                                        currentInstructionIndex = 0
-                                                                        screenState =
-                                                                                MapScreenState
-                                                                                        .ROUTE_PREVIEW
-                                                                        offlineRouteDebugMessage =
-                                                                                buildString {
-                                                                                        append(
-                                                                                                if (plan.source ==
-                                                                                                                RouteSource
-                                                                                                                        .OFFLINE
-                                                                                                )
-                                                                                                        "Offline route"
-                                                                                                else "Online route"
-                                                                                        )
-                                                                                        if (plan.avoidedHazards.isNotEmpty()) {
-                                                                                                append(
-                                                                                                        " · avoiding ${plan.avoidedHazards.size} hazard(s)"
-                                                                                                )
-                                                                                        }
-                                                                                }
-                                                                } else {
-                                                                        offlineRouteDebugMessage =
-                                                                                "Route failed: ${plan.result.errorMessage}"
-                                                                }
-                                                        }
-                                                        .onFailure { error ->
-                                                                offlineRouteDebugMessage =
-                                                                        "Route crashed: ${error.message}"
-                                                        }
-
-                                                if (screenState != MapScreenState.ROUTE_PREVIEW) {
-                                                        routeResult = null
-                                                }
-                                                isLoadingRoute = false
+                                        if (searchPurpose == SearchPurpose.STOP) {
+                                                addStop(result)
+                                                searchPurpose = SearchPurpose.DESTINATION
+                                                searchQuery = ""
+                                                screenState = MapScreenState.ROUTE_PREVIEW
+                                        } else {
+                                                planRouteTo(result)
                                         }
                                 }
                         )
@@ -1598,96 +1963,25 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         routeSource = activeRouteSource,
                                         avoidedHazardCount = avoidedHazardCount,
                                         hazardWarning = hazardWarning,
-                                        onAvoidHazard = {
-                                                scope.launch {
-                                                        isLoadingRoute = true
-                                                        val destination = selectedDestination
-                                                        val isWalking =
-                                                                selectedProfile == "foot-walking"
-                                                        val plan =
-                                                                if (destination != null) {
-                                                                        runCatching {
-                                                                                        RouteRepository.plan(
-                                                                                                start =
-                                                                                                        GeoPoint(
-                                                                                                                currentLat,
-                                                                                                                currentLng
-                                                                                                        ),
-                                                                                                end =
-                                                                                                        GeoPoint(
-                                                                                                                destination.lat,
-                                                                                                                destination.lng
-                                                                                                        ),
-                                                                                                profile =
-                                                                                                        if (isWalking)
-                                                                                                                "foot"
-                                                                                                        else "car",
-                                                                                                hazards = hazards
-                                                                                        )
-                                                                                }
-                                                                                .getOrNull()
-                                                                } else null
-                                                        if (plan != null && plan.success) {
-                                                                if (isWalking) {
-                                                                        walkRouteResult = plan.result
-                                                                } else {
-                                                                        routeResult = plan.result
-                                                                        navigationInstructions =
-                                                                                plan.result
-                                                                                        .instructions
-                                                                        currentInstructionIndex = 0
-                                                                }
-                                                                activeRouteSource = plan.source
-                                                                avoidedHazardCount =
-                                                                        plan.avoidedHazards.size
-                                                                offlineRouteDebugMessage =
-                                                                        "Avoiding ${plan.avoidedHazards.size} hazard(s)"
-                                                                hazardWarning?.let {
-                                                                        lastAutoReroutedHazardId = it.id
-                                                                }
-                                                        } else {
-                                                                offlineRouteDebugMessage =
-                                                                        "Could not find a safe detour"
-                                                        }
-                                                        isLoadingRoute = false
-                                                }
+                                        onAvoidHazard = { planTrip(selectedProfile) },
+                                        onProfileChange = { profile -> planTrip(profile) },
+                                        stops = routeStops,
+                                        onAddStop = {
+                                                searchPurpose = SearchPurpose.STOP
+                                                searchQuery = ""
+                                                screenState = MapScreenState.SEARCHING
                                         },
-                                        onProfileChange = { profile ->
-                                                selectedProfile = profile
-                                                if (profile == "foot-walking" &&
-                                                                walkRouteResult == null &&
-                                                                selectedDestination != null
-                                                ) {
-                                                        scope.launch {
-                                                                isLoadingWalk = true
-                                                                val walkPlan =
-        runCatching {
-                RouteRepository.plan(
-                        start = GeoPoint(currentLat, currentLng),
-                        end = GeoPoint(
-                                selectedDestination!!.lat,
-                                selectedDestination!!.lng
-                        ),
-                        profile = "foot",
-                        hazards = HazardRegistry.active()
-                )
-        }.getOrNull()
-walkRouteResult = if (walkPlan?.success == true) walkPlan.result else null
-if (walkRouteResult == null) {
-        offlineRouteDebugMessage =
-                "Walking route failed: " + (walkPlan?.result?.errorMessage ?: "unknown error")
-}
-                                                                isLoadingWalk = false
-                                                        }
-                                                }
-                                        },
+                                        onRemoveStop = { removeStop(it) },
+                                        onQuickStop = { addQuickStop(it) },
                                         onStartNavigation = {
                                                 currentInstructionIndex = 0
                                                 navigationNotice = null
                                                 isRerouting = false
+                                                wrongWayDetected = false
                                                 lastAutoReroutedHazardId = null
                                                 offRouteMonitor.reset()
                                                 pendingSimulationRestart = false
+                                                showSimControls = false
                                                 navigationSessionId++
                                                 val activeRoute =
                                                         if (selectedProfile == "driving-car") {
@@ -1734,9 +2028,14 @@ if (walkRouteResult == null) {
                                                                 style.removeLayer("route-layer")
                                                                 style.removeSource("route-source")
                                                         } catch (_: Exception) {}
+                                                        try {
+                                                                style.removeLayer("stops-marker")
+                                                                style.removeSource("stops-source")
+                                                        } catch (_: Exception) {}
                                                 }
                                                 routeResult = null
                                                 walkRouteResult = null
+                                                routeStops = emptyList()
                                                 selectedDestination = null
                                                 selectedProfile = "driving-car"
                                                 searchQuery = ""
@@ -1774,6 +2073,7 @@ if (walkRouteResult == null) {
                         totalInstructions = navigationInstructions.size,
                         navigationNotice = navigationNotice,
                         isRerouting = isRerouting,
+                        wrongWay = wrongWayDetected,
                         onNext = {
                                 if (currentInstructionIndex < navigationInstructions.size - 1) {
                                         currentInstructionIndex++
@@ -1785,8 +2085,11 @@ if (walkRouteResult == null) {
                                 isSimulationMode = false
                                 isRerouting = false
                                 navigationNotice = null
+                                wrongWayDetected = false
                                 offRouteMonitor.reset()
                                 pendingSimulationRestart = false
+                                routeStops = emptyList()
+                                showSimControls = false
                                 navigationSessionId++
 
                                 // Fetch actual user location to prevent routing from stale simulation position
@@ -1852,14 +2155,49 @@ if (walkRouteResult == null) {
         }
         // === SIMULATION CONTROLS (shown during navigation when sim active) ===
         Box(modifier = Modifier.fillMaxSize()) {
+                // Collapsed state: a small chip so the navigation screen stays clean.
                 AnimatedVisibility(
-                        visible = screenState == MapScreenState.NAVIGATING && isSimulationMode,
-                        enter = slideInVertically { -it } + fadeIn(),
-                        exit = slideOutVertically { -it } + fadeOut(),
+                        visible =
+                                screenState == MapScreenState.NAVIGATING &&
+                                        isSimulationMode &&
+                                        !showSimControls,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
                         modifier =
-                                Modifier.align(Alignment.TopEnd)
-                                        .statusBarsPadding()
-                                        .padding(top = 100.dp, end = 8.dp)
+                                Modifier.align(Alignment.BottomStart)
+                                        .padding(start = 8.dp, bottom = 240.dp)
+                ) {
+                        AssistChip(
+                                onClick = { showSimControls = true },
+                                label = {
+                                        Text(
+                                                "SIM",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                        )
+                                },
+                                leadingIcon = {
+                                        Icon(
+                                                Icons.Default.Science,
+                                                null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = Sky
+                                        )
+                                },
+                                modifier = Modifier.height(32.dp)
+                        )
+                }
+
+                AnimatedVisibility(
+                        visible =
+                                screenState == MapScreenState.NAVIGATING &&
+                                        isSimulationMode &&
+                                        showSimControls,
+                        enter = fadeIn() + scaleIn(initialScale = 0.95f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.95f),
+                        modifier =
+                                Modifier.align(Alignment.BottomStart)
+                                        .padding(start = 8.dp, bottom = 240.dp)
                 ) {
                         Card(
                                 shape = RoundedCornerShape(12.dp),
@@ -1877,11 +2215,36 @@ if (walkRouteResult == null) {
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                        Text(
-                                                "🧪 SIM",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold
-                                        )
+                                        Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                                Icon(
+                                                        Icons.Default.Science,
+                                                        null,
+                                                        modifier = Modifier.size(14.dp),
+                                                        tint = Sky
+                                                )
+                                                Text(
+                                                        "SIM",
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                )
+                                                Icon(
+                                                        Icons.Default.Close,
+                                                        "Hide simulation controls",
+                                                        modifier =
+                                                                Modifier.size(16.dp)
+                                                                        .clickable {
+                                                                                showSimControls =
+                                                                                        false
+                                                                        },
+                                                        tint =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant
+                                                )
+                                        }
 
                                         // Speed buttons
                                         SimulationSpeed.entries.forEach { speed ->
@@ -1908,7 +2271,11 @@ if (walkRouteResult == null) {
                                                 )
                                         }
 
-                                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                                        HorizontalDivider(
+                                                modifier =
+                                                        Modifier.width(120.dp)
+                                                                .padding(vertical = 4.dp)
+                                        )
 
                                         // GPS Toggle
                                         Row(
@@ -1934,24 +2301,45 @@ if (walkRouteResult == null) {
                                         }
 
                                         // Test the live reroute path without driving: jump the
-                                        // puck 200 m off the line, then let the detector and
-                                        // router do exactly what they do for a real missed turn.
-                                        OutlinedButton(
-                                                onClick = { simulateDeviation() },
-                                                enabled = !isRerouting && !simArrived,
-                                                modifier = Modifier.height(30.dp),
-                                                contentPadding =
-                                                        PaddingValues(
-                                                                horizontal = 10.dp,
-                                                                vertical = 0.dp
+                                        // puck 200 m off the line, or turn it around on the
+                                        // line. Both feed the same detector and router.
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                OutlinedButton(
+                                                        onClick = { simulateDeviation() },
+                                                        enabled = !isRerouting && !simArrived,
+                                                        modifier = Modifier.height(30.dp),
+                                                        contentPadding =
+                                                                PaddingValues(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 0.dp
+                                                                )
+                                                ) {
+                                                        Text(
+                                                                "Deviate",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelSmall,
+                                                                fontWeight = FontWeight.SemiBold
                                                         )
-                                        ) {
-                                                Text(
-                                                        "Deviate",
-                                                        style =
-                                                                MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.SemiBold
-                                                )
+                                                }
+                                                OutlinedButton(
+                                                        onClick = { simulateWrongWay() },
+                                                        enabled = !isRerouting && !simArrived,
+                                                        modifier = Modifier.height(30.dp),
+                                                        contentPadding =
+                                                                PaddingValues(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 0.dp
+                                                                )
+                                                ) {
+                                                        Text(
+                                                                "Wrong way",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelSmall,
+                                                                fontWeight = FontWeight.SemiBold
+                                                        )
+                                                }
                                         }
 
                                         // Progress indicator
@@ -2129,13 +2517,15 @@ private suspend fun planRouteOffMain(
         destinationLat: Double,
         destinationLng: Double,
         profile: String,
-        hazards: List<HazardZone>
+        hazards: List<HazardZone>,
+        stops: List<GeoPoint> = emptyList()
 ): RoutePlan? =
         withContext(Dispatchers.Default) {
                 try {
-                        RouteRepository.plan(
+                        RouteRepository.planWithStops(
                                 start = GeoPoint(startLat, startLng),
                                 end = GeoPoint(destinationLat, destinationLng),
+                                stops = stops,
                                 profile = profile,
                                 hazards = hazards
                         )

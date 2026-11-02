@@ -48,6 +48,7 @@ import com.google.android.gms.location.Priority
 import com.noobdev.waffle.feature.flood.loadSectorData
 import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.data.remote.*
+import com.noobdev.waffle.feature.shops.data.ShopCategory
 import com.noobdev.waffle.core.navigation.CameraTransitionManager
 import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
@@ -94,7 +95,11 @@ fun RoutePreviewCard(
         routeSource: RouteSource? = null,
         avoidedHazardCount: Int = 0,
         hazardWarning: HazardZone? = null,
-        onAvoidHazard: (() -> Unit)? = null
+        onAvoidHazard: (() -> Unit)? = null,
+        stops: List<GeoSearchResult> = emptyList(),
+        onAddStop: (() -> Unit)? = null,
+        onRemoveStop: ((GeoSearchResult) -> Unit)? = null,
+        onQuickStop: ((ShopCategory) -> Unit)? = null
 ) {
         val isDriving = selectedProfile == "driving-car"
         val currentRoute = if (isDriving) routeResult else (walkRouteResult ?: routeResult)
@@ -121,12 +126,231 @@ fun RoutePreviewCard(
                                                 color = MaterialTheme.colorScheme.primary
                                         )
                                         Text(
-                                                "${formatDistance(currentRoute.distanceMeters)} • ${destination?.name ?: "Destination"}",
+                                                "${formatDistance(currentRoute.distanceMeters)} • ${if (stops.isNotEmpty()) "${stops.size} stop(s) • " else ""}${destination?.name ?: "Destination"}",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                 }
                                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close") }
+                        }
+
+                        // Stops: a compact "via" strip plus one-tap fuel/food/stay shortcuts.
+                        if (onAddStop != null) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                        Text(
+                                                "Via",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        LazyRow(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                if (stops.isEmpty()) {
+                                                        item {
+                                                                Text(
+                                                                        "Direct",
+                                                                        style =
+                                                                                MaterialTheme
+                                                                                        .typography
+                                                                                        .labelSmall,
+                                                                        color =
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .onSurfaceVariant
+                                                                )
+                                                        }
+                                                }
+                                                items(stops) { stop ->
+                                                        Surface(
+                                                                shape = RoundedCornerShape(50),
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .surfaceVariant
+                                                                                .copy(alpha = 0.7f)
+                                                        ) {
+                                                                Row(
+                                                                        modifier =
+                                                                                Modifier.padding(
+                                                                                        start = 10.dp,
+                                                                                        end = 6.dp,
+                                                                                        top = 6.dp,
+                                                                                        bottom = 6.dp
+                                                                                ),
+                                                                        verticalAlignment =
+                                                                                Alignment
+                                                                                        .CenterVertically
+                                                                ) {
+                                                                        Icon(
+                                                                                Icons.Default.Place,
+                                                                                null,
+                                                                                modifier =
+                                                                                        Modifier.size(
+                                                                                                13.dp
+                                                                                        ),
+                                                                                tint =
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .primary
+                                                                        )
+                                                                        Spacer(
+                                                                                Modifier.width(
+                                                                                        4.dp
+                                                                                )
+                                                                        )
+                                                                        Text(
+                                                                                stop.name,
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .labelSmall,
+                                                                                maxLines = 1,
+                                                                                overflow =
+                                                                                        TextOverflow
+                                                                                                .Ellipsis,
+                                                                                modifier =
+                                                                                        Modifier.widthIn(
+                                                                                                max = 120.dp
+                                                                                        )
+                                                                        )
+                                                                        if (onRemoveStop !=
+                                                                                        null
+                                                                        ) {
+                                                                                Spacer(
+                                                                                        Modifier.width(
+                                                                                                4.dp
+                                                                                        )
+                                                                                )
+                                                                                Icon(
+                                                                                        Icons.Default.Close,
+                                                                                        "Remove stop",
+                                                                                        modifier =
+                                                                                                Modifier.size(
+                                                                                                                14.dp
+                                                                                                        )
+                                                                                                        .clickable {
+                                                                                                                onRemoveStop(
+                                                                                                                        stop
+                                                                                                                )
+                                                                                                        },
+                                                                                        tint =
+                                                                                                MaterialTheme
+                                                                                                        .colorScheme
+                                                                                                        .onSurfaceVariant
+                                                                                )
+                                                                        }
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                        Surface(
+                                                onClick = onAddStop,
+                                                shape = RoundedCornerShape(50),
+                                                color =
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.10f
+                                                        ),
+                                                border =
+                                                        BorderStroke(
+                                                                1.dp,
+                                                                MaterialTheme.colorScheme.primary
+                                                                        .copy(alpha = 0.4f)
+                                                        )
+                                        ) {
+                                                Row(
+                                                        modifier =
+                                                                Modifier.padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 6.dp
+                                                                ),
+                                                        verticalAlignment =
+                                                                Alignment.CenterVertically
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.Add,
+                                                                null,
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                        )
+                                                        Spacer(Modifier.width(4.dp))
+                                                        Text(
+                                                                "Add stop",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelSmall,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                        )
+                                                }
+                                        }
+                                }
+
+                                if (onQuickStop != null) {
+                                        Row(
+                                                modifier = Modifier.padding(top = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                        Arrangement.spacedBy(6.dp)
+                                        ) {
+                                                Text(
+                                                        "Along the way:",
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall,
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant
+                                                )
+                                                listOf(
+                                                                ShopCategory.FUEL,
+                                                                ShopCategory.FOOD,
+                                                                ShopCategory.STAY
+                                                        )
+                                                        .forEach { category ->
+                                                                AssistChip(
+                                                                        onClick = {
+                                                                                onQuickStop(
+                                                                                        category
+                                                                                )
+                                                                        },
+                                                                        label = {
+                                                                                Text(
+                                                                                        category
+                                                                                                .shortLabel,
+                                                                                        style =
+                                                                                                MaterialTheme
+                                                                                                        .typography
+                                                                                                        .labelSmall
+                                                                                )
+                                                                        },
+                                                                        leadingIcon = {
+                                                                                Icon(
+                                                                                        category.icon,
+                                                                                        null,
+                                                                                        modifier =
+                                                                                                Modifier.size(
+                                                                                                        14.dp
+                                                                                                ),
+                                                                                        tint =
+                                                                                                category.tint
+                                                                                )
+                                                                        },
+                                                                        modifier =
+                                                                                Modifier.height(
+                                                                                        30.dp
+                                                                                )
+                                                                )
+                                                        }
+                                        }
+                                }
                         }
 
                         // Offline/online source + whether hazards were avoided
