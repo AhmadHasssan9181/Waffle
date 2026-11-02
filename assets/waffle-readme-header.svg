@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420">
+<defs>
+  
+    <radialGradient id="waffle-batter" cx="40%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="55%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </radialGradient>
+    <linearGradient id="fuselage-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="55%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+    <filter id="drone-pop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="-6" dy="12" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="waffle-rotor-clip">
+      <circle cx="0" cy="0" r="40"/>
+    </clipPath>
+
+    <g id="waffle-propeller">
+      <circle cx="0" cy="5" r="44" fill="#78350f" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="0" r="44" fill="url(#waffle-batter)" stroke="#0f172a" stroke-width="4.5"/>
+      <g clip-path="url(#waffle-rotor-clip)">
+        <g fill="#92400e" stroke="#78350f" stroke-width="1.5">
+          <rect x="-38" y="-38" width="14" height="14" rx="2.5"/><rect x="-18" y="-38" width="14" height="14" rx="2.5"/><rect x="2" y="-38" width="14" height="14" rx="2.5"/><rect x="22" y="-38" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="-18" width="14" height="14" rx="2.5"/><rect x="-18" y="-18" width="14" height="14" rx="2.5"/><rect x="2" y="-18" width="14" height="14" rx="2.5"/><rect x="22" y="-18" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="2" width="14" height="14" rx="2.5"/><rect x="-18" y="2" width="14" height="14" rx="2.5"/><rect x="2" y="2" width="14" height="14" rx="2.5"/><rect x="22" y="2" width="14" height="14" rx="2.5"/>
+          <rect x="-38" y="22" width="14" height="14" rx="2.5"/><rect x="-18" y="22" width="14" height="14" rx="2.5"/><rect x="2" y="22" width="14" height="14" rx="2.5"/><rect x="22" y="22" width="14" height="14" rx="2.5"/>
+        </g>
+        <g fill="#b45309">
+          <rect x="-36" y="-34" width="12" height="10" rx="1.5"/><rect x="-16" y="-34" width="12" height="10" rx="1.5"/><rect x="4" y="-34" width="12" height="10" rx="1.5"/><rect x="24" y="-34" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="-14" width="12" height="10" rx="1.5"/><rect x="-16" y="-14" width="12" height="10" rx="1.5"/><rect x="4" y="-14" width="12" height="10" rx="1.5"/><rect x="24" y="-14" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="6" width="12" height="10" rx="1.5"/><rect x="-16" y="6" width="12" height="10" rx="1.5"/><rect x="4" y="6" width="12" height="10" rx="1.5"/><rect x="24" y="6" width="12" height="10" rx="1.5"/>
+          <rect x="-36" y="26" width="12" height="10" rx="1.5"/><rect x="-16" y="26" width="12" height="10" rx="1.5"/><rect x="4" y="26" width="12" height="10" rx="1.5"/><rect x="24" y="26" width="12" height="10" rx="1.5"/>
+        </g>
+      </g>
+      <circle cx="0" cy="0" r="40" fill="none" stroke="#fef08a" stroke-width="2" opacity="0.7"/>
+      <g transform="rotate(-30)">
+        <path d="M -38 -4 C -15 -9, -6 -3, 0 0 C 6 3, 15 9, 38 4 C 41 1, 41 -1, 38 -4 C 15 -2, 6 -2, 0 0 C -6 2, -15 2, -38 4 Z" fill="#38bdf8" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round"/>
+      </g>
+      <circle cx="0" cy="0" r="10" fill="#0f172a"/>
+      <circle cx="0" cy="0" r="6" fill="#38bdf8"/>
+      <circle cx="-2" cy="-2" r="2" fill="#ffffff"/>
+    </g>
+  
+  <radialGradient id="header-bg" cx="50%" cy="30%" r="90%">
+    <stop offset="0%" stop-color="#FFFDF9"/>
+    <stop offset="50%" stop-color="#FAF4E8"/>
+    <stop offset="100%" stop-color="#F2E6CE"/>
+  </radialGradient>
+  <pattern id="header-dots" width="24" height="24" patternUnits="userSpaceOnUse">
+    <circle cx="2" cy="2" r="1.5" fill="#78350f" opacity="0.08"/>
+  </pattern>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&amp;family=JetBrains+Mono:wght@600;700&amp;display=swap');
+    .title { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 900; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-weight: 700; }
+    .sans { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 700; }
+  </style>
+</defs>
+
+<!-- Background -->
+<rect width="1200" height="420" fill="url(#header-bg)"/>
+<rect width="1200" height="420" fill="url(#header-dots)"/>
+
+<!-- Top Status Bar -->
+<g transform="translate(60, 50)">
+  <rect x="0" y="0" width="168" height="30" rx="7" fill="#f59e0b" fill-opacity="0.16" stroke="#b45309" stroke-width="1.8"/>
+  <circle cx="16" cy="15" r="4.5" fill="#d97706"/>
+  <text x="30" y="20" class="mono" font-size="12" letter-spacing="1.5" fill="#92400e">AUTONOMOUS UAV</text>
+
+  <text x="186" y="20" class="mono" font-size="12" letter-spacing="1.5" fill="#78350f" opacity="0.75">// FLIGHT COMPANION &#183; OFFLINE NAVIGATION</text>
+</g>
+
+<!-- Left Typography Block -->
+<g transform="translate(60, 155)">
+  <!-- Shadow offset title -->
+  <text x="4" y="4" class="title" font-size="82" letter-spacing="-1.5" fill="#78350f" opacity="0.12">W.A.F.F.L.E.</text>
+  <text x="0" y="0" class="title" font-size="82" letter-spacing="-1.5" fill="#0f172a">W.A.F.F.L.E.</text>
+  
+  <text x="0" y="42" class="sans" font-size="22" fill="#0f172a" opacity="0.9">Wireless Autonomous Flying Fleet for Life Emergencies</text>
+  <text x="0" y="72" class="sans" font-size="16" fill="#78350f" opacity="0.8">Offline Android Companion Station &#183; MapLibre Vector GL &#183; GraphHopper</text>
+
+  <!-- Spec Badges -->
+  <g transform="translate(0, 115)">
+    <rect x="0" y="0" width="158" height="34" rx="8" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+    <text x="79" y="22" text-anchor="middle" class="mono" font-size="12" fill="#0f172a">Jetpack Compose</text>
+
+    <rect x="170" y="0" width="138" height="34" rx="8" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+    <text x="239" y="22" text-anchor="middle" class="mono" font-size="12" fill="#0f172a">MapLibre GL</text>
+
+    <rect x="320" y="0" width="168" height="34" rx="8" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+    <text x="404" y="22" text-anchor="middle" class="mono" font-size="12" fill="#0f172a">GraphHopper Offline</text>
+
+    <rect x="500" y="0" width="150" height="34" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+    <text x="575" y="22" text-anchor="middle" class="mono" font-size="12" fill="#92400e">Gemini AI Client</text>
+  </g>
+
+  <text x="0" y="195" class="mono" font-size="11.5" letter-spacing="1.5" fill="#78350f" opacity="0.7">PX4 COMPANION &#183; ZERO-WIFI TURN-BY-TURN &#183; DISASTER TELEMETRY</text>
+</g>
+
+<!-- Right Side: The ACTUAL Waffle Mark Drone Artwork -->
+<g transform="translate(710, -25) scale(0.92)">
+  
+
+  <g transform="translate(256 256) scale(1.62) rotate(-18)" filter="url(#drone-pop)">
+    <g stroke="#0f172a" stroke-width="16" stroke-linecap="round">
+      <line x1="-88" y1="-68" x2="88" y2="68"/>
+      <line x1="88" y1="-68" x2="-88" y2="68"/>
+    </g>
+    <g stroke="#0ea5e9" stroke-width="8" stroke-linecap="round">
+      <line x1="-88" y1="-68" x2="88" y2="68"/>
+      <line x1="88" y1="-68" x2="-88" y2="68"/>
+    </g>
+
+    <use href="#waffle-propeller" x="-92" y="-72"/>
+    <use href="#waffle-propeller" x="92" y="-72"/>
+    <use href="#waffle-propeller" x="-92" y="72"/>
+    <use href="#waffle-propeller" x="92" y="72"/>
+
+    <g transform="translate(-44, 18) rotate(35)">
+      <rect x="-16" y="-24" width="32" height="44" rx="10" fill="#0d9488" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="14" r="13" fill="#e2e8f0" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="14" r="7" fill="#0f172a"/>
+      <circle cx="-2" cy="12" r="2.5" fill="#38bdf8"/>
+    </g>
+
+    <g>
+      <rect x="-34" y="-56" width="68" height="118" rx="22" fill="#9a3412" stroke="#0f172a" stroke-width="4.5"/>
+      <rect x="-34" y="-64" width="68" height="114" rx="22" fill="url(#fuselage-grad)" stroke="#0f172a" stroke-width="4.5"/>
+      <rect x="-20" y="-46" width="40" height="72" rx="12" fill="#2dd4bf" stroke="#0f172a" stroke-width="3.5"/>
+      <rect x="-12" y="-12" width="24" height="28" rx="5" fill="#0f172a"/>
+      <line x1="-7" y1="-4" x2="7" y2="-4" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-7" y1="3" x2="3" y2="3" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-7" y1="10" x2="7" y2="10" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="0" cy="-28" r="7" fill="#fef08a" stroke="#0f172a" stroke-width="3"/>
+      <rect x="-18" y="38" width="36" height="22" rx="8" fill="#38bdf8" stroke="#0f172a" stroke-width="4"/>
+      <circle cx="0" cy="49" r="8" fill="#0f172a"/>
+      <circle cx="0" cy="49" r="4" fill="#38bdf8"/>
+      <circle cx="-1.5" cy="47.5" r="1.5" fill="#ffffff"/>
+    </g>
+  </g>
+
+</g>
+
+<!-- Clean border -->
+<rect x="0" y="0" width="1200" height="420" fill="none" stroke="#0f172a" stroke-width="6"/>
+</svg>
