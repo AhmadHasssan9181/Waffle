@@ -33,6 +33,10 @@ The map tab. This is the most stateful screen in the app.
   route and instructions, and shows a notice in `NavigationModeUI`. Hazard reroutes share the
   `isRerouting` flag so only one plan runs at a time. `CameraTransitionManager.snapToRoute` reports
   the raw offset even when it is too far away to snap.
+- Simulation test: in Test Mode the SIM panel has a **Deviate** button. It jumps the puck 200 m off
+  the line, feeds that position through the same `OffRouteMonitor`, and the normal reroute path
+  restarts the simulator on the new route. This exercises detection, planning and route replacement
+  without driving.
 - A shop/alert can push a pin: set `MapFocus.request(MapTarget(lat, lon, label))`, then navigate to
   `Screen.Map.route`. `MapScreen` consumes it, draws `focus-source` and animates the camera.
 - `DisposableEffect` removes the route layers when the screen leaves composition.

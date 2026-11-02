@@ -200,13 +200,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var isSimulationMode by remember { mutableStateOf(false) }
         var selectedSimSpeed by remember { mutableStateOf(SimulationSpeed.CITY) }
         var showSimControls by remember { mutableStateOf(false) }
+        // A simulated deviation pauses the route-follower; the reroute restarts it on the new line.
+        var pendingSimulationRestart by remember { mutableStateOf(false) }
 
         // Collect simulation state
         val simPosition by routeSimulator.currentPosition.collectAsState()
         val simSpeed by routeSimulator.currentSpeed.collectAsState()
         val simBearing by routeSimulator.currentBearing.collectAsState()
         val simGpsActive by routeSimulator.isGpsActive.collectAsState()
-        val simRunning by routeSimulator.isSimulationRunning.collectAsState()
         val simProgress by routeSimulator.progress.collectAsState()
         val simArrived by routeSimulator.hasArrived.collectAsState()
         val simSegmentIndex by routeSimulator.currentSegmentIndex.collectAsState()
@@ -367,7 +368,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 plan.avoidedHazards.firstOrNull()?.let {
                                         lastAutoReroutedHazardId = it.id
                                 }
+                                if (isSimulationMode && pendingSimulationRestart) {
+                                        pendingSimulationRestart = false
+                                        routeSimulator.startSimulation(
+                                                coordinates = plan.result.coordinates,
+                                                speedMps = selectedSimSpeed.speedMps,
+                                                scope = scope
+                                        )
+                                }
                         } else {
+                                pendingSimulationRestart = false
                                 navigationNotice = "Off route · no new route found"
                                 offlineRouteDebugMessage =
                                         "Reroute failed: ${plan?.result?.errorMessage ?: "no route"}"
@@ -376,6 +386,97 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         offRouteMonitor.markAttempt()
                         isRerouting = false
                 }
+        }
+
+        /**
+         * Test hook for simulation mode: pretend the driver missed a turn by ~200 m, feed that
+         * position through the same detector the live GPS uses, then let the normal reroute path
+         * take over. The route-follower is paused at the off-route point and restarted on the new
+         * line once a route is found.
+         */
+        fun simulateDeviation() {
+                if (!isSimulationMode || screenState != MapScreenState.NAVIGATING) return
+                if (isRerouting) return
+                if (selectedDestination == null) return
+                val position = simPosition ?: return
+                val route =
+                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
+                        else routeResult
+                if (route == null || route.coordinates.size < 2) return
+
+                val index = simSegmentIndex.coerceIn(0, route.coordinates.size - 2)
+                val a = route.coordinates[index]
+                val b = route.coordinates[index + 1]
+                val heading =
+                        CameraTransitionManager.calculateBearing(
+                                LatLng(a.first, a.second),
+                                LatLng(b.first, b.second)
+                        )
+                // Try both shoulders and keep the one that is genuinely furthest from the line.
+                val candidates =
+                        listOf(heading + 90.0, heading - 90.0).map { side ->
+                                side to
+                                        GeoGeometry.destinationMeters(
+                                                GeoPoint(position.latitude, position.longitude),
+                                                side,
+                                                200.0
+                                        )
+                        }
+                val (side, deviated) =
+                        candidates.maxByOrNull { (_, point) ->
+                                CameraTransitionManager.snapToRoute(
+                                                point.latitude,
+                                                point.longitude,
+                                                route.coordinates
+                                        )
+                                        .distanceMeters
+                        } ?: return
+                val distance =
+                        CameraTransitionManager.snapToRoute(
+                                        deviated.latitude,
+                                        deviated.longitude,
+                                        route.coordinates
+                                )
+                                .distanceMeters
+
+                // Run the real detector first. If the chosen point is somehow still close to the
+                // route, keep the simulation running rather than freezing it for nothing.
+                offRouteMonitor.reset()
+                var decision = offRouteMonitor.onFix(distance, 5f)
+                repeat(2) { decision = offRouteMonitor.onFix(distance, 5f) }
+                if (!decision.shouldReroute) {
+                        navigationNotice = "Simulated deviation · too close to the route"
+                        return
+                }
+
+                routeSimulator.stopSimulation()
+                pendingSimulationRestart = true
+                currentLat = deviated.latitude
+                currentLng = deviated.longitude
+                currentBearing = ((side % 360.0) + 360.0) % 360.0
+                hasLocation = true
+
+                val mockLocation =
+                        android.location.Location("simulated-deviation").apply {
+                                latitude = deviated.latitude
+                                longitude = deviated.longitude
+                                bearing = currentBearing.toFloat()
+                                speed = 0f
+                                accuracy = 5f
+                                time = System.currentTimeMillis()
+                        }
+                mapInstance?.locationComponent?.forceLocationUpdate(mockLocation)
+                if (!isUserPanMode) {
+                        mapInstance?.let { map ->
+                                CameraTransitionManager.updateNavigationCamera(
+                                        map,
+                                        LatLng(deviated.latitude, deviated.longitude),
+                                        currentBearing
+                                )
+                        }
+                }
+
+                rerouteFromDeviation(deviated.latitude, deviated.longitude)
         }
 
         // Live location tracking during navigation (real GPS or simulation)
@@ -1586,6 +1687,7 @@ if (walkRouteResult == null) {
                                                 isRerouting = false
                                                 lastAutoReroutedHazardId = null
                                                 offRouteMonitor.reset()
+                                                pendingSimulationRestart = false
                                                 navigationSessionId++
                                                 val activeRoute =
                                                         if (selectedProfile == "driving-car") {
@@ -1684,6 +1786,7 @@ if (walkRouteResult == null) {
                                 isRerouting = false
                                 navigationNotice = null
                                 offRouteMonitor.reset()
+                                pendingSimulationRestart = false
                                 navigationSessionId++
 
                                 // Fetch actual user location to prevent routing from stale simulation position
@@ -1827,6 +1930,27 @@ if (walkRouteResult == null) {
                                                                 routeSimulator.toggleGps()
                                                         },
                                                         modifier = Modifier.height(24.dp)
+                                                )
+                                        }
+
+                                        // Test the live reroute path without driving: jump the
+                                        // puck 200 m off the line, then let the detector and
+                                        // router do exactly what they do for a real missed turn.
+                                        OutlinedButton(
+                                                onClick = { simulateDeviation() },
+                                                enabled = !isRerouting && !simArrived,
+                                                modifier = Modifier.height(30.dp),
+                                                contentPadding =
+                                                        PaddingValues(
+                                                                horizontal = 10.dp,
+                                                                vertical = 0.dp
+                                                        )
+                                        ) {
+                                                Text(
+                                                        "Deviate",
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold
                                                 )
                                         }
 
