@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.noobdev.waffle.core.navigation.GeoGeometry
+import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.feature.shops.data.Shop
 import com.noobdev.waffle.feature.shops.data.ShopPhotoRepository
 import com.noobdev.waffle.feature.shops.data.ShopRepository
@@ -56,6 +57,33 @@ class MapShopsViewModel(application: Application) : AndroidViewModel(application
                             lastLon = lon
                         }
                     }
+            _isLoading.value = false
+            loading = false
+        }
+    }
+
+    /**
+     * Loads shops around a few points along a planned route, merging them into one list. This is
+     * what makes "fuel on the way" work for a 30 km trip instead of only the current block.
+     */
+    fun loadAlongRoute(points: List<GeoPoint>) {
+        if (loading || points.isEmpty()) return
+        loading = true
+        viewModelScope.launch {
+            _isLoading.value = true
+            val merged = linkedMapOf<String, Shop>()
+            points.distinctBy { "${it.latitude},${it.longitude}" }.take(3).forEach { point ->
+                runCatching { repository.nearby(point.latitude, point.longitude, 2_500) }
+                        .getOrNull()
+                        ?.getOrNull()
+                        ?.forEach { merged[it.id] = it }
+            }
+            if (merged.isNotEmpty()) {
+                _shops.value = merged.values.toList()
+                // Let the next local load refresh even if the user is near the route start.
+                lastLat = Double.NaN
+                lastLon = Double.NaN
+            }
             _isLoading.value = false
             loading = false
         }

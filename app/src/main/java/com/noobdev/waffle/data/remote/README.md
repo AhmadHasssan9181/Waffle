@@ -9,6 +9,7 @@ screen should see an exception.
 | `OfflineGeocoder.kt` | Bundled fallback geocoder, no network | none |
 | `OpenMeteo.kt` | Hourly weather | none |
 | `OpenRouteService.kt` | Online routing + `avoid_polygons` | `ORS_API_KEY` |
+| `TomTomTrafficRepository.kt` | Live traffic flow for the navigation ETA | `TOMTOM_API_KEY` (optional) |
 | `GeminiClient.kt`, `GeminiInstance.kt` | AI situation brief | `GEMINI_API_KEY` |
 | `MapStyles.kt` (in `feature/map`) | MapTiler style URLs | `MAPTILER_API_KEY` |
 

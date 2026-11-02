@@ -38,6 +38,7 @@ android {
         buildConfigField("String", "ORS_API_KEY", "\"${secret("ORS_API_KEY")}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${secret("GEMINI_API_KEY")}\"")
         buildConfigField("String", "OPENCAGE_API_KEY", "\"${secret("OPENCAGE_API_KEY")}\"")
+        buildConfigField("String", "TOMTOM_API_KEY", "\"${secret("TOMTOM_API_KEY")}\"")
     }
 
     buildTypes {

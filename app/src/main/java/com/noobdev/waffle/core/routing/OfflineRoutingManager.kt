@@ -69,5 +69,8 @@ object OfflineRoutingManager {
 
     fun getEngineOrNull(): LocalRoutingEngine? = engine
 
+    fun speedLimitKmhAt(lat: Double, lon: Double): Int? =
+            engine?.speedLimitKmhAt(lat, lon)
+
     fun isReady(): Boolean = engine != null
 }

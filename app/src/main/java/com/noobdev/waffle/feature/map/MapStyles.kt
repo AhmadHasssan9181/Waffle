@@ -100,16 +100,24 @@ object MapStyleResolver {
  * The blue dot becomes a small travel-mode badge: car, bike or walk. The bearing arrow stays
  * Honey so heading is readable in both themes.
  */
-private fun locationOptions(context: Context, travelMode: String): LocationComponentOptions {
+private fun locationOptions(
+        context: Context,
+        travelMode: String,
+        hidePuck: Boolean
+): LocationComponentOptions {
     val puck =
             when (travelMode) {
                 "cycling-regular" -> R.drawable.ic_nav_puck_bike
                 "foot-walking" -> R.drawable.ic_nav_puck_walk
                 else -> R.drawable.ic_nav_puck_car
             }
+    val foreground = if (hidePuck) R.drawable.ic_nav_puck_transparent else puck
+    val bearing =
+            if (hidePuck) R.drawable.ic_nav_puck_transparent
+            else R.drawable.ic_nav_bearing
     return LocationComponentOptions.builder(context)
-            .foregroundDrawable(puck)
-            .bearingDrawable(R.drawable.ic_nav_bearing)
+            .foregroundDrawable(foreground)
+            .bearingDrawable(bearing)
             .build()
 }
 
@@ -120,6 +128,7 @@ fun LocationAwareMap(
         modifier: Modifier = Modifier,
         followUser: Boolean = true,
         travelMode: String = "driving-car",
+        hidePuck: Boolean = false,
         onMapReady: (MapLibreMap) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -148,7 +157,7 @@ fun LocationAwareMap(
                     val options = LocationComponentActivationOptions
                         .builder(context, style)
                         .useDefaultLocationEngine(true)
-                        .locationComponentOptions(locationOptions(context, travelMode))
+                        .locationComponentOptions(locationOptions(context, travelMode, hidePuck))
                         .build()
 
                     mapboxMap?.locationComponent?.apply {
@@ -170,7 +179,7 @@ fun LocationAwareMap(
                 if (followUser) CameraMode.TRACKING else CameraMode.NONE
     }
     // Swap the puck badge when the travel mode changes.
-    LaunchedEffect(travelMode) {
+    LaunchedEffect(travelMode, hidePuck) {
         if (!hasLocationPermission) return@LaunchedEffect
         mapboxMap?.let { map ->
             map.getStyle { style ->
@@ -178,7 +187,7 @@ fun LocationAwareMap(
                     val options = LocationComponentActivationOptions
                         .builder(context, style)
                         .useDefaultLocationEngine(true)
-                        .locationComponentOptions(locationOptions(context, travelMode))
+                        .locationComponentOptions(locationOptions(context, travelMode, hidePuck))
                         .build()
                     map.locationComponent.apply {
                         activateLocationComponent(options)
@@ -203,7 +212,7 @@ fun LocationAwareMap(
                                 val options = LocationComponentActivationOptions
                                     .builder(ctx, style)
                                     .useDefaultLocationEngine(true)
-                                    .locationComponentOptions(locationOptions(ctx, travelMode))
+                                    .locationComponentOptions(locationOptions(ctx, travelMode, hidePuck))
                                     .build()
                                 map.locationComponent.apply {
                                     activateLocationComponent(options)

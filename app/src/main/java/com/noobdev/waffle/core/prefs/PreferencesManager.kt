@@ -18,6 +18,7 @@ class PreferencesManager(private val context: Context) {
         // Preference Keys
         private val THEME_KEY = stringPreferencesKey("app_theme")
         private val MAP_STYLE_INDEX_KEY = intPreferencesKey("map_style_index")
+        private val SPEED_UNIT_KEY = stringPreferencesKey("speed_unit")
         private val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         private val FLOOD_ALERTS_KEY = booleanPreferencesKey("flood_alerts")
         private val EARTHQUAKE_ALERTS_KEY = booleanPreferencesKey("earthquake_alerts")
@@ -52,6 +53,20 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setMapStyleIndex(index: Int) {
         context.dataStore.edit { preferences -> preferences[MAP_STYLE_INDEX_KEY] = index }
+    }
+
+    // ============================================
+    // SPEED UNIT
+    // ============================================
+
+    val speedUnit: Flow<SpeedUnit> =
+            context.dataStore.data.map { preferences ->
+                val name = preferences[SPEED_UNIT_KEY] ?: SpeedUnit.KMH.name
+                runCatching { SpeedUnit.valueOf(name) }.getOrDefault(SpeedUnit.KMH)
+            }
+
+    suspend fun setSpeedUnit(unit: SpeedUnit) {
+        context.dataStore.edit { preferences -> preferences[SPEED_UNIT_KEY] = unit.name }
     }
 
     // ============================================

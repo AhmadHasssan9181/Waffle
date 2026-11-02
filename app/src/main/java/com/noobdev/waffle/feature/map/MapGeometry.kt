@@ -150,6 +150,35 @@ fun remainingRouteMeters(
 }
 
 /**
+ * Distance from the current snapped point to [targetIndex] along the route. Used for the "in X m"
+ * approach view and the turn list.
+ */
+fun distanceToRouteIndexMeters(
+        coordinates: List<Pair<Double, Double>>,
+        segmentIndex: Int,
+        targetIndex: Int,
+        currentLat: Double,
+        currentLng: Double
+): Double {
+        if (coordinates.size < 2) return 0.0
+        val start = segmentIndex.coerceIn(0, coordinates.size - 2)
+        val target = targetIndex.coerceIn(start + 1, coordinates.size - 1)
+        var total =
+                calculateDistance(
+                        currentLat,
+                        currentLng,
+                        coordinates[start + 1].first,
+                        coordinates[start + 1].second
+                )
+        for (i in start + 1 until target) {
+                val a = coordinates[i]
+                val b = coordinates[i + 1]
+                total += calculateDistance(a.first, a.second, b.first, b.second)
+        }
+        return total
+}
+
+/**
  * Fast direct update of the route GeoJsonSource for vanishing trail effect. Unlike
  * updateRouteSource, this skips the async getStyle() callback by using the already-stored source
  * reference – crucial for smooth 1-second updates during navigation.

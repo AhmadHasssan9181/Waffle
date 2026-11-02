@@ -59,6 +59,8 @@ import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.prefs.PreferencesManager
+import com.noobdev.waffle.core.prefs.SpeedUnit
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
 import com.noobdev.waffle.core.routing.RoutePlan
 import com.noobdev.waffle.core.routing.RouteRepository
@@ -107,6 +109,8 @@ enum class SearchPurpose {
 fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
+        val preferencesManager = remember { PreferencesManager(context) }
+        val speedUnit by preferencesManager.speedUnit.collectAsState(initial = SpeedUnit.KMH)
 
         val shopsViewModel: MapShopsViewModel = viewModel()
         val mapShops by shopsViewModel.shops.collectAsState()
@@ -208,8 +212,26 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var navigationInstructions by remember { mutableStateOf<List<String>>(emptyList()) }
         var remainingDistance by remember { mutableStateOf(0.0) }
         var remainingDuration by remember { mutableStateOf(0.0) }
+        var distanceToNextTurn by remember { mutableStateOf(0.0) }
         var currentBearing by remember { mutableStateOf(0.0) }
         var currentSpeedMps by remember { mutableStateOf(0f) }
+        var speedLimitKmh by remember { mutableStateOf<Int?>(null) }
+        var lastSpeedLimitCheckAt by remember { mutableStateOf(0L) }
+        var trafficFlow by remember { mutableStateOf<TrafficFlow?>(null) }
+
+        /** The speed used for the live ETA: TomTom flow, then GPS, then the route average. */
+        fun liveSpeedMps(route: RouteResult?): Double {
+                val routeAverage =
+                        if (route != null && route.durationSeconds > 0.0)
+                                route.distanceMeters / route.durationSeconds
+                        else if (selectedProfile == "driving-car") 11.0 else 1.4
+                val trafficSpeed = trafficFlow?.currentSpeedKmh?.div(3.6)
+                return when {
+                        trafficSpeed != null && trafficSpeed > 1.0 -> trafficSpeed
+                        currentSpeedMps > 2f -> currentSpeedMps.toDouble()
+                        else -> routeAverage.coerceAtLeast(1.0)
+                }
+        }
         // Holds the last non-null route so NavigationModeUI never crashes during exit animation
         var lastNavigationRoute by remember { mutableStateOf<RouteResult?>(null) }
 
@@ -283,6 +305,20 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 navigationInstructions = plan.result.instructions
                                 currentInstructionIndex = 0
                                 screenState = MapScreenState.ROUTE_PREVIEW
+                                val routeCoordinates = plan.result.coordinates
+                                if (routeCoordinates.size >= 2) {
+                                        shopsViewModel.loadAlongRoute(
+                                                listOf(
+                                                                routeCoordinates.first(),
+                                                                routeCoordinates[
+                                                                        routeCoordinates.size / 2],
+                                                                routeCoordinates.last()
+                                                        )
+                                                        .map {
+                                                                GeoPoint(it.first, it.second)
+                                                        }
+                                        )
+                                }
                                 offlineRouteDebugMessage =
                                         buildString {
                                                 append(
@@ -397,7 +433,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // Shops around the current fix: dots on the map, tap for the same sheet as Nearby.
         LaunchedEffect(hasLocation, currentLat, currentLng, screenState) {
-                if (hasLocation && screenState != MapScreenState.NAVIGATING) {
+                if (hasLocation &&
+                                (screenState == MapScreenState.IDLE ||
+                                        screenState == MapScreenState.SEARCHING)
+                ) {
                         shopsViewModel.loadAround(currentLat, currentLng)
                 }
         }
@@ -407,6 +446,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 styleIndex = selectedStyleIndex,
                 shops = if (screenState == MapScreenState.NAVIGATING) emptyList() else visibleShops
         )
+
+        if (hasLocation) {
+                Puck3D(
+                        map = mapInstance,
+                        styleIndex = selectedStyleIndex,
+                        lat = currentLat,
+                        lng = currentLng,
+                        bearing = currentBearing,
+                        travelMode = selectedProfile
+                )
+        }
 
         // Choosing a category should reveal it, not leave the user hunting at city zoom.
         LaunchedEffect(shopFilter, mapInstance, mapShops.size) {
@@ -469,6 +519,25 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         )
                                 } ?: return@filter true
                         nearest > currentIndex + 1
+                }
+        }
+
+        /** Stops the driver has already passed; they are removed from the trip. */
+        fun passedStops(
+                route: RouteResult?,
+                currentIndex: Int
+        ): List<GeoSearchResult> {
+                if (route == null || currentIndex < 1 || routeStops.isEmpty()) return emptyList()
+                return routeStops.filter { stop ->
+                        val nearest =
+                                route.coordinates.indices.minByOrNull { index ->
+                                        val point = route.coordinates[index]
+                                        GeoGeometry.haversineMeters(
+                                                GeoPoint(stop.lat, stop.lng),
+                                                GeoPoint(point.first, point.second)
+                                        )
+                                } ?: return@filter false
+                        nearest < currentIndex - 1
                 }
         }
 
@@ -917,6 +986,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                                 0f
                                                                                         )
                                                                         else 0f
+                                                                speedLimitKmh =
+                                                                        OfflineRoutingManager
+                                                                                .speedLimitKmhAt(
+                                                                                        location.latitude,
+                                                                                        location.longitude
+                                                                                )
 
                                                                 // Update route source for vanishing
                                                                 // trail
@@ -959,11 +1034,45 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                                         1
                                                                                         )
 
+                                                                        distanceToNextTurn =
+                                                                                if (nextStepIndex !=
+                                                                                                -1
+                                                                                )
+                                                                                        distanceToRouteIndexMeters(
+                                                                                                activeRoute
+                                                                                                        .coordinates,
+                                                                                                snapResult
+                                                                                                        .matchedIndex,
+                                                                                                activeRoute
+                                                                                                        .steps[
+                                                                                                        nextStepIndex]
+                                                                                                        .wayPointIndex,
+                                                                                                snapResult
+                                                                                                        .snappedLat,
+                                                                                                snapResult
+                                                                                                        .snappedLng
+                                                                                        )
+                                                                                else 0.0
+
                                                                         if (currentInstructionIndex !=
                                                                                         currentStepIndex
                                                                         ) {
                                                                                 currentInstructionIndex =
                                                                                         currentStepIndex
+                                                                        }
+
+                                                                        val passed =
+                                                                                passedStops(
+                                                                                        activeRoute,
+                                                                                        snapResult
+                                                                                                .matchedIndex
+                                                                                )
+                                                                        if (passed.isNotEmpty()) {
+                                                                                routeStops =
+                                                                                        routeStops -
+                                                                                                passed.toSet()
+                                                                                navigationNotice =
+                                                                                        "Stop reached · continuing"
                                                                         }
                                                                 }
 
@@ -1004,24 +1113,20 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         ) {
                                                                                 remainingDistance =
                                                                                         routeRemaining
-                                                                                val averageSpeed =
-                                                                                        if (route
-                                                                                                        .durationSeconds >
+                                                                                val newDuration =
+                                                                                        routeRemaining /
+                                                                                                liveSpeedMps(
+                                                                                                        route
+                                                                                                )
+                                                                                remainingDuration =
+                                                                                        if (remainingDuration >
                                                                                                         0.0
                                                                                         )
-                                                                                                (route.distanceMeters /
-                                                                                                        route.durationSeconds)
-                                                                                                        .coerceAtLeast(
-                                                                                                                1.0
-                                                                                                        )
-                                                                                        else if (selectedProfile ==
-                                                                                                        "driving-car"
-                                                                                        )
-                                                                                                11.0
-                                                                                        else 1.4
-                                                                                remainingDuration =
-                                                                                        routeRemaining /
-                                                                                                averageSpeed
+                                                                                                remainingDuration *
+                                                                                                        0.6 +
+                                                                                                        newDuration *
+                                                                                                                0.4
+                                                                                        else newDuration
                                                                         } else {
                                                                                 val toDestination =
                                                                                         calculateDistance(
@@ -1034,15 +1139,20 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                         )
                                                                                 remainingDistance =
                                                                                         toDestination
-                                                                                val speedMps =
-                                                                                        if (selectedProfile ==
-                                                                                                        "driving-car"
-                                                                                        )
-                                                                                                11.0
-                                                                                        else 1.4
-                                                                                remainingDuration =
+                                                                                val newDuration =
                                                                                         toDestination /
-                                                                                                speedMps
+                                                                                                liveSpeedMps(
+                                                                                                        route
+                                                                                                )
+                                                                                remainingDuration =
+                                                                                        if (remainingDuration >
+                                                                                                        0.0
+                                                                                        )
+                                                                                                remainingDuration *
+                                                                                                        0.6 +
+                                                                                                        newDuration *
+                                                                                                                0.4
+                                                                                        else newDuration
                                                                         }
                                                                 }
 
@@ -1101,6 +1211,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         currentBearing = simBearing
                         currentSpeedMps = simSpeed
                         hasLocation = true
+                        val now = System.currentTimeMillis()
+                        if (now - lastSpeedLimitCheckAt > 2_000L) {
+                                speedLimitKmh =
+                                        OfflineRoutingManager.speedLimitKmhAt(
+                                                simPosition!!.latitude,
+                                                simPosition!!.longitude
+                                        )
+                                lastSpeedLimitCheckAt = now
+                        }
 
                         // Update route source for vanishing trail - use direct source ref
                         val activeRoute = activeRouteFor(selectedProfile)
@@ -1123,8 +1242,26 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         if (nextStepIndex == -1) activeRoute.steps.lastIndex
                                         else max(0, nextStepIndex - 1)
 
+                                distanceToNextTurn =
+                                        if (nextStepIndex != -1)
+                                                distanceToRouteIndexMeters(
+                                                        activeRoute.coordinates,
+                                                        simSegmentIndex,
+                                                        activeRoute.steps[nextStepIndex]
+                                                                .wayPointIndex,
+                                                        currentLat,
+                                                        currentLng
+                                                )
+                                        else 0.0
+
                                 if (currentInstructionIndex != currentStepIndex) {
                                         currentInstructionIndex = currentStepIndex
+                                }
+
+                                val passed = passedStops(activeRoute, simSegmentIndex)
+                                if (passed.isNotEmpty()) {
+                                        routeStops = routeStops - passed.toSet()
+                                        navigationNotice = "Stop reached · continuing"
                                 }
                         }
 
@@ -1622,6 +1759,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
+        // === LIVE TRAFFIC: TomTom flow at the current position, every 45 seconds ===
+        LaunchedEffect(screenState) {
+                if (screenState == MapScreenState.NAVIGATING) {
+                        while (true) {
+                                trafficFlow =
+                                        TomTomTrafficRepository.flowAt(
+                                                currentLat,
+                                                currentLng
+                                        )
+                                delay(45_000)
+                        }
+                } else {
+                        trafficFlow = null
+                }
+        }
+
         // Cleanup: remove route from map and reset camera when this composable leaves composition
         DisposableEffect(Unit) {
                 onDispose {
@@ -1651,12 +1804,29 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         modifier = Modifier.fillMaxSize(),
                         followUser = screenState != MapScreenState.NAVIGATING,
                         travelMode = selectedProfile,
+                        hidePuck = true,
                         onMapReady = { map ->
                                 mapInstance = map
 
                                 // Tap a shop dot → open its detail sheet.
                                 map.addOnMapClickListener { latLng ->
                                         val point = map.projection.toScreenLocation(latLng)
+                                        val cluster =
+                                                map.queryRenderedFeatures(
+                                                        point,
+                                                        "shops-cluster"
+                                                )
+                                        if (cluster.isNotEmpty()) {
+                                                map.animateCamera(
+                                                        CameraUpdateFactory.newLatLngZoom(
+                                                                latLng,
+                                                                map.cameraPosition.zoom + 2.0
+                                                        ),
+                                                        300
+                                                )
+                                                return@addOnMapClickListener true
+                                        }
+
                                         val shopId =
                                                 map.queryRenderedFeatures(point, "shops-symbol")
                                                         .firstOrNull()
@@ -2000,6 +2170,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         },
                                         onRemoveStop = { removeStop(it) },
                                         onQuickStop = { addQuickStop(it) },
+                                        onReorderStops = { newStops ->
+                                                routeStops = newStops
+                                                planTrip(selectedProfile)
+                                        },
                                         onStartNavigation = {
                                                 currentInstructionIndex = 0
                                                 navigationNotice = null
@@ -2010,6 +2184,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 pendingSimulationRestart = false
                                                 showSimControls = false
                                                 currentSpeedMps = 0f
+                                                speedLimitKmh = null
                                                 navigationSessionId++
                                                 val activeRoute =
                                                         activeRouteFor(selectedProfile)
@@ -2089,6 +2264,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         ) {
                 // Safe: lastNavigationRoute is only set to non-null, never cleared while visible
                 val safeRoute = lastNavigationRoute ?: return@AnimatedVisibility
+                val trafficLabel =
+                        trafficFlow?.let { flow ->
+                                when {
+                                        flow.roadClosure -> "Road closed"
+                                        flow.isHeavy -> "Heavy traffic"
+                                        flow.isSlow -> "Slow traffic"
+                                        else -> "Traffic clear"
+                                }
+                        }
+                val trafficColor =
+                        when {
+                                trafficFlow?.roadClosure == true ||
+                                                trafficFlow?.isHeavy == true -> DangerRed
+                                trafficFlow?.isSlow == true -> WarningOrange
+                                else -> SafeGreen
+                        }
                 NavigationModeUI(
                         routeResult = safeRoute,
                         remainingDistance = remainingDistance,
@@ -2098,6 +2289,19 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         currentIndex = currentInstructionIndex,
                         totalInstructions = navigationInstructions.size,
                         speedMps = if (isSimulationMode) simSpeed else currentSpeedMps,
+                        distanceToNextTurn = distanceToNextTurn,
+                        speedLimitKmh = speedLimitKmh,
+                        speedUnit = speedUnit,
+                        onToggleSpeedUnit = {
+                                scope.launch {
+                                        preferencesManager.setSpeedUnit(
+                                                if (speedUnit == SpeedUnit.KMH) SpeedUnit.MPH
+                                                else SpeedUnit.KMH
+                                        )
+                                }
+                        },
+                        trafficLabel = trafficLabel,
+                        trafficColor = trafficColor,
                         navigationNotice = navigationNotice,
                         isRerouting = isRerouting,
                         wrongWay = wrongWayDetected,
@@ -2113,6 +2317,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 isRerouting = false
                                 navigationNotice = null
                                 wrongWayDetected = false
+                                speedLimitKmh = null
                                 offRouteMonitor.reset()
                                 pendingSimulationRestart = false
                                 routeStops = emptyList()

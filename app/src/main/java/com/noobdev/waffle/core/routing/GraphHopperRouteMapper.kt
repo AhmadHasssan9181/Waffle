@@ -2,6 +2,7 @@ package com.noobdev.waffle.core.routing
 
 import com.graphhopper.GHResponse
 import com.graphhopper.util.Instruction
+import com.noobdev.waffle.core.navigation.ManeuverType
 import com.noobdev.waffle.data.remote.NavigationStep
 import com.noobdev.waffle.data.remote.RouteResult
 import kotlin.math.abs
@@ -54,7 +55,8 @@ object GraphHopperRouteMapper {
                             distance = instruction.distance,
                             duration = 0.0,
                             type = instruction.sign,
-                            wayPointIndex = wayPointIndex
+                            wayPointIndex = wayPointIndex,
+                            maneuver = maneuverFor(instruction.sign)
                     )
             )
         }
@@ -78,6 +80,23 @@ object GraphHopperRouteMapper {
                     success = false,
                     errorMessage = message
             )
+
+    private fun maneuverFor(sign: Int): ManeuverType =
+            when (sign) {
+                Instruction.KEEP_LEFT -> ManeuverType.KEEP_LEFT
+                Instruction.TURN_SHARP_LEFT -> ManeuverType.TURN_SHARP_LEFT
+                Instruction.TURN_LEFT -> ManeuverType.TURN_LEFT
+                Instruction.TURN_SLIGHT_LEFT -> ManeuverType.TURN_SLIGHT_LEFT
+                Instruction.CONTINUE_ON_STREET -> ManeuverType.CONTINUE
+                Instruction.TURN_SLIGHT_RIGHT -> ManeuverType.TURN_SLIGHT_RIGHT
+                Instruction.TURN_RIGHT -> ManeuverType.TURN_RIGHT
+                Instruction.TURN_SHARP_RIGHT -> ManeuverType.TURN_SHARP_RIGHT
+                Instruction.FINISH -> ManeuverType.ARRIVE
+                Instruction.REACHED_VIA -> ManeuverType.WAYPOINT
+                Instruction.USE_ROUNDABOUT -> ManeuverType.ROUNDABOUT_RIGHT
+                Instruction.KEEP_RIGHT -> ManeuverType.KEEP_RIGHT
+                else -> ManeuverType.UNKNOWN
+            }
 
     private fun describe(instruction: Instruction): String {
         val action =

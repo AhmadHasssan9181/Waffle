@@ -5,8 +5,11 @@ import com.graphhopper.GHResponse
 import com.graphhopper.GraphHopper
 import com.graphhopper.config.CHProfile
 import com.graphhopper.config.Profile
+import com.graphhopper.routing.ev.MaxSpeed
+import com.graphhopper.routing.util.EdgeFilter
 import com.graphhopper.util.shapes.GHPoint
 import com.noobdev.waffle.core.navigation.GeoPoint
+import kotlin.math.roundToInt
 
 /**
  * Offline routing engine backed by GraphHopper 1.0.
@@ -58,6 +61,26 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
             setLocale("en")
         }
         return hopper.route(request)
+    }
+
+    /**
+     * The OSM `maxspeed` value for the road under [lat]/[lon], in km/h, or null when the way has no
+     * signed limit. The graph already encodes this value; no extra data file is needed.
+     */
+    fun speedLimitKmhAt(lat: Double, lon: Double): Int? {
+        val maxSpeed =
+                hopper.encodingManager.getDecimalEncodedValue(MaxSpeed.KEY) ?: return null
+        val result = hopper.locationIndex.findClosest(lat, lon, EdgeFilter.ALL_EDGES)
+        if (!result.isValid) return null
+        val edge = result.closestEdge ?: return null
+        val limit = edge.get(maxSpeed)
+        if (!limit.isFinite() ||
+                        limit <= 0.0 ||
+                        limit >= MaxSpeed.UNLIMITED_SIGN_SPEED
+        ) {
+            return null
+        }
+        return limit.roundToInt()
     }
 
     private fun normalizeProfile(profile: String): String =

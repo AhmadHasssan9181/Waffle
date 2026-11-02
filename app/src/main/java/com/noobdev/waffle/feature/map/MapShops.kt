@@ -1,6 +1,7 @@
 package com.noobdev.waffle.feature.map
 
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,14 +49,27 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Property
+import org.maplibre.android.style.layers.PropertyFactory.circleColor
+import org.maplibre.android.style.layers.PropertyFactory.circleOpacity
+import org.maplibre.android.style.layers.PropertyFactory.circleRadius
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.textColor
+import org.maplibre.android.style.layers.PropertyFactory.textField
+import org.maplibre.android.style.layers.PropertyFactory.textFont
+import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 
 /**
@@ -85,11 +99,49 @@ internal fun MapShopMarkers(map: MapLibreMap?, styleIndex: Int, shops: List<Shop
                     existing.setGeoJson(geoJson)
                     val show = if (shops.isEmpty()) Property.NONE else Property.VISIBLE
                     style.getLayer("shops-symbol")?.setProperties(visibility(show))
+                    style.getLayer("shops-cluster")?.setProperties(visibility(show))
+                    style.getLayer("shops-cluster-count")?.setProperties(visibility(show))
                     return@getStyle
                 }
                 if (shops.isEmpty()) return@getStyle
 
-                style.addSource(GeoJsonSource("shops-source", geoJson))
+                style.addSource(
+                        GeoJsonSource(
+                                "shops-source",
+                                geoJson,
+                                GeoJsonOptions()
+                                        .withCluster(true)
+                                        .withClusterRadius(50)
+                                        .withClusterMaxZoom(14)
+                        )
+                )
+                style.addLayer(
+                        CircleLayer("shops-cluster", "shops-source")
+                                .withProperties(
+                                        circleColor(AndroidColor.parseColor("#F2A33C")),
+                                        circleRadius(18f),
+                                        circleStrokeWidth(2.5f),
+                                        circleStrokeColor(AndroidColor.WHITE),
+                                        circleOpacity(0.95f)
+                                )
+                                .withFilter(Expression.has("point_count"))
+                                .apply { minZoom = 6f }
+                )
+                style.addLayer(
+                        SymbolLayer("shops-cluster-count", "shops-source")
+                                .withProperties(
+                                        textField(
+                                                Expression.get("point_count_abbreviated")
+                                        ),
+                                        textFont(arrayOf("Noto Sans Regular")),
+                                        textSize(12f),
+                                        textColor(AndroidColor.WHITE),
+                                        textAllowOverlap(true),
+                                        textIgnorePlacement(true)
+                                )
+                                .withFilter(Expression.has("point_count"))
+                                .apply { minZoom = 6f }
+                )
                 style.addLayer(
                         SymbolLayer("shops-symbol", "shops-source")
                                 .withProperties(
@@ -99,6 +151,7 @@ internal fun MapShopMarkers(map: MapLibreMap?, styleIndex: Int, shops: List<Shop
                                         iconIgnorePlacement(true),
                                         iconAnchor(Property.ICON_ANCHOR_CENTER)
                                 )
+                                .withFilter(Expression.not(Expression.has("point_count")))
                                 .apply { minZoom = 8.0f }
                 )
             }
@@ -110,6 +163,8 @@ internal fun MapShopMarkers(map: MapLibreMap?, styleIndex: Int, shops: List<Shop
             map?.getStyle { style ->
                 runCatching {
                     style.removeLayer("shops-symbol")
+                    style.removeLayer("shops-cluster-count")
+                    style.removeLayer("shops-cluster")
                     style.removeSource("shops-source")
                 }
             }

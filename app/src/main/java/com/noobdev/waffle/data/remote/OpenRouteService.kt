@@ -6,6 +6,7 @@ import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardZone
+import com.noobdev.waffle.core.navigation.ManeuverType
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,7 +86,9 @@ data class NavigationStep(
         val distance: Double,
         val duration: Double,
         val type: Int,
-        val wayPointIndex: Int // Index in the coordinates list where this step starts
+        val wayPointIndex: Int, // Index in the coordinates list where this step starts
+        val maneuver: com.noobdev.waffle.core.navigation.ManeuverType =
+                com.noobdev.waffle.core.navigation.ManeuverType.UNKNOWN
 )
 
 data class RouteResult(
@@ -220,7 +223,11 @@ suspend fun getRoute(
                                                                         distance = step.distance,
                                                                         duration = step.duration,
                                                                         type = step.type,
-                                                                        wayPointIndex = startIndex
+                                                                        wayPointIndex = startIndex,
+                                                                        maneuver =
+                                                                                orsManeuver(
+                                                                                        step.type
+                                                                                )
                                                                 )
                                                         )
                                                 }
@@ -432,7 +439,8 @@ private fun DirectionsResponse.toRouteResult(): RouteResult {
                                         distance = step.distance,
                                         duration = step.duration,
                                         type = step.type,
-                                        wayPointIndex = step.wayPoints?.firstOrNull() ?: 0
+                                        wayPointIndex = step.wayPoints?.firstOrNull() ?: 0,
+                                        maneuver = orsManeuver(step.type)
                                 )
                         )
                 }
@@ -459,6 +467,25 @@ private fun failedRoute(message: String): RouteResult =
         )
 
 // === HELPER FUNCTIONS ===
+
+/** ORS step type codes → the app's structured maneuver. */
+private fun orsManeuver(type: Int): ManeuverType =
+        when (type) {
+            0 -> ManeuverType.TURN_LEFT
+            1 -> ManeuverType.TURN_RIGHT
+            2 -> ManeuverType.TURN_SHARP_LEFT
+            3 -> ManeuverType.TURN_SHARP_RIGHT
+            4 -> ManeuverType.TURN_SLIGHT_LEFT
+            5 -> ManeuverType.TURN_SLIGHT_RIGHT
+            6 -> ManeuverType.CONTINUE
+            7, 8 -> ManeuverType.ROUNDABOUT_RIGHT
+            9 -> ManeuverType.U_TURN_LEFT
+            10 -> ManeuverType.ARRIVE
+            11 -> ManeuverType.DEPART
+            12 -> ManeuverType.KEEP_LEFT
+            13 -> ManeuverType.KEEP_RIGHT
+            else -> ManeuverType.UNKNOWN
+        }
 
 /** Format distance for display */
 fun formatDistance(meters: Double): String {

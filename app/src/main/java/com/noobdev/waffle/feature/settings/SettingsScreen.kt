@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.SettingsBrightness
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +73,7 @@ import androidx.navigation.NavController
 import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.Screen
 import com.noobdev.waffle.core.prefs.PreferencesManager
+import com.noobdev.waffle.core.prefs.SpeedUnit
 import com.noobdev.waffle.data.model.StatusLevel
 import com.noobdev.waffle.design.components.WaffleSpace
 import com.noobdev.waffle.design.components.disasterColor
@@ -93,6 +95,7 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
     val context = LocalContext.current
 
     val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.SYSTEM)
+    val speedUnit by preferencesManager.speedUnit.collectAsState(initial = SpeedUnit.KMH)
     val mapStyleIndex by preferencesManager.mapStyleIndex.collectAsState(initial = -1)
     val effectiveMapStyleIndex =
             if (mapStyleIndex >= 0) mapStyleIndex
@@ -160,6 +163,22 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                             }
                     )
                 }
+
+                SettingsDivider()
+
+                SettingsItem(
+                        icon = Icons.Rounded.Speed,
+                        title = "Speed units",
+                        subtitle = if (speedUnit == SpeedUnit.KMH) "km/h" else "mph",
+                        onClick = {
+                                scope.launch {
+                                        preferencesManager.setSpeedUnit(
+                                                if (speedUnit == SpeedUnit.KMH) SpeedUnit.MPH
+                                                else SpeedUnit.KMH
+                                        )
+                                }
+                        }
+                )
 
                 SettingsDivider()
 

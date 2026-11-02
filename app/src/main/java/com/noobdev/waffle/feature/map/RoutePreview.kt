@@ -78,6 +78,7 @@ import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.sources.GeoJsonSource
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoutePreviewCard(
         destination: GeoSearchResult?,
@@ -100,8 +101,10 @@ fun RoutePreviewCard(
         stops: List<GeoSearchResult> = emptyList(),
         onAddStop: (() -> Unit)? = null,
         onRemoveStop: ((GeoSearchResult) -> Unit)? = null,
-        onQuickStop: ((ShopCategory) -> Unit)? = null
+        onQuickStop: ((ShopCategory) -> Unit)? = null,
+        onReorderStops: ((List<GeoSearchResult>) -> Unit)? = null
 ) {
+        var showStopEditor by remember { mutableStateOf(false) }
         val isDriving = selectedProfile == "driving-car"
         val isBiking = selectedProfile == "cycling-regular"
         val isWalking = selectedProfile == "foot-walking"
@@ -255,6 +258,21 @@ fun RoutePreviewCard(
                                                                         }
                                                                 }
                                                         }
+                                                }
+                                        }
+                                        if (stops.size > 1 && onReorderStops != null) {
+                                                IconButton(
+                                                        onClick = { showStopEditor = true },
+                                                        modifier = Modifier.size(30.dp)
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.Edit,
+                                                                contentDescription = "Edit stops",
+                                                                modifier = Modifier.size(15.dp),
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
                                                 }
                                         }
                                         Surface(
@@ -785,6 +803,108 @@ fun RoutePreviewCard(
                                         if (isSimulationMode) "Start Simulation" else "Start",
                                         style = MaterialTheme.typography.titleMedium
                                 )
+                        }
+                }
+        }
+
+        if (showStopEditor) {
+                ModalBottomSheet(
+                        onDismissRequest = { showStopEditor = false },
+                        containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                        Column(
+                                modifier =
+                                        Modifier.fillMaxWidth()
+                                                .padding(horizontal = 16.dp)
+                                                .padding(bottom = 24.dp)
+                        ) {
+                                Text(
+                                        "Edit stops",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                stops.forEachIndexed { index, stop ->
+                                        Row(
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                Icon(
+                                                        Icons.Default.Place,
+                                                        null,
+                                                        modifier = Modifier.size(18.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(Modifier.width(10.dp))
+                                                Text(
+                                                        stop.name,
+                                                        modifier = Modifier.weight(1f),
+                                                        style =
+                                                                MaterialTheme.typography
+                                                                        .bodyMedium,
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                                IconButton(
+                                                        onClick = {
+                                                                val next = stops.toMutableList()
+                                                                val moved = next.removeAt(index)
+                                                                next.add(index - 1, moved)
+                                                                onReorderStops?.invoke(next)
+                                                        },
+                                                        enabled = index > 0
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.KeyboardArrowUp,
+                                                                "Move up",
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
+                                                IconButton(
+                                                        onClick = {
+                                                                val next = stops.toMutableList()
+                                                                val moved = next.removeAt(index)
+                                                                next.add(index + 1, moved)
+                                                                onReorderStops?.invoke(next)
+                                                        },
+                                                        enabled = index < stops.lastIndex
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.KeyboardArrowDown,
+                                                                "Move down",
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
+                                                IconButton(
+                                                        onClick = {
+                                                                onRemoveStop?.invoke(stop)
+                                                        }
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.Close,
+                                                                "Remove stop",
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
+                                        }
+                                        HorizontalDivider(
+                                                color =
+                                                        MaterialTheme.colorScheme.outline.copy(
+                                                                alpha = 0.25f
+                                                        )
+                                        )
+                                }
                         }
                 }
         }
