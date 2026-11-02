@@ -28,6 +28,11 @@ The map tab. This is the most stateful screen in the app.
   of returning a style the device cannot load.
 - Hazards: `LaunchedEffect(hazards, ...)` draws blast-radius polygons from `hazard-source`. The
   radius is already in metres.
+- Live rerouting: `OffRouteMonitor` judges the **raw** fix against the active route (three fixes
+  beyond 45 m, or one beyond 110 m). `MapScreen` then replans from the raw position, replaces the
+  route and instructions, and shows a notice in `NavigationModeUI`. Hazard reroutes share the
+  `isRerouting` flag so only one plan runs at a time. `CameraTransitionManager.snapToRoute` reports
+  the raw offset even when it is too far away to snap.
 - A shop/alert can push a pin: set `MapFocus.request(MapTarget(lat, lon, label))`, then navigate to
   `Screen.Map.route`. `MapScreen` consumes it, draws `focus-source` and animates the camera.
 - `DisposableEffect` removes the route layers when the screen leaves composition.

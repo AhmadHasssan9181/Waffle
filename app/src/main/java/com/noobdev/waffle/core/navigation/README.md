@@ -9,7 +9,8 @@ unit-tested on the JVM.
 | `BlastRadius.kt` | Converts an alert into a danger radius. Earthquakes use `10^(0.43M - 0.8)` km; floods use the explicit radius, otherwise severity defaults. Routing radius = 65% of the display radius. |
 | `HazardRegistry.kt` | Normalises live alerts into `HazardZone`s (id, centre, radius, severity) for the map and router. |
 | `HazardDetourPlanner.kt` | Builds via-points so a route goes around a hazard, and picks the shorter valid detour. |
-| `NavigationManager.kt` | Current instruction, distance to next turn, off-route detection, arrival. |
+| `OffRouteMonitor.kt` | Decides when live GPS is genuinely off the line (accuracy gate, consecutive fixes, retry cooldown). |
+| `NavigationManager.kt` | Session facade for the map screen: route state, road closures, hazard proximity. |
 | `RouteSimulator.kt` | Drives the demo/navigation animation along a route. |
 | `CameraTransitionManager.kt` | Smooth camera interpolation between map states. |
 

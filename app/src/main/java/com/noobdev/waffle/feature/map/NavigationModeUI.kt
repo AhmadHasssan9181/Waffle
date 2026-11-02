@@ -85,6 +85,8 @@ fun NavigationModeUI(
         currentInstruction: String,
         currentIndex: Int,
         totalInstructions: Int,
+        navigationNotice: String? = null,
+        isRerouting: Boolean = false,
         onNext: () -> Unit,
         onExit: () -> Unit
 ) {
@@ -131,6 +133,65 @@ fun NavigationModeUI(
                                                         style = MaterialTheme.typography.titleLarge,
                                                         color = MaterialTheme.colorScheme.onSurface,
                                                         fontWeight = FontWeight.Bold,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                        }
+                                }
+
+                                // Off-route / reroute feedback. Without this, a new route
+                                // appears silently and it is impossible to tell whether the
+                                // app noticed the deviation.
+                                AnimatedVisibility(
+                                        visible = isRerouting || !navigationNotice.isNullOrBlank(),
+                                        enter = fadeIn() + expandVertically(),
+                                        exit = fadeOut() + shrinkVertically()
+                                ) {
+                                        Row(
+                                                modifier =
+                                                        Modifier.padding(top = 12.dp)
+                                                                .fillMaxWidth()
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .background(
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                                                .copy(alpha = 0.12f)
+                                                                )
+                                                                .padding(
+                                                                        horizontal = 12.dp,
+                                                                        vertical = 9.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                if (isRerouting) {
+                                                        CircularProgressIndicator(
+                                                                modifier = Modifier.size(14.dp),
+                                                                strokeWidth = 2.dp,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                        )
+                                                } else {
+                                                        Icon(
+                                                                imageVector =
+                                                                        Icons.Default.Refresh,
+                                                                contentDescription = null,
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary,
+                                                                modifier = Modifier.size(16.dp)
+                                                        )
+                                                }
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                        text =
+                                                                navigationNotice
+                                                                        ?: "Rerouting…",
+                                                        style =
+                                                                MaterialTheme.typography.bodySmall,
+                                                        color =
+                                                                MaterialTheme.colorScheme.onSurface,
+                                                        fontWeight = FontWeight.Medium,
                                                         maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis
                                                 )

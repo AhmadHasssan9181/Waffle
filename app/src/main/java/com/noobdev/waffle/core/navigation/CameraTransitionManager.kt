@@ -192,7 +192,9 @@ object CameraTransitionManager {
     data class SnapResult(
             val snappedLat: Double,
             val snappedLng: Double,
-            val matchedIndex: Int // Index of the coordinate at start of closest segment
+            val matchedIndex: Int, // Index of the coordinate at start of closest segment
+            /** Raw GPS distance to the line, even when it is too far away to snap. */
+            val distanceMeters: Double = 0.0
     )
 
     /**
@@ -211,7 +213,7 @@ object CameraTransitionManager {
             routeCoordinates: List<Pair<Double, Double>>,
             maxSnapDistance: Double = 50.0
     ): SnapResult {
-        if (routeCoordinates.isEmpty()) return SnapResult(rawLat, rawLng, -1)
+        if (routeCoordinates.size < 2) return SnapResult(rawLat, rawLng, -1, 0.0)
 
         var closestPoint = Pair(rawLat, rawLng)
         var minDistance = Double.MAX_VALUE
@@ -234,9 +236,9 @@ object CameraTransitionManager {
 
         // Only snap if within threshold
         return if (minDistance <= maxSnapDistance) {
-            SnapResult(closestPoint.first, closestPoint.second, matchedIndex)
+            SnapResult(closestPoint.first, closestPoint.second, matchedIndex, minDistance)
         } else {
-            SnapResult(rawLat, rawLng, -1)
+            SnapResult(rawLat, rawLng, -1, minDistance)
         }
     }
 

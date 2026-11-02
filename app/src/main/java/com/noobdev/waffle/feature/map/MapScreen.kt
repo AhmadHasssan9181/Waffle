@@ -56,9 +56,11 @@ import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.NavigationManager
+import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
+import com.noobdev.waffle.core.routing.RoutePlan
 import com.noobdev.waffle.core.routing.RouteRepository
 import com.noobdev.waffle.core.routing.RouteSource
 import com.noobdev.waffle.design.theme.*
@@ -66,6 +68,7 @@ import com.noobdev.waffle.feature.shops.ShopDetailSheet
 import com.noobdev.waffle.feature.shops.data.Shop
 import com.noobdev.waffle.feature.shops.data.ShopCategory
 import kotlin.math.max
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,6 +153,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var lastAutoReroutedHazardId by remember { mutableStateOf<String?>(null) }
         val hazards by HazardRegistry.hazards.collectAsState()
 
+        // Deviation handling. The monitor is deliberately plain Kotlin so its timing rules can be
+        // unit-tested without a device.
+        val offRouteMonitor = remember { OffRouteMonitor() }
+        var isRerouting by remember { mutableStateOf(false) }
+        var navigationNotice by remember { mutableStateOf<String?>(null) }
+        // Incremented on every start/exit so a slow reroute from a previous trip cannot land in a
+        // new navigation session.
+        var navigationSessionId by remember { mutableStateOf(0) }
+
         fun offlineResponseToRouteResult(
                 response: com.graphhopper.GHResponse
         ): RouteResult? {
@@ -210,6 +222,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 selectedDestination = result
                 searchQuery = result.name
                 screenState = MapScreenState.IDLE
+                navigationNotice = null
+                isRerouting = false
+                offRouteMonitor.reset()
                 scope.launch {
                         isLoadingRoute = true
                         offlineRouteDebugMessage = null
@@ -298,15 +313,80 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 LocationServices.getFusedLocationProviderClient(context)
         }
 
+        /**
+         * Re-plan from the live fix after the driver leaves the line.
+         *
+         * The start point is the raw GPS fix, not the snapped route point: the whole point of this
+         * route is to get back from where the car actually is. The resulting route replaces the
+         * active one, so the next location callback snaps to the new geometry.
+         */
+        fun rerouteFromDeviation(rawLat: Double, rawLng: Double) {
+                if (isRerouting) return
+                val destination = selectedDestination ?: return
+                val walk = selectedProfile == "foot-walking"
+                val activeHazards = hazards
+                val session = navigationSessionId
+
+                isRerouting = true
+                navigationNotice = "Off route · finding a new way…"
+
+                scope.launch {
+                        val plan =
+                                planRouteOffMain(
+                                        startLat = rawLat,
+                                        startLng = rawLng,
+                                        destinationLat = destination.lat,
+                                        destinationLng = destination.lng,
+                                        profile = if (walk) "foot" else "car",
+                                        hazards = activeHazards
+                                )
+
+                        // The driver may have exited or started a new trip while we were planning.
+                        if (session != navigationSessionId ||
+                                        screenState != MapScreenState.NAVIGATING
+                        ) {
+                                return@launch
+                        }
+
+                        if (plan != null && plan.success) {
+                                if (walk) {
+                                        walkRouteResult = plan.result
+                                } else {
+                                        routeResult = plan.result
+                                }
+                                lastNavigationRoute = plan.result
+                                navigationInstructions = plan.result.instructions
+                                currentInstructionIndex = 0
+                                activeRouteSource = plan.source
+                                avoidedHazardCount = plan.avoidedHazards.size
+                                remainingDistance = plan.result.distanceMeters
+                                remainingDuration = plan.result.durationSeconds
+                                navigationNotice =
+                                        "New route · ${formatDistance(plan.result.distanceMeters)} · ${formatDuration(plan.result.durationSeconds)}"
+                                offlineRouteDebugMessage = "Rerouted from current location"
+                                plan.avoidedHazards.firstOrNull()?.let {
+                                        lastAutoReroutedHazardId = it.id
+                                }
+                        } else {
+                                navigationNotice = "Off route · no new route found"
+                                offlineRouteDebugMessage =
+                                        "Reroute failed: ${plan?.result?.errorMessage ?: "no route"}"
+                        }
+
+                        offRouteMonitor.markAttempt()
+                        isRerouting = false
+                }
+        }
+
         // Live location tracking during navigation (real GPS or simulation)
         DisposableEffect(screenState, isSimulationMode) {
                 if (screenState == MapScreenState.NAVIGATING) {
                         // Initialize remaining distance from route
-                        val activeRoute =
+                        val initialRoute =
                                 if (selectedProfile == "driving-car") routeResult
                                 else (walkRouteResult ?: routeResult)
-                        remainingDistance = activeRoute?.distanceMeters ?: 0.0
-                        remainingDuration = activeRoute?.durationSeconds ?: 0.0
+                        remainingDistance = initialRoute?.distanceMeters ?: 0.0
+                        remainingDuration = initialRoute?.durationSeconds ?: 0.0
 
                         if (isSimulationMode) {
                                 // Simulation mode - use RouteSimulator
@@ -330,6 +410,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         result: LocationResult
                                                 ) {
                                                         result.lastLocation?.let { location ->
+                                                                // Read the route here, not when the
+                                                                // callback was created: a reroute
+                                                                // replaces it while navigation runs.
+                                                                val activeRoute =
+                                                                        if (selectedProfile ==
+                                                                                        "foot-walking"
+                                                                        )
+                                                                                (walkRouteResult
+                                                                                        ?: routeResult)
+                                                                        else routeResult
+
                                                                 // Apply road snapping if we have a
                                                                 // route
                                                                 val snapResult =
@@ -348,6 +439,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                                 location.longitude,
                                                                                                 -1
                                                                                         )
+
+                                                                // Deviation is judged on the raw
+                                                                // fix, never the snapped one.
+                                                                if (activeRoute != null) {
+                                                                        val decision =
+                                                                                offRouteMonitor.onFix(
+                                                                                        snapResult.distanceMeters,
+                                                                                        location.accuracy
+                                                                                )
+                                                                        if (decision.shouldReroute) {
+                                                                                rerouteFromDeviation(
+                                                                                        location.latitude,
+                                                                                        location.longitude
+                                                                                )
+                                                                        }
+                                                                }
 
                                                                 currentLat = snapResult.snappedLat
                                                                 currentLng = snapResult.snappedLng
@@ -402,48 +509,113 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         }
                                                                 }
 
-                                                                // Calculate bearing from previous
-                                                                // position
+                                                                // Heading comes from the raw GPS
+                                                                // movement, not the snapped points:
+                                                                // after a reroute the snap can jump
+                                                                // to a different road and would spin
+                                                                // the camera.
+                                                                val movedMeters =
+                                                                        calculateDistance(
+                                                                                previousLat,
+                                                                                previousLng,
+                                                                                location.latitude,
+                                                                                location.longitude
+                                                                        )
                                                                 val newBearing =
-                                                                        CameraTransitionManager
-                                                                                .calculateBearing(
-                                                                                        LatLng(
-                                                                                                previousLat,
-                                                                                                previousLng
-                                                                                        ),
-                                                                                        LatLng(
+                                                                        when {
+                                                                                location.hasBearing() &&
+                                                                                                location.speed >
+                                                                                                                1.0f ->
+                                                                                        location.bearing
+                                                                                                .toDouble()
+                                                                                movedMeters > 5.0 ->
+                                                                                        CameraTransitionManager
+                                                                                                .calculateBearing(
+                                                                                                        LatLng(
+                                                                                                                previousLat,
+                                                                                                                previousLng
+                                                                                                        ),
+                                                                                                        LatLng(
+                                                                                                                location.latitude,
+                                                                                                                location.longitude
+                                                                                                        )
+                                                                                                )
+                                                                                else -> currentBearing
+                                                                        }
+                                                                currentBearing = newBearing
+                                                                previousLat = location.latitude
+                                                                previousLng = location.longitude
+
+                                                                // Calculate remaining distance. Follow the
+                                                                // route when we are on it; fall back to
+                                                                // straight-line only while off-route.
+                                                                selectedDestination?.let { dest ->
+                                                                        val route = activeRoute
+                                                                        val routeRemaining =
+                                                                                if (route !=
+                                                                                                null &&
+                                                                                                snapResult
+                                                                                                        .matchedIndex !=
+                                                                                                        -1
+                                                                                )
+                                                                                        remainingRouteMeters(
+                                                                                                route.coordinates,
+                                                                                                snapResult
+                                                                                                        .matchedIndex,
                                                                                                 snapResult
                                                                                                         .snappedLat,
                                                                                                 snapResult
                                                                                                         .snappedLng
                                                                                         )
-                                                                                )
-                                                                currentBearing = newBearing
-                                                                previousLat = snapResult.snappedLat
-                                                                previousLng = snapResult.snappedLng
+                                                                                else null
 
-                                                                // Calculate remaining distance
-                                                                selectedDestination?.let { dest ->
-                                                                        val toDestination =
-                                                                                calculateDistance(
-                                                                                        snapResult
-                                                                                                .snappedLat,
-                                                                                        snapResult
-                                                                                                .snappedLng,
-                                                                                        dest.lat,
-                                                                                        dest.lng
-                                                                                )
-                                                                        remainingDistance =
-                                                                                toDestination
-                                                                        val speedMps =
-                                                                                if (selectedProfile ==
-                                                                                                "driving-car"
-                                                                                )
-                                                                                        11.0
-                                                                                else 1.4
-                                                                        remainingDuration =
-                                                                                toDestination /
-                                                                                        speedMps
+                                                                        if (routeRemaining !=
+                                                                                        null &&
+                                                                                        route !=
+                                                                                                null
+                                                                        ) {
+                                                                                remainingDistance =
+                                                                                        routeRemaining
+                                                                                val averageSpeed =
+                                                                                        if (route
+                                                                                                        .durationSeconds >
+                                                                                                        0.0
+                                                                                        )
+                                                                                                (route.distanceMeters /
+                                                                                                        route.durationSeconds)
+                                                                                                        .coerceAtLeast(
+                                                                                                                1.0
+                                                                                                        )
+                                                                                        else if (selectedProfile ==
+                                                                                                        "driving-car"
+                                                                                        )
+                                                                                                11.0
+                                                                                        else 1.4
+                                                                                remainingDuration =
+                                                                                        routeRemaining /
+                                                                                                averageSpeed
+                                                                        } else {
+                                                                                val toDestination =
+                                                                                        calculateDistance(
+                                                                                                snapResult
+                                                                                                        .snappedLat,
+                                                                                                snapResult
+                                                                                                        .snappedLng,
+                                                                                                dest.lat,
+                                                                                                dest.lng
+                                                                                        )
+                                                                                remainingDistance =
+                                                                                        toDestination
+                                                                                val speedMps =
+                                                                                        if (selectedProfile ==
+                                                                                                        "driving-car"
+                                                                                        )
+                                                                                                11.0
+                                                                                        else 1.4
+                                                                                remainingDuration =
+                                                                                        toDestination /
+                                                                                                speedMps
+                                                                        }
                                                                 }
 
                                                                 // Update camera with bearing (only
@@ -613,8 +785,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Draw route when available – stores direct source reference for fast updates
-        LaunchedEffect(routeResult) {
-                routeResult?.let { result ->
+        LaunchedEffect(routeResult, walkRouteResult, selectedProfile) {
+                val drawnRoute =
+                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
+                        else routeResult
+                drawnRoute?.let { result ->
                         if (result.success && result.coordinates.isNotEmpty()) {
                                 mapInstance?.getStyle { style ->
                                         // Remove existing route layer/source if any
@@ -646,8 +821,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         // Store reference for direct future updates
                                         routeSource = newSource
 
-                                        // Animate camera to show full route bounds
-                                        if (result.coordinates.size >= 2) {
+                                        // Animate camera to show full route bounds. During
+                                        // navigation the camera belongs to the driver: a
+                                        // reroute must not yank it out to the whole route.
+                                        if (result.coordinates.size >= 2 &&
+                                                        screenState != MapScreenState.NAVIGATING
+                                        ) {
                                                 val bounds =
                                                         org.maplibre.android.geometry.LatLngBounds
                                                                 .Builder()
@@ -834,6 +1013,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
+        // Navigation notices ("off route", "new route", hazard detour) are also transient. While a
+        // reroute is in flight the message must stay up, so only start the timer after it settles.
+        LaunchedEffect(navigationNotice, isRerouting) {
+                if (!isRerouting && navigationNotice != null) {
+                        delay(6000)
+                        navigationNotice = null
+                }
+        }
+
         // === HAZARD CHECK: does the active route cut through a danger zone? ===
         LaunchedEffect(hazards, routeResult, walkRouteResult, selectedProfile) {
                 val activeRoute =
@@ -858,6 +1046,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 if (screenState != MapScreenState.NAVIGATING || !hasLocation) {
                         return@LaunchedEffect
                 }
+                if (isRerouting) return@LaunchedEffect
                 if (hazard.id == lastAutoReroutedHazardId) return@LaunchedEffect
 
                 val distanceToHazard =
@@ -869,34 +1058,43 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 val destination = selectedDestination ?: return@LaunchedEffect
                 val isWalking = selectedProfile == "foot-walking"
-                lastAutoReroutedHazardId = hazard.id
 
-                val plan =
-                        runCatching {
-                                        RouteRepository.plan(
-                                                start = GeoPoint(currentLat, currentLng),
-                                                end =
-                                                        GeoPoint(
-                                                                destination.lat,
-                                                                destination.lng
-                                                        ),
-                                                profile = if (isWalking) "foot" else "car",
-                                                hazards = hazards
-                                        )
+                isRerouting = true
+                navigationNotice = "Hazard ahead · finding a safe detour…"
+                try {
+                        val plan =
+                                planRouteOffMain(
+                                        startLat = currentLat,
+                                        startLng = currentLng,
+                                        destinationLat = destination.lat,
+                                        destinationLng = destination.lng,
+                                        profile = if (isWalking) "foot" else "car",
+                                        hazards = hazards
+                                )
+
+                        if (plan != null && plan.success) {
+                                if (isWalking) {
+                                        walkRouteResult = plan.result
+                                } else {
+                                        routeResult = plan.result
                                 }
-                                .getOrNull()
-
-                if (plan != null && plan.success) {
-                        if (isWalking) {
-                                walkRouteResult = plan.result
-                        } else {
-                                routeResult = plan.result
+                                lastNavigationRoute = plan.result
                                 navigationInstructions = plan.result.instructions
                                 currentInstructionIndex = 0
+                                activeRouteSource = plan.source
+                                avoidedHazardCount = plan.avoidedHazards.size
+                                remainingDistance = plan.result.distanceMeters
+                                remainingDuration = plan.result.durationSeconds
+                                lastAutoReroutedHazardId = hazard.id
+                                navigationNotice = "Rerouted around ${hazard.title}"
+                                offlineRouteDebugMessage = "Rerouted around ${hazard.title}"
+                        } else {
+                                navigationNotice = "Hazard ahead · no safe detour found"
+                                offlineRouteDebugMessage =
+                                        "Hazard detour failed: ${plan?.result?.errorMessage ?: "no route"}"
                         }
-                        activeRouteSource = plan.source
-                        avoidedHazardCount = plan.avoidedHazards.size
-                        offlineRouteDebugMessage = "Rerouted around ${hazard.title}"
+                } finally {
+                        isRerouting = false
                 }
         }
 
@@ -1384,6 +1582,11 @@ if (walkRouteResult == null) {
                                         },
                                         onStartNavigation = {
                                                 currentInstructionIndex = 0
+                                                navigationNotice = null
+                                                isRerouting = false
+                                                lastAutoReroutedHazardId = null
+                                                offRouteMonitor.reset()
+                                                navigationSessionId++
                                                 val activeRoute =
                                                         if (selectedProfile == "driving-car") {
                                                                 currentRouteResult
@@ -1467,6 +1670,8 @@ if (walkRouteResult == null) {
                                 navigationInstructions.getOrNull(currentInstructionIndex) ?: "",
                         currentIndex = currentInstructionIndex,
                         totalInstructions = navigationInstructions.size,
+                        navigationNotice = navigationNotice,
+                        isRerouting = isRerouting,
                         onNext = {
                                 if (currentInstructionIndex < navigationInstructions.size - 1) {
                                         currentInstructionIndex++
@@ -1476,6 +1681,10 @@ if (walkRouteResult == null) {
                                 // Stop simulation if running
                                 routeSimulator.stopSimulation()
                                 isSimulationMode = false
+                                isRerouting = false
+                                navigationNotice = null
+                                offRouteMonitor.reset()
+                                navigationSessionId++
 
                                 // Fetch actual user location to prevent routing from stale simulation position
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -1788,3 +1997,27 @@ if (walkRouteResult == null) {
 // ============================================
 // GOOGLE-STYLE SEARCH BAR
 // ============================================
+
+/** Plans a route on a background dispatcher; GraphHopper is fast but not free, and ORS may wait. */
+private suspend fun planRouteOffMain(
+        startLat: Double,
+        startLng: Double,
+        destinationLat: Double,
+        destinationLng: Double,
+        profile: String,
+        hazards: List<HazardZone>
+): RoutePlan? =
+        withContext(Dispatchers.Default) {
+                try {
+                        RouteRepository.plan(
+                                start = GeoPoint(startLat, startLng),
+                                end = GeoPoint(destinationLat, destinationLng),
+                                profile = profile,
+                                hazards = hazards
+                        )
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                } catch (_: Exception) {
+                        null
+                }
+        }

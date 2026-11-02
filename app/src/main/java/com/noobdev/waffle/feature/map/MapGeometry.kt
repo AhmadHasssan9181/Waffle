@@ -92,8 +92,7 @@ fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): D
 }
 
 /** Helper to update route source with vanishing trail */
-fun updateRouteSource(map: MapLibreMap, coordinates: List<Pair<Double, Double>>, startIndex: Int) {
-        map.getStyle { style ->
+fun updateRouteSource(map: MapLibreMap, coordinates: List<Pair<Double, Double>>, startIndex: Int) {        map.getStyle { style ->
                 if (coordinates.size <= startIndex) return@getStyle
 
                 // Vanishing trail: only show coordinates from startIndex to end
@@ -125,6 +124,29 @@ fun updateRouteSource(map: MapLibreMap, coordinates: List<Pair<Double, Double>>,
                         style.addLayer(layer)
                 }
         }
+}
+
+/**
+ * Distance still to drive along [coordinates], starting from the segment the location snapped to.
+ * The first leg runs from the current position to the end of that segment, so the number does not
+ * jump when a fix lands mid-segment.
+ */
+fun remainingRouteMeters(
+        coordinates: List<Pair<Double, Double>>,
+        segmentIndex: Int,
+        currentLat: Double,
+        currentLng: Double
+): Double {
+        if (coordinates.size < 2) return 0.0
+        val start = segmentIndex.coerceIn(0, coordinates.size - 2)
+        val next = coordinates[start + 1]
+        var total = calculateDistance(currentLat, currentLng, next.first, next.second)
+        for (i in start + 1 until coordinates.size - 1) {
+                val a = coordinates[i]
+                val b = coordinates[i + 1]
+                total += calculateDistance(a.first, a.second, b.first, b.second)
+        }
+        return total
 }
 
 /**
