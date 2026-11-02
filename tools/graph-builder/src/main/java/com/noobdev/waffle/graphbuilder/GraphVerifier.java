@@ -39,27 +39,33 @@ public final class GraphVerifier {
                 new Profile("foot").setVehicle("foot").setWeighting("shortest"),
                 new Profile("bike").setVehicle("bike").setWeighting("fastest")
         );
-        hopper.getCHPreparationHandler().setCHProfiles(new CHProfile("car"));
+        hopper.getCHPreparationHandler().setCHProfiles(
+                new CHProfile("car"),
+                new CHProfile("foot"),
+                new CHProfile("bike")
+        );
         hopper.setAllowWrites(false);
         hopper.importOrLoad();
 
         // Islamabad city centre to the north-east of the city.
-        GHRequest request = new GHRequest(
-                new GHPoint(33.6844, 73.0479),
-                new GHPoint(33.7294, 73.0931)
-        );
-        request.setProfile("car");
-        request.setLocale("en");
+        for (String profile : new String[]{"car", "foot", "bike"}) {
+            GHRequest request = new GHRequest(
+                    new GHPoint(33.6844, 73.0479),
+                    new GHPoint(33.7294, 73.0931)
+            );
+            request.setProfile(profile);
+            request.setLocale("en");
 
-        GHResponse response = hopper.route(request);
-        if (response.hasErrors()) {
-            System.err.println("Routing failed: " + response.getErrors());
-            System.exit(3);
+            GHResponse response = hopper.route(request);
+            if (response.hasErrors()) {
+                System.err.println(profile + " routing failed: " + response.getErrors());
+                System.exit(3);
+            }
+
+            System.out.println(profile + " distance: " + Math.round(response.getBest().getDistance()) + " m");
+            System.out.println(profile + " time    : " + Math.round(response.getBest().getTime() / 1000.0) + " s");
+            System.out.println(profile + " points  : " + response.getBest().getPoints().size());
+            System.out.println(profile + " instructions: " + response.getBest().getInstructions().size());
         }
-
-        System.out.println("Distance: " + Math.round(response.getBest().getDistance()) + " m");
-        System.out.println("Time    : " + Math.round(response.getBest().getTime() / 1000.0) + " s");
-        System.out.println("Points  : " + response.getBest().getPoints().size());
-        System.out.println("Instructions: " + response.getBest().getInstructions().size());
     }
 }

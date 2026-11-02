@@ -61,7 +61,14 @@ public final class GraphBuilder {
         hopper.setEncodingManager(
                 EncodingManager.create(new DefaultFlagEncoderFactory(), "car,foot,bike")
         );
-        hopper.getCHPreparationHandler().setCHProfiles(new CHProfile("car"));
+        // GraphHopper's mobile mode does not allow disabling CH per request, so every profile
+        // needs a CH preparation. The graph is a little larger, but all three travel modes work
+        // offline.
+        hopper.getCHPreparationHandler().setCHProfiles(
+                new CHProfile("car"),
+                new CHProfile("foot"),
+                new CHProfile("bike")
+        );
         hopper.setElevation(false);
         hopper.setStoreOnFlush(true);
         hopper.importOrLoad();

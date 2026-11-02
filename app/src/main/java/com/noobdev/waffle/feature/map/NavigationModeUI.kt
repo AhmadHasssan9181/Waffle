@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,6 +62,7 @@ import com.noobdev.waffle.core.routing.RouteRepository
 import com.noobdev.waffle.core.routing.RouteSource
 import com.noobdev.waffle.design.theme.*
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,6 +87,7 @@ fun NavigationModeUI(
         currentInstruction: String,
         currentIndex: Int,
         totalInstructions: Int,
+        speedMps: Float = 0f,
         navigationNotice: String? = null,
         isRerouting: Boolean = false,
         wrongWay: Boolean = false,
@@ -92,6 +95,13 @@ fun NavigationModeUI(
         onExit: () -> Unit
 ) {
         Box(modifier = Modifier.fillMaxSize()) {
+                NavigationSpeedBadge(
+                        speedMps = speedMps,
+                        modifier =
+                                Modifier.align(Alignment.BottomStart)
+                                        .padding(start = 16.dp, bottom = 150.dp)
+                )
+
                 // Top instruction bar
                 Card(
                         modifier = Modifier.fillMaxWidth().statusBarsPadding(),
@@ -294,14 +304,74 @@ fun NavigationModeUI(
         }
 }
 
+/** Small Google-Maps-style speed bubble, bottom-left, above the navigation bar. */
+@Composable
+private fun NavigationSpeedBadge(speedMps: Float, modifier: Modifier = Modifier) {
+        val kmh = (speedMps.coerceAtLeast(0f) * 3.6f).roundToInt()
+        Surface(
+                modifier = modifier.size(58.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                border =
+                        BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                        ),
+                shadowElevation = 4.dp
+        ) {
+                Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                ) {
+                        Text(
+                                "$kmh",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                                "km/h",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                }
+        }
+}
+
 fun getDirectionIcon(instruction: String): ImageVector {
         val lower = instruction.lowercase()
         return when {
-                lower.contains("left") -> Icons.Default.KeyboardArrowLeft
-                lower.contains("right") -> Icons.Default.KeyboardArrowRight
-                lower.contains("arrive") -> Icons.Default.Flag
-                lower.contains("destination") -> Icons.Default.Flag
-                else -> Icons.AutoMirrored.Filled.ArrowForward
+                lower.contains("u-turn") || lower.contains("u turn") || lower.contains("turn around") ->
+                        if (lower.contains("right")) Icons.Rounded.UTurnRight
+                        else Icons.Rounded.UTurnLeft
+                lower.contains("roundabout") || lower.contains("rotary") ->
+                        if (lower.contains("left")) Icons.Rounded.RoundaboutLeft
+                        else Icons.Rounded.RoundaboutRight
+                lower.contains("merge") || lower.contains("motorway") || lower.contains("freeway") ->
+                        Icons.Rounded.CallMerge
+                lower.contains("ramp") || lower.contains("exit") ->
+                        if (lower.contains("left")) Icons.Rounded.RampLeft
+                        else Icons.Rounded.RampRight
+                lower.contains("sharp left") -> Icons.Rounded.TurnSharpLeft
+                lower.contains("sharp right") -> Icons.Rounded.TurnSharpRight
+                lower.contains("slight left") || lower.contains("bear left") ->
+                        Icons.Rounded.TurnSlightLeft
+                lower.contains("slight right") || lower.contains("bear right") ->
+                        Icons.Rounded.TurnSlightRight
+                lower.contains("keep left") || lower.contains("fork left") ->
+                        Icons.Rounded.ForkLeft
+                lower.contains("keep right") || lower.contains("fork right") ->
+                        Icons.Rounded.ForkRight
+                lower.contains("left") -> Icons.Rounded.TurnLeft
+                lower.contains("right") -> Icons.Rounded.TurnRight
+                lower.contains("arrive") ||
+                        lower.contains("destination") ||
+                        lower.contains("via point") -> Icons.Rounded.Flag
+                lower.contains("continue") ||
+                        lower.contains("straight") ||
+                        lower.contains("head") -> Icons.Rounded.Straight
+                else -> Icons.Rounded.Navigation
         }
 }
 

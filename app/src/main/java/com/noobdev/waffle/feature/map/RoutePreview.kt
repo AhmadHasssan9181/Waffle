@@ -84,6 +84,7 @@ fun RoutePreviewCard(
         routeResult: RouteResult,
         selectedProfile: String,
         walkRouteResult: RouteResult?,
+        bikeRouteResult: RouteResult? = null,
         isLoadingWalk: Boolean,
         onProfileChange: (String) -> Unit,
         onStartNavigation: () -> Unit,
@@ -102,7 +103,14 @@ fun RoutePreviewCard(
         onQuickStop: ((ShopCategory) -> Unit)? = null
 ) {
         val isDriving = selectedProfile == "driving-car"
-        val currentRoute = if (isDriving) routeResult else (walkRouteResult ?: routeResult)
+        val isBiking = selectedProfile == "cycling-regular"
+        val isWalking = selectedProfile == "foot-walking"
+        val currentRoute =
+                when {
+                        isDriving -> routeResult
+                        isBiking -> bikeRouteResult ?: routeResult
+                        else -> walkRouteResult ?: routeResult
+                }
 
         Card(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -468,7 +476,7 @@ fun RoutePreviewCard(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Route options - WORKING Drive/Walk toggle
+                        // Route options - Drive / Bike / Walk
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -476,38 +484,117 @@ fun RoutePreviewCard(
                                 // Drive option
                                 Surface(
                                         onClick = { onProfileChange("driving-car") },
+                                        modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(20.dp),
                                         color =
-                                                if (isDriving) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                                                if (isDriving)
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.10f
+                                                        )
                                                 else MaterialTheme.colorScheme.surfaceVariant,
                                         border =
-                                                if (isDriving) BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                                if (isDriving)
+                                                        BorderStroke(
+                                                                2.dp,
+                                                                MaterialTheme.colorScheme.primary
+                                                        )
                                                 else null
                                 ) {
                                         Row(
                                                 modifier =
-                                                        Modifier.padding(
-                                                                horizontal = 16.dp,
-                                                                vertical = 10.dp
-                                                        ),
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 10.dp
+                                                                ),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                horizontalArrangement = Arrangement.Center
                                         ) {
                                                 Icon(
                                                         Icons.Default.DirectionsCar,
                                                         null,
                                                         tint =
-                                                                if (isDriving) MaterialTheme.colorScheme.primary
+                                                                if (isDriving)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
                                                                 else
                                                                         MaterialTheme.colorScheme
                                                                                 .onSurfaceVariant,
-                                                        modifier = Modifier.size(20.dp)
+                                                        modifier = Modifier.size(18.dp)
                                                 )
+                                                Spacer(Modifier.width(5.dp))
                                                 Text(
-                                                        formatDuration(routeResult.durationSeconds),
-                                                        style = MaterialTheme.typography.labelLarge,
+                                                        formatDuration(
+                                                                routeResult.durationSeconds
+                                                        ),
+                                                        style =
+                                                                MaterialTheme.typography.labelMedium,
                                                         color =
-                                                                if (isDriving) MaterialTheme.colorScheme.primary
+                                                                if (isDriving)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                                else
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                )
+                                        }
+                                }
+
+                                // Bike option
+                                Surface(
+                                        onClick = { onProfileChange("cycling-regular") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(20.dp),
+                                        color =
+                                                if (isBiking)
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.10f
+                                                        )
+                                                else MaterialTheme.colorScheme.surfaceVariant,
+                                        border =
+                                                if (isBiking)
+                                                        BorderStroke(
+                                                                2.dp,
+                                                                MaterialTheme.colorScheme.primary
+                                                        )
+                                                else null
+                                ) {
+                                        Row(
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 10.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                        ) {
+                                                Icon(
+                                                        Icons.Default.DirectionsBike,
+                                                        null,
+                                                        tint =
+                                                                if (isBiking)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                                else
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant,
+                                                        modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(5.dp))
+                                                Text(
+                                                        if (bikeRouteResult != null)
+                                                                formatDuration(
+                                                                        bikeRouteResult
+                                                                                .durationSeconds
+                                                                )
+                                                        else "Bike",
+                                                        style =
+                                                                MaterialTheme.typography.labelMedium,
+                                                        color =
+                                                                if (isBiking)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
                                                                 else
                                                                         MaterialTheme.colorScheme
                                                                                 .onSurfaceVariant
@@ -518,65 +605,70 @@ fun RoutePreviewCard(
                                 // Walk option
                                 Surface(
                                         onClick = { onProfileChange("foot-walking") },
+                                        modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(20.dp),
                                         color =
-                                                if (!isDriving) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                                                if (isWalking)
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.10f
+                                                        )
                                                 else MaterialTheme.colorScheme.surfaceVariant,
                                         border =
-                                                if (!isDriving)
-                                                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                                if (isWalking)
+                                                        BorderStroke(
+                                                                2.dp,
+                                                                MaterialTheme.colorScheme.primary
+                                                        )
                                                 else null
                                 ) {
                                         Row(
                                                 modifier =
-                                                        Modifier.padding(
-                                                                horizontal = 16.dp,
-                                                                vertical = 10.dp
-                                                        ),
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 10.dp
+                                                                ),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                horizontalArrangement = Arrangement.Center
                                         ) {
                                                 Icon(
                                                         Icons.Default.DirectionsWalk,
                                                         null,
                                                         tint =
-                                                                if (!isDriving) MaterialTheme.colorScheme.primary
+                                                                if (isWalking)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
                                                                 else
                                                                         MaterialTheme.colorScheme
                                                                                 .onSurfaceVariant,
-                                                        modifier = Modifier.size(20.dp)
+                                                        modifier = Modifier.size(18.dp)
                                                 )
+                                                Spacer(Modifier.width(5.dp))
                                                 if (isLoadingWalk) {
                                                         CircularProgressIndicator(
-                                                                modifier = Modifier.size(16.dp),
+                                                                modifier = Modifier.size(14.dp),
                                                                 strokeWidth = 2.dp
-                                                        )
-                                                } else if (walkRouteResult != null) {
-                                                        Text(
-                                                                formatDuration(
-                                                                        walkRouteResult
-                                                                                .durationSeconds
-                                                                ),
-                                                                style =
-                                                                        MaterialTheme.typography
-                                                                                .labelLarge,
-                                                                color =
-                                                                        if (!isDriving)
-                                                                                MaterialTheme.colorScheme.primary
-                                                                        else
-                                                                                MaterialTheme
-                                                                                        .colorScheme
-                                                                                        .onSurfaceVariant
                                                         )
                                                 } else {
                                                         Text(
-                                                                "Walk",
+                                                                if (walkRouteResult != null)
+                                                                        formatDuration(
+                                                                                walkRouteResult
+                                                                                        .durationSeconds
+                                                                        )
+                                                                else "Walk",
                                                                 style =
                                                                         MaterialTheme.typography
                                                                                 .labelMedium,
                                                                 color =
-                                                                        MaterialTheme.colorScheme
-                                                                                .onSurfaceVariant
+                                                                        if (isWalking)
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .primary
+                                                                        else
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .onSurfaceVariant
                                                         )
                                                 }
                                         }

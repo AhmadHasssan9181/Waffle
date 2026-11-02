@@ -151,6 +151,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
         var routeResult by remember { mutableStateOf<RouteResult?>(null) }
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
+        var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
@@ -170,6 +171,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // Incremented on every start/exit so a slow reroute from a previous trip cannot land in a
         // new navigation session.
         var navigationSessionId by remember { mutableStateOf(0) }
+
+        /** The route that belongs to the currently selected travel mode. */
+        fun activeRouteFor(profile: String): RouteResult? =
+                when (profile) {
+                        "foot-walking" -> walkRouteResult ?: routeResult
+                        "cycling-regular" -> bikeRouteResult ?: routeResult
+                        else -> routeResult
+                }
+
+        fun isWalkingProfile(profile: String): Boolean = profile == "foot-walking"
+        fun isBikeProfile(profile: String): Boolean = profile == "cycling-regular"
 
         fun offlineResponseToRouteResult(
                 response: com.graphhopper.GHResponse
@@ -197,6 +209,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var remainingDistance by remember { mutableStateOf(0.0) }
         var remainingDuration by remember { mutableStateOf(0.0) }
         var currentBearing by remember { mutableStateOf(0.0) }
+        var currentSpeedMps by remember { mutableStateOf(0f) }
         // Holds the last non-null route so NavigationModeUI never crashes during exit animation
         var lastNavigationRoute by remember { mutableStateOf<RouteResult?>(null) }
 
@@ -225,17 +238,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
         /**
-         * Shared "take me there" action: closes the sheet/search, plans with hazards avoided and
-         * shows the route preview. Used by search results and by a tapped shop pin.
-         */
-        /**
-         * Plans the current destination with the current intermediate stops. Car and walk are
-         * planned separately, but both include the same stops.
+         * Plans the current destination with the current intermediate stops. Car, bike and walk are
+         * planned separately, but all include the same stops.
          */
         fun planTrip(profile: String) {
                 val destination = selectedDestination ?: return
                 val stops = routeStops
-                val walking = profile == "foot-walking"
+                val walking = isWalkingProfile(profile)
+                val biking = isBikeProfile(profile)
 
                 scope.launch {
                         if (walking) isLoadingWalk = true else isLoadingRoute = true
@@ -247,7 +257,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         startLng = currentLng,
                                         destinationLat = destination.lat,
                                         destinationLng = destination.lng,
-                                        profile = if (walking) "foot" else "car",
+                                        profile =
+                                                when {
+                                                        walking -> "foot"
+                                                        biking -> "bike"
+                                                        else -> "car"
+                                                },
                                         hazards = HazardRegistry.active(),
                                         stops = stops.map { GeoPoint(it.lat, it.lng) }
                                 )
@@ -256,10 +271,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 selectedProfile = profile
                                 if (walking) {
                                         walkRouteResult = plan.result
+                                } else if (biking) {
+                                        bikeRouteResult = plan.result
                                 } else {
                                         routeResult = plan.result
-                                        walkRouteResult = null
                                 }
+                                if (!walking) walkRouteResult = null
+                                if (!biking) bikeRouteResult = null
                                 activeRouteSource = plan.source
                                 avoidedHazardCount = plan.avoidedHazards.size
                                 navigationInstructions = plan.result.instructions
@@ -319,9 +337,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
          * more specific.
          */
         fun addQuickStop(category: ShopCategory) {
-                val activeRoute =
-                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
-                        else routeResult
+                val activeRoute = activeRouteFor(selectedProfile)
                 if (activeRoute == null || activeRoute.coordinates.size < 2) return
 
                 val candidates =
@@ -471,7 +487,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         ) {
                 if (isRerouting) return
                 val destination = selectedDestination ?: return
-                val walk = selectedProfile == "foot-walking"
+                val walking = isWalkingProfile(selectedProfile)
+                val biking = isBikeProfile(selectedProfile)
                 val activeHazards = hazards
                 val session = navigationSessionId
 
@@ -488,7 +505,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         startLng = rawLng,
                                         destinationLat = destination.lat,
                                         destinationLng = destination.lng,
-                                        profile = if (walk) "foot" else "car",
+                                        profile =
+                                                when {
+                                                        walking -> "foot"
+                                                        biking -> "bike"
+                                                        else -> "car"
+                                                },
                                         hazards = activeHazards,
                                         stops = viaStops.map { GeoPoint(it.lat, it.lng) }
                                 )
@@ -501,8 +523,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         }
 
                         if (plan != null && plan.success) {
-                                if (walk) {
+                                if (walking) {
                                         walkRouteResult = plan.result
+                                } else if (biking) {
+                                        bikeRouteResult = plan.result
                                 } else {
                                         routeResult = plan.result
                                 }
@@ -557,9 +581,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 if (isRerouting) return
                 if (selectedDestination == null) return
                 val position = simPosition ?: return
-                val route =
-                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
-                        else routeResult
+                val route = activeRouteFor(selectedProfile)
                 if (route == null || route.coordinates.size < 2) return
 
                 val index = simSegmentIndex.coerceIn(0, route.coordinates.size - 2)
@@ -651,9 +673,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 if (isRerouting) return
                 if (selectedDestination == null) return
                 val position = simPosition ?: return
-                val route =
-                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
-                        else routeResult
+                val route = activeRouteFor(selectedProfile)
                 if (route == null || route.coordinates.size < 2) return
 
                 val index = simSegmentIndex.coerceIn(0, route.coordinates.size - 2)
@@ -731,9 +751,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         DisposableEffect(screenState, isSimulationMode) {
                 if (screenState == MapScreenState.NAVIGATING) {
                         // Initialize remaining distance from route
-                        val initialRoute =
-                                if (selectedProfile == "driving-car") routeResult
-                                else (walkRouteResult ?: routeResult)
+                        val initialRoute = activeRouteFor(selectedProfile)
                         remainingDistance = initialRoute?.distanceMeters ?: 0.0
                         remainingDuration = initialRoute?.durationSeconds ?: 0.0
 
@@ -763,12 +781,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 // callback was created: a reroute
                                                                 // replaces it while navigation runs.
                                                                 val activeRoute =
-                                                                        if (selectedProfile ==
-                                                                                        "foot-walking"
+                                                                        activeRouteFor(
+                                                                                selectedProfile
                                                                         )
-                                                                                (walkRouteResult
-                                                                                        ?: routeResult)
-                                                                        else routeResult
 
                                                                 // Heading comes from the raw GPS
                                                                 // movement, not the snapped points:
@@ -895,6 +910,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 currentLat = snapResult.snappedLat
                                                                 currentLng = snapResult.snappedLng
                                                                 hasLocation = true
+                                                                currentSpeedMps =
+                                                                        if (location.hasSpeed())
+                                                                                location.speed
+                                                                                        .coerceAtLeast(
+                                                                                                0f
+                                                                                        )
+                                                                        else 0f
 
                                                                 // Update route source for vanishing
                                                                 // trail
@@ -1077,12 +1099,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         currentLat = simPosition!!.latitude
                         currentLng = simPosition!!.longitude
                         currentBearing = simBearing
+                        currentSpeedMps = simSpeed
                         hasLocation = true
 
-                        // Update route source for vanishing trail – use direct source ref
-                        val activeRoute =
-                                if (selectedProfile == "driving-car") routeResult
-                                else (walkRouteResult ?: routeResult)
+                        // Update route source for vanishing trail - use direct source ref
+                        val activeRoute = activeRouteFor(selectedProfile)
                         if (activeRoute != null && simSegmentIndex >= 0) {
                                 trimRouteSource(
                                         routeSource,
@@ -1191,10 +1212,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Draw route when available – stores direct source reference for fast updates
-        LaunchedEffect(routeResult, walkRouteResult, selectedProfile) {
-                val drawnRoute =
-                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
-                        else routeResult
+        LaunchedEffect(routeResult, walkRouteResult, bikeRouteResult, selectedProfile) {
+                val drawnRoute = activeRouteFor(selectedProfile)
                 drawnRoute?.let { result ->
                         if (result.success && result.coordinates.isNotEmpty()) {
                                 mapInstance?.getStyle { style ->
@@ -1510,10 +1529,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // === HAZARD CHECK: does the active route cut through a danger zone? ===
-        LaunchedEffect(hazards, routeResult, walkRouteResult, selectedProfile) {
-                val activeRoute =
-                        if (selectedProfile == "foot-walking") (walkRouteResult ?: routeResult)
-                        else routeResult
+        LaunchedEffect(hazards, routeResult, walkRouteResult, bikeRouteResult, selectedProfile) {
+                val activeRoute = activeRouteFor(selectedProfile)
                 if (activeRoute == null ||
                                 !activeRoute.success ||
                                 activeRoute.coordinates.size < 2 ||
@@ -1544,9 +1561,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 if (distanceToHazard > hazard.radiusMeters + 5_000.0) return@LaunchedEffect
 
                 val destination = selectedDestination ?: return@LaunchedEffect
-                val isWalking = selectedProfile == "foot-walking"
-                val activeRoute =
-                        if (isWalking) (walkRouteResult ?: routeResult) else routeResult
+                val isWalking = isWalkingProfile(selectedProfile)
+                val isBiking = isBikeProfile(selectedProfile)
+                val activeRoute = activeRouteFor(selectedProfile)
                 val currentIndex =
                         activeRoute?.coordinates?.indices?.minByOrNull { index ->
                                 val point = activeRoute.coordinates[index]
@@ -1566,7 +1583,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         startLng = currentLng,
                                         destinationLat = destination.lat,
                                         destinationLng = destination.lng,
-                                        profile = if (isWalking) "foot" else "car",
+                                        profile =
+                                                when {
+                                                        isWalking -> "foot"
+                                                        isBiking -> "bike"
+                                                        else -> "car"
+                                                },
                                         hazards = hazards,
                                         stops = viaStops.map { GeoPoint(it.lat, it.lng) }
                                 )
@@ -1574,6 +1596,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         if (plan != null && plan.success) {
                                 if (isWalking) {
                                         walkRouteResult = plan.result
+                                } else if (isBiking) {
+                                        bikeRouteResult = plan.result
                                 } else {
                                         routeResult = plan.result
                                 }
@@ -1626,6 +1650,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         currentStyleIndex = selectedStyleIndex,
                         modifier = Modifier.fillMaxSize(),
                         followUser = screenState != MapScreenState.NAVIGATING,
+                        travelMode = selectedProfile,
                         onMapReady = { map ->
                                 mapInstance = map
 
@@ -1817,6 +1842,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                 avoidedHazardCount =
                                                                                         plan.avoidedHazards.size
                                                                                 walkRouteResult = null
+                                                                                bikeRouteResult = null
                                                                                 navigationInstructions =
                                                                                         plan.result.instructions
                                                                                 currentInstructionIndex = 0
@@ -1959,6 +1985,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         routeResult = currentRouteResult,
                                         selectedProfile = selectedProfile,
                                         walkRouteResult = walkRouteResult,
+                                        bikeRouteResult = bikeRouteResult,
                                         isLoadingWalk = isLoadingWalk,
                                         routeSource = activeRouteSource,
                                         avoidedHazardCount = avoidedHazardCount,
@@ -1982,13 +2009,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 offRouteMonitor.reset()
                                                 pendingSimulationRestart = false
                                                 showSimControls = false
+                                                currentSpeedMps = 0f
                                                 navigationSessionId++
                                                 val activeRoute =
-                                                        if (selectedProfile == "driving-car") {
-                                                                currentRouteResult
-                                                        } else {
-                                                                walkRouteResult ?: currentRouteResult
-                                                        }
+                                                        activeRouteFor(selectedProfile)
+                                                                ?: currentRouteResult
                                                 navigationInstructions = activeRoute.instructions
 
                                                 mapInstance?.let { map ->
@@ -2035,6 +2060,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 }
                                                 routeResult = null
                                                 walkRouteResult = null
+                                                bikeRouteResult = null
                                                 routeStops = emptyList()
                                                 selectedDestination = null
                                                 selectedProfile = "driving-car"
@@ -2071,6 +2097,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 navigationInstructions.getOrNull(currentInstructionIndex) ?: "",
                         currentIndex = currentInstructionIndex,
                         totalInstructions = navigationInstructions.size,
+                        speedMps = if (isSimulationMode) simSpeed else currentSpeedMps,
                         navigationNotice = navigationNotice,
                         isRerouting = isRerouting,
                         wrongWay = wrongWayDetected,
@@ -2146,6 +2173,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 routeSource = null
                                 routeResult = null
                                 walkRouteResult = null
+                                bikeRouteResult = null
                                 selectedDestination = null
                                 searchQuery = ""
                                 isUserPanMode = false

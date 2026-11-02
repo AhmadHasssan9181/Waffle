@@ -1,6 +1,12 @@
 package com.noobdev.waffle.design.theme
 
 import android.app.Activity
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.SystemClock
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -8,20 +14,28 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 /**
  * The app ships exactly two looks: a warm dark mode for night driving and a warm light mode for
- * daylight. "System" follows the phone.
+ * daylight. "System" follows the phone; "Auto" follows the ambient light sensor like a car
+ * head-unit (dark when it is dim, light in daylight).
  */
 enum class AppTheme {
     SYSTEM,
     LIGHT,
-    DARK
+    DARK,
+    AUTO
 }
 
 val WaffleShapes =
@@ -91,16 +105,63 @@ private val WaffleLightScheme =
                 scrim = Color(0x66101620)
         )
 
+/**
+ * Ambient-light theme. Hysteresis (dark below 20 lux, light above 80 lux) stops the UI flickering
+ * when a streetlight or headlight sweeps across the sensor.
+ */
+@Composable
+private fun rememberAmbientDark(): Boolean {
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+    var dark by remember { mutableStateOf(systemDark) }
+
+    DisposableEffect(context) {
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = manager?.getDefaultSensor(Sensor.TYPE_LIGHT)
+        if (manager == null || sensor == null) {
+            return@DisposableEffect onDispose {}
+        }
+
+        var lastSwitchAt = 0L
+        val listener =
+                object : SensorEventListener {
+                    override fun onSensorChanged(event: SensorEvent) {
+                        val lux = event.values.getOrNull(0) ?: return
+                        val now = SystemClock.elapsedRealtime()
+                        val next =
+                                when {
+                                    lux <= 20f -> true
+                                    lux >= 80f -> false
+                                    else -> dark
+                                }
+                        if (next != dark && now - lastSwitchAt >= 1_500L) {
+                            dark = next
+                            lastSwitchAt = now
+                        }
+                    }
+
+                    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+                }
+
+        manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        onDispose { manager.unregisterListener(listener) }
+    }
+
+    return dark
+}
+
 @Composable
 fun WaffleTheme(
         appTheme: AppTheme = AppTheme.SYSTEM,
         content: @Composable () -> Unit
 ) {
+    val sensorDark = if (appTheme == AppTheme.AUTO) rememberAmbientDark() else false
     val darkTheme =
             when (appTheme) {
                 AppTheme.SYSTEM -> isSystemInDarkTheme()
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
+                AppTheme.AUTO -> sensorDark
             }
     val colorScheme = if (darkTheme) WaffleDarkScheme else WaffleLightScheme
 

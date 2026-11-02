@@ -1,5 +1,6 @@
 package com.noobdev.waffle.feature.map
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -23,9 +24,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.noobdev.waffle.BuildConfig
+import com.noobdev.waffle.R
 import com.noobdev.waffle.core.network.NetworkState
 import org.maplibre.android.MapLibre
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
@@ -93,12 +96,30 @@ object MapStyleResolver {
     }
 }
 
+/**
+ * The blue dot becomes a small travel-mode badge: car, bike or walk. The bearing arrow stays
+ * Honey so heading is readable in both themes.
+ */
+private fun locationOptions(context: Context, travelMode: String): LocationComponentOptions {
+    val puck =
+            when (travelMode) {
+                "cycling-regular" -> R.drawable.ic_nav_puck_bike
+                "foot-walking" -> R.drawable.ic_nav_puck_walk
+                else -> R.drawable.ic_nav_puck_car
+            }
+    return LocationComponentOptions.builder(context)
+            .foregroundDrawable(puck)
+            .bearingDrawable(R.drawable.ic_nav_bearing)
+            .build()
+}
+
 @OptIn(ExperimentalStdlibApi::class, ExperimentalPermissionsApi::class)
 @Composable
 fun LocationAwareMap(
         currentStyleIndex: Int,
         modifier: Modifier = Modifier,
         followUser: Boolean = true,
+        travelMode: String = "driving-car",
         onMapReady: (MapLibreMap) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -127,6 +148,7 @@ fun LocationAwareMap(
                     val options = LocationComponentActivationOptions
                         .builder(context, style)
                         .useDefaultLocationEngine(true)
+                        .locationComponentOptions(locationOptions(context, travelMode))
                         .build()
 
                     mapboxMap?.locationComponent?.apply {
@@ -147,6 +169,28 @@ fun LocationAwareMap(
         mapboxMap?.locationComponent?.cameraMode =
                 if (followUser) CameraMode.TRACKING else CameraMode.NONE
     }
+    // Swap the puck badge when the travel mode changes.
+    LaunchedEffect(travelMode) {
+        if (!hasLocationPermission) return@LaunchedEffect
+        mapboxMap?.let { map ->
+            map.getStyle { style ->
+                runCatching {
+                    val options = LocationComponentActivationOptions
+                        .builder(context, style)
+                        .useDefaultLocationEngine(true)
+                        .locationComponentOptions(locationOptions(context, travelMode))
+                        .build()
+                    map.locationComponent.apply {
+                        activateLocationComponent(options)
+                        isLocationComponentEnabled = true
+                        cameraMode =
+                                if (followUser) CameraMode.TRACKING else CameraMode.NONE
+                        renderMode = RenderMode.COMPASS
+                    }
+                }
+            }
+        }
+    }
     AndroidView(
         factory = { ctx ->
             MapView(ctx).also { mv ->
@@ -159,6 +203,7 @@ fun LocationAwareMap(
                                 val options = LocationComponentActivationOptions
                                     .builder(ctx, style)
                                     .useDefaultLocationEngine(true)
+                                    .locationComponentOptions(locationOptions(ctx, travelMode))
                                     .build()
                                 map.locationComponent.apply {
                                     activateLocationComponent(options)

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DarkMode
@@ -145,7 +146,7 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                                     color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                    "Warm light or night driving",
+                                    "Light, dark, or sensor auto",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -500,7 +501,8 @@ private fun ThemeSegmented(current: AppTheme, onSelect: (AppTheme) -> Unit) {
             listOf(
                     Triple(AppTheme.SYSTEM, "System", Icons.Rounded.SettingsBrightness),
                     Triple(AppTheme.LIGHT, "Light", Icons.Rounded.LightMode),
-                    Triple(AppTheme.DARK, "Dark", Icons.Rounded.DarkMode)
+                    Triple(AppTheme.DARK, "Dark", Icons.Rounded.DarkMode),
+                    Triple(AppTheme.AUTO, "Auto", Icons.Rounded.BrightnessMedium)
             )
 
     Row(horizontalArrangement = Arrangement.spacedBy(WaffleSpace.sm)) {

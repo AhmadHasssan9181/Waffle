@@ -18,10 +18,11 @@ the graph with `tools/graph-builder`.
 | App profile | GraphHopper profile | Weighting | CH |
 | --- | --- | --- | --- |
 | `car` | `car` | `fastest` | yes |
-| `foot` | `foot` | `shortest` | no |
-| `bike` | `bike` | `fastest` | no |
+| `foot` | `foot` | `shortest` | yes |
+| `bike` | `bike` | `fastest` | yes |
 
-Elevation is off. `car` is the only profile with contraction hierarchies.
+Elevation is off. GraphHopper's mobile mode does not allow disabling CH per request, so **every**
+profile gets a CH preparation. The bundled graph and `LocalRoutingEngine` must agree on that.
 
 **Multi-stop invariant:** `planWithStops` plans each leg separately, so every leg gets the same
 hazard avoidance. The shared boundary coordinate is removed from the next leg, and each leg's

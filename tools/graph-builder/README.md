@@ -50,7 +50,7 @@ prune the profiles you do not use (`Profile(...)` lines in `GraphBuilder`) befor
 `GraphBuilder` and `LocalRoutingEngine.kt` must agree on:
 
 - profile names and vehicles: `car` (fastest), `foot` (shortest), `bike` (fastest)
-- contraction hierarchies: `car` only
+- contraction hierarchies: **all three profiles** (mobile mode cannot disable CH per request)
 - elevation: off
 
 If they drift, GraphHopper refuses to load the graph on the device.

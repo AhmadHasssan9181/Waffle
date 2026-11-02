@@ -26,9 +26,14 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
                         Profile("foot").setVehicle("foot").setWeighting("shortest"),
                         Profile("bike").setVehicle("bike").setWeighting("fastest")
                 )
-                // Only the car profile gets contraction hierarchies; foot/bike stay flexible but
-                // still fast enough for city-sized graphs.
-                getCHPreparationHandler().setCHProfiles(CHProfile("car"))
+                // GraphHopper's mobile mode does not allow disabling CH per request, so every
+                // profile needs a CH preparation. The bundled graph is built the same way.
+                getCHPreparationHandler()
+                        .setCHProfiles(
+                                CHProfile("car"),
+                                CHProfile("foot"),
+                                CHProfile("bike")
+                        )
                 setAllowWrites(false)
                 importOrLoad()
             }
@@ -47,8 +52,9 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
         waypoints.forEach { points.add(GHPoint(it.latitude, it.longitude)) }
         points.add(GHPoint(end.latitude, end.longitude))
 
+        val normalizedProfile = normalizeProfile(profile)
         val request = GHRequest(points).apply {
-            setProfile(normalizeProfile(profile))
+            setProfile(normalizedProfile)
             setLocale("en")
         }
         return hopper.route(request)
