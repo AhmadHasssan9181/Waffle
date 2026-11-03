@@ -1,6 +1,7 @@
 package com.noobdev.waffle.feature.map
 
 import android.content.Context
+import android.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -115,10 +116,19 @@ private fun locationOptions(
     val bearing =
             if (hidePuck) R.drawable.ic_nav_puck_transparent
             else R.drawable.ic_nav_bearing
-    return LocationComponentOptions.builder(context)
-            .foregroundDrawable(foreground)
-            .bearingDrawable(bearing)
-            .build()
+    val builder =
+            LocationComponentOptions.builder(context)
+                    .foregroundDrawable(foreground)
+                    .bearingDrawable(bearing)
+    if (hidePuck) {
+        builder.accuracyAlpha(0f)
+                .accuracyColor(Color.TRANSPARENT)
+                .accuracyAnimationEnabled(false)
+                .pulseEnabled(false)
+                .pulseColor(Color.TRANSPARENT)
+                .pulseAlpha(0f)
+    }
+    return builder.build()
 }
 
 @OptIn(ExperimentalStdlibApi::class, ExperimentalPermissionsApi::class)
@@ -162,7 +172,7 @@ fun LocationAwareMap(
 
                     mapboxMap?.locationComponent?.apply {
                         activateLocationComponent(options)
-                        isLocationComponentEnabled = true
+                        isLocationComponentEnabled = !hidePuck
                         cameraMode = if (followUser) CameraMode.TRACKING else CameraMode.NONE
                         renderMode = RenderMode.COMPASS
                     }
@@ -193,7 +203,7 @@ fun LocationAwareMap(
                         .build()
                     map.locationComponent.apply {
                         activateLocationComponent(options)
-                        isLocationComponentEnabled = true
+                        isLocationComponentEnabled = !hidePuck
                         cameraMode =
                                 if (followUser) CameraMode.TRACKING else CameraMode.NONE
                         renderMode = RenderMode.COMPASS
@@ -220,7 +230,7 @@ fun LocationAwareMap(
                                     .build()
                                 map.locationComponent.apply {
                                     activateLocationComponent(options)
-                                    isLocationComponentEnabled = true
+                                    isLocationComponentEnabled = !hidePuck
                                     cameraMode =
                                             if (followUser) CameraMode.TRACKING
                                             else CameraMode.NONE

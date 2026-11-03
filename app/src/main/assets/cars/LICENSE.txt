@@ -1,0 +1,13 @@
+Kenney Car Kit
+https://kenney.nl/assets/car-kit
+
+License: Creative Commons Zero (CC0 1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Models used by Waffle:
+- sedan-sports.glb
+- suv-luxury.glb
+- truck-flat.glb
+- colormap.png
+
+Credit is not required, but the source is credited here.

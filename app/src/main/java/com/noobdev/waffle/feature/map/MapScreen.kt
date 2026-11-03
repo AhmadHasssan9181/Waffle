@@ -138,6 +138,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // Screen state
         var screenState by remember { mutableStateOf(MapScreenState.IDLE) }
+        var navigationCameraReady by remember { mutableStateOf(false) }
 
         // Map style - this will be passed up to change the map
         val darkUi = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -167,6 +168,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
+        val use3DCar =
+                hasLocation &&
+                        screenState == MapScreenState.NAVIGATING &&
+                        selectedProfile == "driving-car" &&
+                        vehicleIcon != VehicleIcon.ARROW
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
         var offlineRouteDebugMessage by remember { mutableStateOf<String?>(null) }
@@ -485,6 +491,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         LaunchedEffect(navSession.active) {
+                if (!navSession.active) navigationCameraReady = false
                 if (!navSession.active &&
                                 !isSimulationMode &&
                                 screenState == MapScreenState.NAVIGATING
@@ -496,6 +503,31 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         routeStops = emptyList()
                         screenState = MapScreenState.IDLE
                 }
+        }
+
+        // A restored trip has no start-navigation swoop. Put the camera at street level so the
+        // 3D car and route do not open at world zoom.
+        LaunchedEffect(navSession.active, mapInstance) {
+                if (!navSession.active) {
+                        navigationCameraReady = false
+                        return@LaunchedEffect
+                }
+                if (navigationCameraReady) return@LaunchedEffect
+                val map = mapInstance ?: return@LaunchedEffect
+                if (navSession.lat == 0.0 && navSession.lng == 0.0) return@LaunchedEffect
+                map.setPadding(0, 400, 0, 0)
+                map.animateCamera(
+                        CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.Builder()
+                                        .target(LatLng(navSession.lat, navSession.lng))
+                                        .zoom(17.0)
+                                        .tilt(55.0)
+                                        .bearing(navSession.bearing)
+                                        .build()
+                        ),
+                        900
+                )
+                navigationCameraReady = true
         }
 
         LaunchedEffect(
@@ -593,7 +625,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 shops = if (screenState == MapScreenState.NAVIGATING) emptyList() else visibleShops
         )
 
-        if (hasLocation) {
+        if (hasLocation && !use3DCar) {
                 AnimatedPuck3D(
                         map = mapInstance,
                         styleIndex = selectedStyleIndex,
@@ -2171,6 +2203,18 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 planRouteTo(result)
                                         }
                                 }
+                        )
+                }
+
+                if (use3DCar) {
+                        Car3DOverlay(
+                                map = mapInstance,
+                                targetLat = currentLat,
+                                targetLng = currentLng,
+                                targetBearing = currentBearing,
+                                vehicleIcon = vehicleIcon,
+                                visible = true,
+                                modifier = Modifier.fillMaxSize()
                         )
                 }
 

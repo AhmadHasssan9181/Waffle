@@ -701,10 +701,34 @@ class FloatingNavigationOverlay(
             canvas.drawPath(path, line)
         }
 
-        val car = carBitmap(nav, base.width) ?: return
         val pixel = projection.project(nav.lat, nav.lng)
         if (pixel != null) {
-            canvas.drawBitmap(car, pixel.x - car.width / 2f, pixel.y - car.height / 2f, null)
+            if (nav.profile == "driving-car" && nav.vehicleIconKey != "ARROW") {
+                val carSize = (base.width * 0.22f).coerceIn(64f, 140f)
+                val drawn =
+                        GltfCarRenderer.draw(
+                                context = context,
+                                canvas = canvas,
+                                centerX = pixel.x,
+                                centerY = pixel.y,
+                                sizePx = carSize,
+                                bearingDegrees = 0f,
+                                modelKey = nav.vehicleIconKey
+                        )
+                if (!drawn) {
+                    Car3DRenderer.draw(
+                            canvas = canvas,
+                            centerX = pixel.x,
+                            centerY = pixel.y,
+                            sizePx = carSize,
+                            bearingDegrees = 0f,
+                            modelKey = nav.vehicleIconKey
+                    )
+                }
+            } else {
+                val car = carBitmap(nav, base.width) ?: return
+                canvas.drawBitmap(car, pixel.x - car.width / 2f, pixel.y - car.height / 2f, null)
+            }
         }
         imageView?.setImageBitmap(composite)
         }
