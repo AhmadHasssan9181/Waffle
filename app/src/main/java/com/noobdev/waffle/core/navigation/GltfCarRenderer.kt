@@ -135,7 +135,6 @@ object GltfCarRenderer {
             modelKey: String,
             lights: VehicleLights
     ) {
-        if (!lights.headlights && !lights.braking && lights.turnSignal == TurnSignal.NONE) return
         val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
         val radians = Math.toRadians(bearingDegrees.toDouble())
         val cos = kotlin.math.cos(radians).toFloat()
@@ -173,33 +172,26 @@ object GltfCarRenderer {
                     glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 246, 205))
                 }
             }
-            // Dim tail lamps whenever the headlights are on.
-            if (!lights.braking) {
-                val rear =
-                        if (motorcycle) listOf(0f to 0.14f)
-                        else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
-                for ((dx, dy) in rear) {
-                    val p = point(dx, dy)
-                    glow(p.first, p.second, sizePx * 0.045f, Color.argb(120, 255, 30, 30))
-                }
-            }
         }
 
-        if (lights.braking) {
-            val rear =
-                    if (motorcycle) listOf(0f to 0.14f)
-                    else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
-            for ((dx, dy) in rear) {
-                val p = point(dx, dy)
+        // Running tail lamps are always on; braking makes them much brighter.
+        val rear =
+                if (motorcycle) listOf(0f to 0.10f)
+                else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
+        for ((dx, dy) in rear) {
+            val p = point(dx, dy)
+            if (lights.braking) {
                 glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 35, 28))
+            } else {
+                glow(p.first, p.second, sizePx * 0.05f, Color.argb(165, 255, 30, 30))
             }
         }
 
         if (lights.turnSignal != TurnSignal.NONE && lights.blinkOn) {
             val side = if (lights.turnSignal == TurnSignal.LEFT) -1f else 1f
             val sideX = if (motorcycle) 0.10f else 0.28f
-            val frontY = if (motorcycle) -0.16f else -0.22f
-            val rearY = if (motorcycle) 0.12f else 0.20f
+            val frontY = if (motorcycle) -0.14f else -0.22f
+            val rearY = if (motorcycle) 0.08f else 0.20f
             for (dy in listOf(frontY, rearY)) {
                 val p = point(side * sideX, dy)
                 glow(p.first, p.second, sizePx * 0.06f, Color.rgb(255, 170, 35))
