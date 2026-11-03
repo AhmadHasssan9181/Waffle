@@ -1,9 +1,11 @@
-"""Generates the 3D navigation pucks as transparent PNGs.
+"""Generates the navigation pucks as transparent PNGs.
 
-- sedan / SUV / pickup: a 3/4 rear-right isometric car
-- bike: a 3/4 isometric bicycle
-- walk: a 3/4 low-poly walker
+- sedan / SUV / pickup: a top-down 3D car with the nose pointing up, so `iconRotate` can align it
+  with the GPS bearing without the car looking sideways.
+- bike: a 3/4 isometric bicycle badge
+- walk: a 3/4 low-poly walker badge
 - arrow: the classic navigation arrow
+- dot: the neutral location dot used outside active navigation
 
 Run: python tools/puck/generate_pucks.py
 """
@@ -12,248 +14,318 @@ from PIL import Image, ImageDraw, ImageFilter
 import math
 
 OUT = Path(__file__).resolve().parents[2] / "app" / "src" / "main" / "res" / "drawable-nodpi"
-SIZE = 512
-S = 150.0
-CX, CY = 256.0, 300.0
 
 INK = (27, 36, 48, 255)
 WHITE = (255, 255, 255, 255)
 HONEY = (242, 163, 60, 255)
+GLASS = (23, 43, 66, 255)
+GLASS_HI = (92, 150, 190, 120)
+TIRE = (17, 22, 29, 255)
+HUB = (128, 142, 158, 255)
 
 
 def shade(color, factor):
     return tuple(max(0, min(255, int(c * factor))) for c in color[:3]) + (255,)
 
 
-def proj(x, y, z):
-    # 3/4 rear-right view: forward (+y) goes up-right, right (+x) goes right-down.
-    return (
-        CX + (x * 0.96 + y * 0.42) * S,
-        CY - (y * 0.78 - x * 0.20 + z) * S,
-    )
-
-
-def poly(draw, pts3, fill, outline=None, width=3):
-    pts = [proj(*p) for p in pts3]
-    draw.polygon(pts, fill=fill)
-    if outline:
-        draw.line(pts + [pts[0]], fill=outline, width=width, joint="curve")
-
-
-def gradient_poly(img, pts3, top, bottom):
-    pts = [proj(*p) for p in pts3]
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    x0, x1 = int(min(xs)) - 2, int(max(xs)) + 2
-    y0, y1 = int(min(ys)) - 2, int(max(ys)) + 2
-    w, h = max(1, x1 - x0), max(1, y1 - y0)
-    grad = Image.new("RGBA", (1, h), (0, 0, 0, 0))
-    for y in range(h):
-        t = y / max(1, h - 1)
+def vertical_gradient(width, height, top, bottom):
+    grad = Image.new("RGBA", (1, height), (0, 0, 0, 0))
+    for y in range(height):
+        t = y / max(1, height - 1)
         c = tuple(int(top[i] * (1 - t) + bottom[i] * t) for i in range(4))
         ImageDraw.Draw(grad).point((0, y), fill=c)
-    grad = grad.resize((w, h))
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).polygon([(x - x0, y - y0) for x, y in pts], fill=255)
-    img.paste(grad, (x0, y0), mask)
+    return grad.resize((width, height))
 
 
-def wheel(draw, x, y, z, r, tire=(17, 22, 29, 255)):
-    # circle in the x = const side plane
-    pts = []
-    for i in range(40):
-        a = 2 * math.pi * i / 40
-        pts.append((x, y + math.cos(a) * r, z + math.sin(a) * r))
-    p = [proj(*q) for q in pts]
-    draw.polygon(p, fill=tire)
-    draw.line(p + [p[0]], fill=(8, 11, 15, 255), width=4, joint="curve")
-    inner = []
-    for i in range(32):
-        a = 2 * math.pi * i / 32
-        inner.append((x - 0.001, y + math.cos(a) * r * 0.58, z + math.sin(a) * r * 0.58))
-    q = [proj(*v) for v in inner]
-    draw.polygon(q, fill=(128, 142, 158, 255))
-    draw.line(q + [q[0]], fill=(64, 74, 88, 255), width=3, joint="curve")
+def gradient_round_rect(img, box, radius, top, bottom, outline=None, width=3):
+    x0, y0, x1, y1 = [int(v) for v in box]
+    w, h = max(1, x1 - x0), max(1, y1 - y0)
+    grad = vertical_gradient(w, h, top, bottom)
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((x0, y0, x1, y1), radius, fill=255)
+    img.paste(grad, (x0, y0), mask.crop((x0, y0, x1, y1)))
+    if outline:
+        ImageDraw.Draw(img).rounded_rectangle(
+            (x0, y0, x1, y1), radius, outline=outline, width=width
+        )
 
 
-def car(kind, body):
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+def shadow(img, box, radius, offset=(10, 20), blur=18, alpha=120):
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    x0, y0, x1, y1 = box
+    ImageDraw.Draw(layer).rounded_rectangle(
+        (x0 + offset[0], y0 + offset[1], x1 + offset[0], y1 + offset[1]),
+        radius,
+        fill=(0, 0, 0, alpha),
+    )
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def wheel(d, box):
+    x0, y0, x1, y1 = box
+    d.rounded_rectangle(box, radius=(x1 - x0) // 3, fill=TIRE, outline=INK, width=4)
+    inset = 7
+    d.rounded_rectangle(
+        (x0 + inset, y0 + inset, x1 - inset, y1 - inset),
+        radius=(x1 - x0 - inset * 2) // 3,
+        fill=HUB,
+        outline=(64, 74, 88, 255),
+        width=3,
+    )
+    d.line([(x0 + inset + 4, y0 + inset + 4), (x1 - inset - 4, y1 - inset - 4)], fill=(190, 202, 216, 130), width=3)
+
+
+def topdown_car(kind, body):
+    img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
     if kind == "sedan":
-        length, width, body_h, cabin_h = 2.75, 1.12, 0.46, 0.38
-        yb0, yb1, yt0, yt1 = -0.55, 0.40, -0.35, 0.20
+        left, right = 181, 331
+        top, bottom = 106, 406
+        roof = (212, 250, 300, 335)
+        windshield = [(205, 205), (307, 205), (302, 252), (210, 252)]
+        rear_window = [(210, 335), (302, 335), (307, 372), (205, 372)]
+        front_axle, rear_axle = (145, 195), (315, 365)
     elif kind == "suv":
-        length, width, body_h, cabin_h = 2.80, 1.18, 0.60, 0.52
-        yb0, yb1, yt0, yt1 = -0.72, 0.55, -0.52, 0.35
+        left, right = 173, 339
+        top, bottom = 100, 412
+        roof = (205, 238, 307, 348)
+        windshield = [(198, 198), (314, 198), (307, 242), (205, 242)]
+        rear_window = [(205, 348), (307, 348), (314, 384), (198, 384)]
+        front_axle, rear_axle = (142, 198), (318, 374)
     else:  # pickup
-        length, width, body_h, cabin_h = 2.90, 1.18, 0.55, 0.46
-        yb0, yb1, yt0, yt1 = 0.10, 0.98, 0.26, 0.82
+        left, right = 173, 339
+        top, bottom = 100, 420
+        roof = (210, 232, 302, 300)
+        windshield = [(202, 190), (310, 190), (303, 236), (209, 236)]
+        rear_window = [(209, 300), (303, 300), (308, 320), (204, 320)]
+        front_axle, rear_axle = (145, 198), (330, 386)
 
-    l2, w2 = length / 2, width / 2
-    cx0b, cx1b = -w2 + 0.06, w2 - 0.06
-    cx0t, cx1t = -w2 + 0.16, w2 - 0.16
-    top = body_h + cabin_h
+    radius = 34
+    shadow(img, (left, top, right, bottom), radius)
 
-    shadow_pts = [proj(-w2, -l2, 0), proj(w2, -l2, 0), proj(w2, l2, 0), proj(-w2, l2, 0)]
-    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(sh).polygon([(x + 8, y + 18) for x, y in shadow_pts], fill=(0, 0, 0, 120))
-    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(16)))
+    # Wheels sit under the body and poke out at the corners.
+    for y0, y1 in (front_axle, rear_axle):
+        wheel(d, (left - 13, y0, left + 18, y1))
+        wheel(d, (right - 18, y0, right + 13, y1))
 
-    poly(
-        d,
-        [(-w2, -l2, 0), (w2, -l2, 0), (w2, -l2, body_h), (-w2, -l2, body_h)],
-        shade(body, 0.55),
-        INK,
-        4,
+    # Lower body / sidewall.
+    d.rounded_rectangle(
+        (left, top, right, bottom), radius=radius, fill=shade(body, 0.62), outline=INK, width=4
     )
-    gradient_poly(
+
+    # Top body surface with a soft front-to-rear gradient.
+    gradient_round_rect(
         img,
-        [(w2, -l2, 0), (w2, l2, 0), (w2, l2, body_h), (w2, -l2, body_h)],
-        shade(body, 1.18),
-        shade(body, 0.62),
-    )
-    poly(
-        d,
-        [(w2, -l2, 0), (w2, l2, 0), (w2, l2, body_h), (w2, -l2, body_h)],
-        None,
-        INK,
-        4,
-    )
-    poly(
-        d,
-        [(-w2, -l2, body_h), (w2, -l2, body_h), (w2, l2, body_h), (-w2, l2, body_h)],
-        shade(body, 1.20),
-        INK,
-        4,
-    )
-
-    poly(
-        d,
-        [(cx0b, yb0, body_h), (cx1b, yb0, body_h), (cx1t, yt0, top), (cx0t, yt0, top)],
-        shade(body, 0.48),
-        INK,
-        4,
-    )
-    gradient_poly(
-        img,
-        [(cx1b, yb0, body_h), (cx1b, yb1, body_h), (cx1t, yt1, top), (cx1t, yt0, top)],
+        (left + 8, top + 6, right - 8, bottom - 6),
+        radius - 5,
         shade(body, 1.16),
-        shade(body, 0.56),
-    )
-    poly(
-        d,
-        [(cx1b, yb0, body_h), (cx1b, yb1, body_h), (cx1t, yt1, top), (cx1t, yt0, top)],
-        None,
-        INK,
-        4,
-    )
-    poly(
-        d,
-        [(cx0t, yt0, top), (cx1t, yt0, top), (cx1t, yt1, top), (cx0t, yt1, top)],
-        shade(body, 1.30),
-        INK,
-        4,
-    )
-
-    poly(
-        d,
-        [(cx0b + 0.08, yb0 + 0.005, body_h + 0.06),
-         (cx1b - 0.08, yb0 + 0.005, body_h + 0.06),
-         (cx1t - 0.06, yt0 + 0.005, top - 0.06),
-         (cx0t + 0.06, yt0 + 0.005, top - 0.06)],
-        (26, 42, 60, 255),
-        (10, 15, 22, 255),
-        3,
-    )
-
-    for y0, y1 in [(yb0 + 0.10, yb0 + 0.40), (yb0 + 0.48, yb1 - 0.08)]:
-        poly(
-            d,
-            [(cx1b - 0.004, y0, body_h + 0.06),
-             (cx1b - 0.004, y1, body_h + 0.06),
-             (cx1t - 0.004, y1 - 0.05, top - 0.06),
-             (cx1t - 0.004, y0 + 0.05, top - 0.06)],
-            (30, 52, 74, 255),
-            (10, 15, 22, 255),
-            3,
-        )
-    d.line(
-        [proj(cx1t - 0.004, yt0 + 0.08, top - 0.12),
-         proj(cx1t - 0.004, yt1 - 0.10, top - 0.12)],
-        fill=(180, 220, 240, 120),
-        width=4,
-    )
-
-    wheel(d, w2 + 0.06, -l2 + 0.50, 0.23, 0.25)
-    wheel(d, w2 + 0.06, l2 - 0.50, 0.23, 0.25)
-
-    poly(
-        d,
-        [(-w2 + 0.02, -l2 - 0.006, 0.02),
-         (w2 - 0.02, -l2 - 0.006, 0.02),
-         (w2 - 0.02, -l2 - 0.006, 0.14),
-         (-w2 + 0.02, -l2 - 0.006, 0.14)],
-        (38, 46, 56, 255),
-        (12, 16, 22, 255),
-        2,
-    )
-    for x0, x1 in [(-w2 + 0.08, -w2 + 0.40), (w2 - 0.40, w2 - 0.08)]:
-        poly(
-            d,
-            [(x0, -l2 - 0.007, body_h * 0.50),
-             (x1, -l2 - 0.007, body_h * 0.50),
-             (x1, -l2 - 0.007, body_h * 0.76),
-             (x0, -l2 - 0.007, body_h * 0.76)],
-            (229, 57, 64, 255),
-            (80, 10, 14, 255),
-            3,
-        )
-    poly(
-        d,
-        [(-0.16, -l2 - 0.009, 0.17),
-         (0.16, -l2 - 0.009, 0.17),
-         (0.16, -l2 - 0.009, 0.28),
-         (-0.16, -l2 - 0.009, 0.28)],
-        (235, 238, 240, 255),
-        (40, 48, 58, 255),
-        2,
-    )
-
-    d.line(
-        [proj(w2 + 0.002, yb0 - 0.06, 0.06),
-         proj(w2 + 0.002, yb0 - 0.06, body_h * 0.88)],
-        fill=(40, 48, 58, 120),
+        shade(body, 0.82),
+        outline=INK,
         width=3,
     )
+
+    # Left highlight and right shadow bevels.
     d.line(
-        [proj(w2 + 0.002, -l2 + 0.10, body_h * 0.42),
-         proj(w2 + 0.002, l2 - 0.10, body_h * 0.42)],
-        fill=(255, 255, 255, 70),
-        width=4,
+        [(left + 13, top + 30), (left + 13, bottom - 30)],
+        fill=(255, 255, 255, 65),
+        width=5,
+    )
+    d.line(
+        [(right - 13, top + 30), (right - 13, bottom - 30)],
+        fill=(0, 0, 0, 70),
+        width=6,
     )
 
     if kind == "pickup":
-        by0, by1 = -l2 + 0.06, yb0 - 0.05
-        poly(
-            d,
-            [(-w2 + 0.08, by0, body_h + 0.01),
-             (w2 - 0.08, by0, body_h + 0.01),
-             (w2 - 0.08, by1, body_h + 0.01),
-             (-w2 + 0.08, by1, body_h + 0.01)],
-            (24, 32, 40, 255),
-            INK,
-            3,
+        # Open cargo bed with a dark floor and body-coloured walls.
+        bed_top = 300
+        d.rounded_rectangle(
+            (left + 14, bed_top, right - 14, bottom - 14),
+            radius=12,
+            fill=(35, 45, 56, 255),
+            outline=INK,
+            width=3,
         )
-        poly(
-            d,
-            [(w2 - 0.08, by0, body_h), (w2 - 0.08, by1, body_h),
-             (w2 - 0.08, by1, body_h + 0.16), (w2 - 0.08, by0, body_h + 0.16)],
-            shade(body, 0.90),
-            INK,
-            3,
+        d.rounded_rectangle(
+            (left + 24, bed_top + 10, right - 24, bottom - 26),
+            radius=8,
+            fill=(24, 32, 42, 255),
+            outline=(10, 15, 22, 255),
+            width=2,
+        )
+        for y in range(bed_top + 24, bottom - 30, 26):
+            d.line([(left + 28, y), (right - 28, y)], fill=(58, 70, 84, 180), width=2)
+        # Tailgate.
+        d.rounded_rectangle(
+            (left + 14, bottom - 24, right - 14, bottom - 10),
+            radius=8,
+            fill=shade(body, 0.95),
+            outline=INK,
+            width=3,
         )
 
+    # Hood.
+    hood_top = top + 22
+    hood_bottom = windshield[0][1] - 4
+    hood = [
+        (left + 18, hood_top),
+        (right - 18, hood_top),
+        (right - 24, hood_bottom),
+        (left + 24, hood_bottom),
+    ]
+    d.polygon(hood, fill=shade(body, 1.20), outline=INK)
+    d.line([(left + 24, hood_bottom), (right - 24, hood_bottom)], fill=INK, width=3)
+    d.line([(256, hood_top + 8), (256, hood_bottom - 6)], fill=shade(body, 0.78), width=3)
+    for x in (left + 48, right - 48):
+        d.line([(x, hood_top + 12), (x, hood_bottom - 10)], fill=shade(body, 0.88), width=3)
+
+    # Windshield.
+    d.polygon(windshield, fill=GLASS, outline=INK)
+    d.line(
+        [windshield[0], windshield[1]],
+        fill=GLASS_HI,
+        width=5,
+    )
+    d.line(
+        [(windshield[0][0] + 10, windshield[0][1] + 10),
+         (windshield[1][0] - 10, windshield[1][1] + 10)],
+        fill=(150, 200, 230, 70),
+        width=4,
+    )
+
+    # Side windows and roof.
+    roof_left, roof_top, roof_right, roof_bottom = roof
+    for x0, x1 in ((left + 18, roof_left - 1), (roof_right + 1, right - 18)):
+        d.rounded_rectangle(
+            (x0, roof_top + 6, x1, roof_bottom - 6),
+            radius=10,
+            fill=GLASS,
+            outline=INK,
+            width=3,
+        )
+        d.line([(x0 + 4, roof_top + 16), (x0 + 4, roof_bottom - 16)], fill=GLASS_HI, width=3)
+    d.rounded_rectangle(
+        (roof_left, roof_top, roof_right, roof_bottom),
+        radius=16,
+        fill=shade(body, 1.06),
+        outline=INK,
+        width=3,
+    )
+    d.line(
+        [(roof_left + 10, roof_top + 8), (roof_right - 10, roof_top + 8)],
+        fill=(255, 255, 255, 75),
+        width=4,
+    )
+    if kind == "suv":
+        # Roof rails and a sunroof.
+        for x in (roof_left + 8, roof_right - 8):
+            d.line([(x, roof_top + 12), (x, roof_bottom - 12)], fill=(38, 46, 58, 255), width=5)
+        d.rounded_rectangle(
+            (roof_left + 22, roof_top + 24, roof_right - 22, roof_bottom - 24),
+            radius=8,
+            fill=GLASS,
+            outline=INK,
+            width=3,
+        )
+    elif kind == "sedan":
+        d.rounded_rectangle(
+            (roof_left + 24, roof_top + 26, roof_right - 24, roof_bottom - 26),
+            radius=8,
+            fill=(40, 62, 86, 255),
+            outline=INK,
+            width=2,
+        )
+
+    # Rear window.
+    d.polygon(rear_window, fill=GLASS, outline=INK)
+    d.line([rear_window[0], rear_window[1]], fill=GLASS_HI, width=4)
+
+    # Trunk / rear deck.
+    if kind != "pickup":
+        trunk_top = rear_window[2][1] + 4
+        d.rounded_rectangle(
+            (left + 22, trunk_top, right - 22, bottom - 22),
+            radius=12,
+            fill=shade(body, 0.94),
+            outline=INK,
+            width=3,
+        )
+        d.line(
+            [(left + 36, trunk_top + 14), (right - 36, trunk_top + 14)],
+            fill=shade(body, 0.75),
+            width=3,
+        )
+
+    # Mirrors.
+    for x0, x1 in ((left - 16, left + 4), (right - 4, right + 16)):
+        d.rounded_rectangle(
+            (x0, windshield[0][1] + 26, x1, windshield[0][1] + 48),
+            radius=7,
+            fill=shade(body, 0.92),
+            outline=INK,
+            width=3,
+        )
+
+    # Front bumper, grille, headlights.
+    d.rounded_rectangle(
+        (left + 18, top + 4, right - 18, top + 24),
+        radius=9,
+        fill=(33, 42, 52, 255),
+        outline=INK,
+        width=3,
+    )
+    d.rounded_rectangle(
+        (left + 48, top + 8, right - 48, top + 20),
+        radius=4,
+        fill=(14, 19, 26, 255),
+        outline=(8, 11, 15, 255),
+        width=2,
+    )
+    for x0, x1 in ((left + 24, left + 52), (right - 52, right - 24)):
+        d.rounded_rectangle(
+            (x0, top + 7, x1, top + 20),
+            radius=5,
+            fill=(255, 244, 204, 255),
+            outline=(120, 110, 80, 255),
+            width=2,
+        )
+
+    # Rear bumper and tail lights.
+    d.rounded_rectangle(
+        (left + 18, bottom - 24, right - 18, bottom - 4),
+        radius=9,
+        fill=(33, 42, 52, 255),
+        outline=INK,
+        width=3,
+    )
+    for x0, x1 in ((left + 24, left + 58), (right - 58, right - 24)):
+        d.rounded_rectangle(
+            (x0, bottom - 20, x1, bottom - 9),
+            radius=4,
+            fill=(226, 58, 62, 255),
+            outline=(90, 12, 16, 255),
+            width=2,
+        )
+
+    # A final soft roof highlight keeps the top-down view from looking flat.
+    d.line(
+        [(roof_left + 14, roof_top + 6), (roof_right - 14, roof_top + 6)],
+        fill=(255, 255, 255, 90),
+        width=4,
+    )
+    return img
+
+
+def dot():
+    img = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sh).ellipse((22, 72, 106, 116), fill=(0, 0, 0, 110))
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(8)))
+    d.ellipse((24, 24, 104, 104), fill=WHITE, outline=INK, width=4)
+    d.ellipse((34, 34, 94, 94), fill=(30, 136, 229, 255), outline=(12, 82, 150, 255), width=3)
+    d.ellipse((46, 42, 72, 64), fill=(170, 220, 255, 180))
     return img
 
 
@@ -302,15 +374,16 @@ def arrow():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    car("sedan", (226, 82, 54)).resize((256, 256), Image.Resampling.LANCZOS).save(
+    topdown_car("sedan", (226, 82, 54)).resize((256, 256), Image.Resampling.LANCZOS).save(
         OUT / "ic_puck_sedan_3d.png"
     )
-    car("suv", (244, 191, 56)).resize((256, 256), Image.Resampling.LANCZOS).save(
+    topdown_car("suv", (244, 191, 56)).resize((256, 256), Image.Resampling.LANCZOS).save(
         OUT / "ic_puck_suv_3d.png"
     )
-    car("pickup", (72, 158, 92)).resize((256, 256), Image.Resampling.LANCZOS).save(
+    topdown_car("pickup", (72, 158, 92)).resize((256, 256), Image.Resampling.LANCZOS).save(
         OUT / "ic_puck_pickup_3d.png"
     )
+    dot().save(OUT / "ic_puck_dot.png")
     arrow_badge("bike").save(OUT / "ic_puck_bike_3d.png")
     arrow_badge("walk").save(OUT / "ic_puck_walk_3d.png")
     arrow().save(OUT / "ic_puck_arrow_3d.png")

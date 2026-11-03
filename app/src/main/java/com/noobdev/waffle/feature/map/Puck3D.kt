@@ -42,16 +42,22 @@ internal fun Puck3D(
         lng: Double,
         bearing: Double,
         travelMode: String,
-        vehicleIcon: VehicleIcon = VehicleIcon.SEDAN
+        vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
+        isNavigating: Boolean = false
 ) {
     val context = LocalContext.current
-    val iconName = "puck-3d-$travelMode-${vehicleIcon.storageKey}"
+    val isCarMode = travelMode == "driving-car"
+    val iconName =
+            "puck-3d-$travelMode-${vehicleIcon.storageKey}-${if (isNavigating) "nav" else "dot"}"
     val drawableRes =
-            when (travelMode) {
-                "cycling-regular" -> R.drawable.ic_puck_bike_3d
-                "foot-walking" -> R.drawable.ic_puck_walk_3d
+            when {
+                !isNavigating -> R.drawable.ic_puck_dot
+                travelMode == "cycling-regular" -> R.drawable.ic_puck_bike_3d
+                travelMode == "foot-walking" -> R.drawable.ic_puck_walk_3d
+                isCarMode && vehicleIcon == VehicleIcon.ARROW -> R.drawable.ic_puck_arrow_3d
                 else -> vehicleIcon.drawable
             }
+    val iconSize = if (isNavigating) 0.42f else 0.30f
     val bitmap =
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
@@ -66,7 +72,7 @@ internal fun Puck3D(
                 style.addImage(iconName, bitmap)
 
                 source = null
-                val geoJson = puckGeoJson(lat, lng, bearing, iconName)
+                val geoJson = puckGeoJson(lat, lng, bearing, iconName, iconSize)
                 val existing = style.getSourceAs<GeoJsonSource>("puck-source")
                 val puckSource =
                         existing
@@ -81,7 +87,7 @@ internal fun Puck3D(
                             SymbolLayer("puck-layer", "puck-source")
                                     .withProperties(
                                             iconImage(Expression.get("icon")),
-                                            iconSize(0.42f),
+                                            iconSize(Expression.get("size")),
                                             iconRotate(Expression.get("bearing")),
                                             iconRotationAlignment(
                                                     Property.ICON_ROTATION_ALIGNMENT_MAP
@@ -103,8 +109,8 @@ internal fun Puck3D(
         }
     }
 
-    LaunchedEffect(source, lat, lng, bearing, iconName) {
-        source?.setGeoJson(puckGeoJson(lat, lng, bearing, iconName))
+    LaunchedEffect(source, lat, lng, bearing, iconName, iconSize) {
+        source?.setGeoJson(puckGeoJson(lat, lng, bearing, iconName, iconSize))
     }
 
     DisposableEffect(map) {
@@ -124,7 +130,8 @@ private fun puckGeoJson(
         lat: Double,
         lng: Double,
         bearing: Double,
-        iconName: String
+        iconName: String,
+        iconSize: Float
 ): String =
         JSONObject()
                 .put("type", "Feature")
@@ -142,5 +149,6 @@ private fun puckGeoJson(
                         JSONObject()
                                 .put("bearing", bearing)
                                 .put("icon", iconName)
+                                .put("size", iconSize)
                 )
                 .toString()

@@ -196,7 +196,8 @@ fun NavigationModeUI(
                         }
                 }
 
-                // Top instruction bar
+                // Top instruction bar (the full card is hidden in the tiny PiP window).
+                if (!isInPip) {
                 Card(
                         modifier = Modifier.fillMaxWidth().statusBarsPadding(),
                         shape = RoundedCornerShape(0.dp),
@@ -438,6 +439,16 @@ fun NavigationModeUI(
                                         }
                                 }
                         }
+                }
+                }
+
+                if (isInPip) {
+                        PipNavigationBar(
+                                instruction = currentInstruction,
+                                distanceToNextTurn = distanceToNextTurn,
+                                maneuver = routeResult.steps.getOrNull(currentIndex)?.maneuver,
+                                modifier = Modifier.align(Alignment.BottomCenter)
+                        )
                 }
 
                 // Bottom bar
@@ -692,6 +703,75 @@ private fun SpeedLimitBadge(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Ink
+                        )
+                }
+        }
+}
+
+@Composable
+private fun PipNavigationBar(
+        instruction: String,
+        distanceToNextTurn: Double,
+        maneuver: ManeuverType?,
+        modifier: Modifier = Modifier
+) {
+        Surface(
+                modifier = modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                tonalElevation = 4.dp
+        ) {
+                Row(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                        Box(
+                                Modifier.size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                                MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.14f
+                                                )
+                                        ),
+                                contentAlignment = Alignment.Center
+                        ) {
+                                Icon(
+                                        imageVector =
+                                                getDirectionIcon(instruction, maneuver),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                        instruction.ifEmpty { "Continue straight" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                )
+                                if (distanceToNextTurn > 0.0) {
+                                        Text(
+                                                "In ${formatDistance(distanceToNextTurn)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.SemiBold
+                                        )
+                                }
+                        }
+                        Text(
+                                "© OSM",
+                                style = MaterialTheme.typography.labelSmall,
+                                color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.55f
+                                        ),
+                                modifier = Modifier.padding(start = 6.dp)
                         )
                 }
         }

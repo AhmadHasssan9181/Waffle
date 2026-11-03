@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -476,7 +477,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        LaunchedEffect(navSession.lat, navSession.lng, navSession.bearing, navSession.active) {
+        LaunchedEffect(
+                navSession.lat,
+                navSession.lng,
+                navSession.bearing,
+                navSession.active,
+                inPip
+        ) {
                 if (navSession.active &&
                                 screenState == MapScreenState.NAVIGATING &&
                                 (navSession.lat != 0.0 || navSession.lng != 0.0)
@@ -492,13 +499,48 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         mapInstance?.locationComponent?.forceLocationUpdate(mock)
                         if (!isUserPanMode) {
                                 mapInstance?.let { map ->
-                                        CameraTransitionManager.updateNavigationCamera(
-                                                map,
-                                                LatLng(navSession.lat, navSession.lng),
-                                                navSession.bearing
-                                        )
+                                        if (inPip) {
+                                                // PiP is a tiny window: use a flat, course-up
+                                                // view so the route ahead stays visible above the
+                                                // compact instruction bar.
+                                                map.animateCamera(
+                                                        CameraUpdateFactory.newCameraPosition(
+                                                                CameraPosition.Builder()
+                                                                        .target(
+                                                                                LatLng(
+                                                                                        navSession.lat,
+                                                                                        navSession.lng
+                                                                                )
+                                                                        )
+                                                                        .zoom(15.2)
+                                                                        .tilt(0.0)
+                                                                        .bearing(navSession.bearing)
+                                                                        .build()
+                                                        ),
+                                                        450
+                                                )
+                                        } else {
+                                                CameraTransitionManager
+                                                        .updateNavigationCamera(
+                                                                map,
+                                                                LatLng(
+                                                                        navSession.lat,
+                                                                        navSession.lng
+                                                                ),
+                                                                navSession.bearing
+                                                        )
+                                        }
                                 }
                         }
+                }
+        }
+
+        // The full-screen map keeps MapLibre's logo/attribution; the tiny PiP window shows a
+        // compact attribution in its instruction bar instead.
+        LaunchedEffect(mapInstance, inPip) {
+                runCatching {
+                        mapInstance?.uiSettings?.isLogoEnabled = !inPip
+                        mapInstance?.uiSettings?.isAttributionEnabled = !inPip
                 }
         }
 
@@ -538,7 +580,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         lng = currentLng,
                         bearing = currentBearing,
                         travelMode = selectedProfile,
-                        vehicleIcon = vehicleIcon
+                        vehicleIcon = vehicleIcon,
+                        isNavigating = screenState == MapScreenState.NAVIGATING
                 )
         }
 
@@ -1435,7 +1478,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Draw route when available – stores direct source reference for fast updates
-        LaunchedEffect(routeResult, walkRouteResult, bikeRouteResult, selectedProfile) {
+        LaunchedEffect(
+                routeResult,
+                walkRouteResult,
+                bikeRouteResult,
+                selectedProfile,
+                selectedStyleIndex,
+                mapInstance,
+                inPip
+        ) {
                 val drawnRoute = activeRouteFor(selectedProfile)
                 drawnRoute?.let { result ->
                         if (result.success && result.coordinates.isNotEmpty()) {
@@ -1465,7 +1516,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 lineCap(Property.LINE_CAP_ROUND),
                                                 lineJoin(Property.LINE_JOIN_ROUND)
                                         )
-                                        style.addLayer(layer)
+                                        if (style.getLayer("puck-layer") != null) {
+                                                style.addLayerBelow(layer, "puck-layer")
+                                        } else {
+                                                style.addLayer(layer)
+                                        }
                                         // Store reference for direct future updates
                                         routeSource = newSource
 
