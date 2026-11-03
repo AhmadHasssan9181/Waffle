@@ -61,6 +61,7 @@ import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.navigation.VehicleLights
 import com.noobdev.waffle.core.navigation.isNightTime
 import com.noobdev.waffle.core.navigation.turnSignalFor
 import com.noobdev.waffle.core.prefs.PreferencesManager
@@ -171,11 +172,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
         val isMotorcycleMode = selectedProfile == "driving-motorcycle"
-        val use3DCar =
-                hasLocation &&
-                        screenState == MapScreenState.NAVIGATING &&
-                        (selectedProfile == "driving-car" || isMotorcycleMode) &&
-                        (isMotorcycleMode || vehicleIcon != VehicleIcon.ARROW)
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
         var offlineRouteDebugMessage by remember { mutableStateOf<String?>(null) }
@@ -260,6 +256,41 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
         // Holds the last non-null route so NavigationModeUI never crashes during exit animation
         var lastNavigationRoute by remember { mutableStateOf<RouteResult?>(null) }
+
+        var blinkOn by remember { mutableStateOf(true) }
+        var braking by remember { mutableStateOf(false) }
+        var lastSpeed by remember { mutableStateOf(0f) }
+        val night = remember { isNightTime() }
+        val currentTurnSignal =
+                turnSignalFor(
+                        lastNavigationRoute
+                                ?.steps
+                                ?.getOrNull(currentInstructionIndex)
+                                ?.maneuver
+                )
+        LaunchedEffect(currentTurnSignal) {
+                if (currentTurnSignal == com.noobdev.waffle.core.navigation.TurnSignal.NONE) {
+                        blinkOn = true
+                        return@LaunchedEffect
+                }
+                while (true) {
+                        blinkOn = !blinkOn
+                        delay(450)
+                }
+        }
+        LaunchedEffect(currentSpeedMps) {
+                braking =
+                        currentSpeedMps < 0.5f ||
+                                (lastSpeed > 0f && currentSpeedMps < lastSpeed - 0.6f)
+                lastSpeed = currentSpeedMps
+        }
+        val vehicleLights =
+                VehicleLights(
+                        headlights = night,
+                        braking = braking,
+                        turnSignal = currentTurnSignal,
+                        blinkOn = blinkOn
+                )
 
         // Camera & User Interaction
         var isUserPanMode by remember { mutableStateOf(false) }
@@ -638,7 +669,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 shops = if (screenState == MapScreenState.NAVIGATING) emptyList() else visibleShops
         )
 
-        if (hasLocation && !use3DCar) {
+        if (hasLocation) {
                 AnimatedPuck3D(
                         map = mapInstance,
                         styleIndex = selectedStyleIndex,
@@ -647,7 +678,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         targetBearing = currentBearing,
                         travelMode = selectedProfile,
                         vehicleIcon = vehicleIcon,
-                        isNavigating = screenState == MapScreenState.NAVIGATING
+                        isNavigating = screenState == MapScreenState.NAVIGATING,
+                        lights = vehicleLights
                 )
         }
 
@@ -2227,33 +2259,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 planRouteTo(result)
                                         }
                                 }
-                        )
-                }
-
-                val currentTurnSignal =
-                        turnSignalFor(
-                                lastNavigationRoute
-                                        ?.steps
-                                        ?.getOrNull(currentInstructionIndex)
-                                        ?.maneuver
-                        )
-                val night = remember { isNightTime() }
-
-                if (use3DCar) {
-                        Car3DOverlay(
-                                map = mapInstance,
-                                targetLat = currentLat,
-                                targetLng = currentLng,
-                                targetBearing = currentBearing,
-                                modelKey =
-                                        if (selectedProfile == "driving-motorcycle")
-                                                "MOTORCYCLE"
-                                        else vehicleIcon.storageKey,
-                                visible = true,
-                                speedMps = if (isSimulationMode) simSpeed else currentSpeedMps,
-                                turnSignal = currentTurnSignal,
-                                night = night,
-                                modifier = Modifier.fillMaxSize()
                         )
                 }
 

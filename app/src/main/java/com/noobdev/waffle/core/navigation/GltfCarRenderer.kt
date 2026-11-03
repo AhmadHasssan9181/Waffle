@@ -85,14 +85,8 @@ object GltfCarRenderer {
             modelKey: String,
             lights: VehicleLights = VehicleLights()
     ): Boolean {
-        val model = modelFor(context, modelKey) ?: return false
+        val bitmap = renderBitmap(context, modelKey, sizePx, bearingDegrees, lights) ?: return false
         drawShadow(canvas, centerX, centerY, sizePx)
-        val roundedBearing = (bearingDegrees / 3f).roundToInt() * 3f
-        val key = "${modelKey.uppercase()}|$roundedBearing|${sizePx.roundToInt()}"
-        val bitmap =
-                bitmapCache.get(key)
-                        ?: render(model, sizePx, roundedBearing)?.also { bitmapCache.put(key, it) }
-                        ?: return false
         val rect =
                 RectF(
                         centerX - sizePx / 2f,
@@ -101,8 +95,35 @@ object GltfCarRenderer {
                         centerY + sizePx / 2f
                 )
         canvas.drawBitmap(bitmap, null, rect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-        drawVehicleLights(canvas, centerX, centerY, sizePx, bearingDegrees, modelKey, lights)
         return true
+    }
+
+    fun renderBitmap(
+            context: Context,
+            modelKey: String,
+            sizePx: Float,
+            bearingDegrees: Float,
+            lights: VehicleLights = VehicleLights()
+    ): Bitmap? {
+        val model = modelFor(context, modelKey) ?: return null
+        val roundedBearing = (bearingDegrees / 3f).roundToInt() * 3f
+        val key =
+                "${modelKey.uppercase()}|$roundedBearing|${sizePx.roundToInt()}|" +
+                        "${lights.headlights}|${lights.braking}|${lights.turnSignal}|${lights.blinkOn}"
+        bitmapCache.get(key)?.let { return it }
+        val bitmap = render(model, sizePx, roundedBearing) ?: return null
+        val canvas = Canvas(bitmap)
+        drawVehicleLights(
+                canvas,
+                bitmap.width / 2f,
+                bitmap.height / 2f,
+                sizePx,
+                roundedBearing,
+                modelKey,
+                lights
+        )
+        bitmapCache.put(key, bitmap)
+        return bitmap
     }
 
     private fun drawVehicleLights(
@@ -144,44 +165,44 @@ object GltfCarRenderer {
 
         if (lights.headlights) {
             if (motorcycle) {
-                val p = point(0f, -0.29f)
-                glow(p.first, p.second, sizePx * 0.12f, Color.rgb(255, 246, 205))
+                val p = point(0f, -0.26f)
+                glow(p.first, p.second, sizePx * 0.075f, Color.rgb(255, 246, 205))
             } else {
                 for (dx in listOf(-0.18f, 0.18f)) {
                     val p = point(dx, -0.30f)
-                    glow(p.first, p.second, sizePx * 0.11f, Color.rgb(255, 246, 205))
+                    glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 246, 205))
                 }
             }
             // Dim tail lamps whenever the headlights are on.
             if (!lights.braking) {
                 val rear =
-                        if (motorcycle) listOf(0f to 0.26f)
-                        else listOf(-0.18f to 0.28f, 0.18f to 0.28f)
+                        if (motorcycle) listOf(0f to 0.14f)
+                        else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
                 for ((dx, dy) in rear) {
                     val p = point(dx, dy)
-                    glow(p.first, p.second, sizePx * 0.055f, Color.argb(120, 255, 30, 30))
+                    glow(p.first, p.second, sizePx * 0.045f, Color.argb(120, 255, 30, 30))
                 }
             }
         }
 
         if (lights.braking) {
             val rear =
-                    if (motorcycle) listOf(0f to 0.26f)
-                    else listOf(-0.18f to 0.28f, 0.18f to 0.28f)
+                    if (motorcycle) listOf(0f to 0.14f)
+                    else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
             for ((dx, dy) in rear) {
                 val p = point(dx, dy)
-                glow(p.first, p.second, sizePx * 0.12f, Color.rgb(255, 35, 28))
+                glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 35, 28))
             }
         }
 
         if (lights.turnSignal != TurnSignal.NONE && lights.blinkOn) {
             val side = if (lights.turnSignal == TurnSignal.LEFT) -1f else 1f
             val sideX = if (motorcycle) 0.10f else 0.28f
-            val frontY = if (motorcycle) -0.20f else -0.24f
-            val rearY = if (motorcycle) 0.20f else 0.24f
+            val frontY = if (motorcycle) -0.16f else -0.22f
+            val rearY = if (motorcycle) 0.12f else 0.20f
             for (dy in listOf(frontY, rearY)) {
                 val p = point(side * sideX, dy)
-                glow(p.first, p.second, sizePx * 0.075f, Color.rgb(255, 170, 35))
+                glow(p.first, p.second, sizePx * 0.06f, Color.rgb(255, 170, 35))
             }
         }
     }

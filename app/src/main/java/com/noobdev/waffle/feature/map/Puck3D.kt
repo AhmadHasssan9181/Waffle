@@ -13,7 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import com.noobdev.waffle.R
+import com.noobdev.waffle.core.navigation.GltfCarRenderer
+import com.noobdev.waffle.core.navigation.VehicleLights
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -44,7 +48,8 @@ internal fun AnimatedPuck3D(
         targetBearing: Double,
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
-        isNavigating: Boolean = false
+        isNavigating: Boolean = false,
+        lights: VehicleLights = VehicleLights()
 ) {
     val lat = remember { Animatable(targetLat.toFloat()) }
     val lng = remember { Animatable(targetLng.toFloat()) }
@@ -76,7 +81,8 @@ internal fun AnimatedPuck3D(
             bearing = bearing.value.toDouble(),
             travelMode = travelMode,
             vehicleIcon = vehicleIcon,
-            isNavigating = isNavigating
+            isNavigating = isNavigating,
+            lights = lights
     )
 }
 
@@ -96,10 +102,18 @@ internal fun Puck3D(
         bearing: Double,
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
-        isNavigating: Boolean = false
+        isNavigating: Boolean = false,
+        lights: VehicleLights = VehicleLights()
 ) {
     val context = LocalContext.current
-    val isCarMode = travelMode == "driving-car"
+    val density = LocalDensity.current
+    val isCarMode = travelMode == "driving-car" || travelMode == "driving-motorcycle"
+    val isMotorcycle = travelMode == "driving-motorcycle"
+    val use3DModel =
+            isNavigating &&
+                    isCarMode &&
+                    (isMotorcycle || vehicleIcon != VehicleIcon.ARROW)
+    val modelKey = if (isMotorcycle) "MOTORCYCLE" else vehicleIcon.storageKey
     val iconName =
             "puck-3d-$travelMode-${vehicleIcon.storageKey}-${if (isNavigating) "nav" else "dot"}"
     val drawableRes =
@@ -111,18 +125,33 @@ internal fun Puck3D(
                 else -> vehicleIcon.drawable
             }
     val iconSize = if (isNavigating) 0.55f else 0.30f
-    val bitmap =
+    val fallbackBitmap =
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
             }
+    var threeDBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(context, modelKey, lights, use3DModel) {
+        threeDBitmap =
+                if (use3DModel) {
+                    GltfCarRenderer.renderBitmap(
+                            context = context.applicationContext,
+                            modelKey = modelKey,
+                            sizePx = with(density) { 100.dp.toPx() },
+                            bearingDegrees = 0f,
+                            lights = lights
+                    )
+                } else null
+    }
+    val bitmap = if (use3DModel) threeDBitmap else fallbackBitmap
     var source by remember { mutableStateOf<GeoJsonSource?>(null) }
 
     LaunchedEffect(map, styleIndex, iconName, bitmap) {
         val mapLibre = map ?: return@LaunchedEffect
+        val bitmapImage = bitmap ?: return@LaunchedEffect
         mapLibre.getStyle { style ->
             runCatching {
                 style.removeImage(iconName)
-                style.addImage(iconName, bitmap)
+                style.addImage(iconName, bitmapImage)
 
                 source = null
                 val geoJson = puckGeoJson(lat, lng, bearing, iconName, iconSize)
