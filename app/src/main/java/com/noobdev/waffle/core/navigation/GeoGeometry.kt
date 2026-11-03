@@ -252,4 +252,47 @@ object GeoGeometry {
     /** Converts a route into the (lng, lat) pairs MapLibre / ORS expect. */
     fun toLngLatPairs(points: List<GeoPoint>): List<List<Double>> =
             points.map { listOf(it.longitude, it.latitude) }
+
+    /** Distance still to travel along a route from the snapped segment, in meters. */
+    fun remainingRouteMeters(
+            coordinates: List<Pair<Double, Double>>,
+            segmentIndex: Int,
+            currentLat: Double,
+            currentLng: Double
+    ): Double {
+        if (coordinates.size < 2) return 0.0
+        val start = segmentIndex.coerceIn(0, coordinates.size - 2)
+        val next = coordinates[start + 1]
+        var total = haversineMeters(GeoPoint(currentLat, currentLng), GeoPoint(next.first, next.second))
+        for (i in start + 1 until coordinates.size - 1) {
+            val a = coordinates[i]
+            val b = coordinates[i + 1]
+            total += haversineMeters(GeoPoint(a.first, a.second), GeoPoint(b.first, b.second))
+        }
+        return total
+    }
+
+    /** Distance from the snapped point to a later route index, used for "In X m". */
+    fun distanceToIndexMeters(
+            coordinates: List<Pair<Double, Double>>,
+            segmentIndex: Int,
+            targetIndex: Int,
+            currentLat: Double,
+            currentLng: Double
+    ): Double {
+        if (coordinates.size < 2) return 0.0
+        val start = segmentIndex.coerceIn(0, coordinates.size - 2)
+        val target = targetIndex.coerceIn(start + 1, coordinates.size - 1)
+        var total =
+                haversineMeters(
+                        GeoPoint(currentLat, currentLng),
+                        GeoPoint(coordinates[start + 1].first, coordinates[start + 1].second)
+                )
+        for (i in start + 1 until target) {
+            val a = coordinates[i]
+            val b = coordinates[i + 1]
+            total += haversineMeters(GeoPoint(a.first, a.second), GeoPoint(b.first, b.second))
+        }
+        return total
+    }
 }

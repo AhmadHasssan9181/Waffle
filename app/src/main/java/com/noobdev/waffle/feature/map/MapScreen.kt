@@ -54,7 +54,9 @@ import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.NavigationManager
+import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.OffRouteMonitor
+import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.prefs.PreferencesManager
@@ -111,6 +113,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val vehicleIconKey by
                 preferencesManager.vehicleIcon.collectAsState(initial = "SEDAN")
         val vehicleIcon = remember(vehicleIconKey) { VehicleIcon.fromKey(vehicleIconKey) }
+        val navSession by NavigationSession.state.collectAsState()
+        val inPip by PipState.active.collectAsState()
 
         val shopsViewModel: MapShopsViewModel = viewModel()
         val mapShops by shopsViewModel.shops.collectAsState()
@@ -427,6 +431,87 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 isRerouting = false
                 offRouteMonitor.reset()
                 planTrip("driving-car")
+        }
+
+        // The service owns the trip. Mirror its snapshot into the local UI state; this is what makes
+        // switching tabs or reopening the app resume the same navigation.
+        LaunchedEffect(navSession) {
+                if (navSession.active) {
+                        val route = navSession.route ?: return@LaunchedEffect
+                        routeResult = route
+                        selectedDestination = navSession.destination
+                        selectedProfile = navSession.profile
+                        routeStops = navSession.stops
+                        navigationInstructions = route.instructions
+                        currentInstructionIndex = navSession.instructionIndex
+                        remainingDistance = navSession.remainingDistance
+                        remainingDuration = navSession.remainingDuration
+                        distanceToNextTurn = navSession.distanceToNextTurn
+                        if (navSession.lat != 0.0 || navSession.lng != 0.0) {
+                                currentLat = navSession.lat
+                                currentLng = navSession.lng
+                                currentBearing = navSession.bearing
+                        }
+                        currentSpeedMps = navSession.speedMps
+                        speedLimitKmh = navSession.speedLimitKmh
+                        wrongWayDetected = navSession.wrongWay
+                        isRerouting = navSession.isRerouting
+                        navigationNotice = navSession.notice
+                        lastNavigationRoute = route
+                        screenState = MapScreenState.NAVIGATING
+                }
+        }
+
+        LaunchedEffect(navSession.active) {
+                if (!navSession.active &&
+                                !isSimulationMode &&
+                                screenState == MapScreenState.NAVIGATING
+                ) {
+                        routeResult = null
+                        walkRouteResult = null
+                        bikeRouteResult = null
+                        selectedDestination = null
+                        routeStops = emptyList()
+                        screenState = MapScreenState.IDLE
+                }
+        }
+
+        LaunchedEffect(navSession.lat, navSession.lng, navSession.bearing, navSession.active) {
+                if (navSession.active &&
+                                screenState == MapScreenState.NAVIGATING &&
+                                (navSession.lat != 0.0 || navSession.lng != 0.0)
+                ) {
+                        val mock =
+                                android.location.Location("navigation-session").apply {
+                                        latitude = navSession.lat
+                                        longitude = navSession.lng
+                                        bearing = navSession.bearing.toFloat()
+                                        time = System.currentTimeMillis()
+                                        accuracy = 5f
+                                }
+                        mapInstance?.locationComponent?.forceLocationUpdate(mock)
+                        if (!isUserPanMode) {
+                                mapInstance?.let { map ->
+                                        CameraTransitionManager.updateNavigationCamera(
+                                                map,
+                                                LatLng(navSession.lat, navSession.lng),
+                                                navSession.bearing
+                                        )
+                                }
+                        }
+                }
+        }
+
+        LaunchedEffect(navSession.matchedIndex, navSession.route) {
+                if (navSession.active && navSession.matchedIndex >= 0) {
+                        val route = navSession.route ?: return@LaunchedEffect
+                        trimRouteSource(
+                                routeSource,
+                                route.coordinates,
+                                navSession.matchedIndex,
+                                LatLng(navSession.lat, navSession.lng)
+                        )
+                }
         }
 
         // Shops around the current fix: dots on the map, tap for the same sheet as Nearby.
@@ -826,7 +911,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         if (isSimulationMode) {
                                 // Simulation mode - use RouteSimulator
                                 onDispose { routeSimulator.stopSimulation() }
-                        } else {
+                        } else if (!NavigationSession.isActive()) {
                                 // Real GPS mode
                                 val locationRequest =
                                         LocationRequest.Builder(
@@ -1193,6 +1278,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 onDispose {
                                         fusedLocationClient.removeLocationUpdates(locationCallback)
                                 }
+                        } else {
+                                onDispose {}
                         }
                 } else {
                         onDispose {}
@@ -1682,6 +1769,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // === AUTO-REROUTE: while navigating, replan if a hazard is close ahead ===
         LaunchedEffect(hazardWarning, screenState) {
+                if (NavigationSession.isActive()) return@LaunchedEffect
                 val hazard = hazardWarning ?: return@LaunchedEffect
                 if (screenState != MapScreenState.NAVIGATING || !hasLocation) {
                         return@LaunchedEffect
@@ -1888,8 +1976,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 // === GOOGLE MAPS-STYLE SEARCH BAR (Top) ===
                 AnimatedVisibility(
                         visible =
-                                screenState == MapScreenState.IDLE ||
-                                        screenState == MapScreenState.SEARCHING,
+                                (screenState == MapScreenState.IDLE ||
+                                        screenState == MapScreenState.SEARCHING) && !inPip,
                         enter = slideInVertically { -it } + fadeIn(),
                         exit = slideOutVertically { -it } + fadeOut(),
                         modifier =
@@ -1931,7 +2019,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 // === SHOP CATEGORY CHIPS ===
                 AnimatedVisibility(
-                        visible = screenState == MapScreenState.IDLE && mapShops.isNotEmpty(),
+                        visible = screenState == MapScreenState.IDLE && mapShops.isNotEmpty() && !inPip,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier =
@@ -1948,7 +2036,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 // === SEARCH RESULTS (Below search bar) ===
                 AnimatedVisibility(
-                        visible = screenState == MapScreenState.SEARCHING,
+                        visible = screenState == MapScreenState.SEARCHING && !inPip,
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically(),
                         modifier =
@@ -1973,7 +2061,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 // === QUICK ACTION BUTTONS (Google Maps style - bottom left) ===
                 AnimatedVisibility(
-                        visible = screenState == MapScreenState.IDLE,
+                        visible = screenState == MapScreenState.IDLE && !inPip,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier =
@@ -1996,6 +2084,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
 
                 // === MAP CONTROLS (Right side - Google Maps style) ===
+                if (!inPip) {
                 Column(
                         modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2036,6 +2125,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
+                }
                 }
         }
 
@@ -2090,6 +2180,18 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         activeRouteFor(selectedProfile)
                                                                 ?: currentRouteResult
                                                 navigationInstructions = activeRoute.instructions
+
+                                                if (!isSimulationMode) {
+                                                        selectedDestination?.let { destination ->
+                                                                NavigationSession.start(
+                                                                        context = context,
+                                                                        route = activeRoute,
+                                                                        destination = destination,
+                                                                        profile = selectedProfile,
+                                                                        stops = routeStops
+                                                                )
+                                                        }
+                                                }
 
                                                 mapInstance?.let { map ->
                                                         val nextWaypoint =
@@ -2202,6 +2304,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         },
                         trafficLabel = trafficLabel,
                         trafficColor = trafficColor,
+                        isInPip = inPip,
                         navigationNotice = navigationNotice,
                         isRerouting = isRerouting,
                         wrongWay = wrongWayDetected,
@@ -2211,6 +2314,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 }
                         },
                         onExit = {
+                                if (NavigationSession.isActive()) NavigationSession.stop(context)
                                 // Stop simulation if running
                                 routeSimulator.stopSimulation()
                                 isSimulationMode = false
@@ -2293,7 +2397,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         visible =
                                 screenState == MapScreenState.NAVIGATING &&
                                         isSimulationMode &&
-                                        !showSimControls,
+                                        !showSimControls &&
+                                        !inPip,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier =
@@ -2325,7 +2430,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         visible =
                                 screenState == MapScreenState.NAVIGATING &&
                                         isSimulationMode &&
-                                        showSimControls,
+                                        showSimControls &&
+                                        !inPip,
                         enter = fadeIn() + scaleIn(initialScale = 0.95f),
                         exit = fadeOut() + scaleOut(targetScale = 0.95f),
                         modifier =
@@ -2498,7 +2604,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // === RE-CENTER BUTTON (shown when user pans away during navigation) ===
         Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
-                        visible = isUserPanMode && screenState == MapScreenState.NAVIGATING,
+                        visible = isUserPanMode && screenState == MapScreenState.NAVIGATING && !inPip,
                         enter = fadeIn() + scaleIn(),
                         exit = fadeOut() + scaleOut(),
                         modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
@@ -2544,7 +2650,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // === LOADING OVERLAY ===
-        if (isLoadingRoute) {
+        if (isLoadingRoute && !inPip) {
                 Box(
                         modifier =
                                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
@@ -2571,7 +2677,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // The route card already states offline/online; only float this when the card is not up.
         if (screenState != MapScreenState.ROUTE_PREVIEW &&
-                        screenState != MapScreenState.NAVIGATING) {
+                        screenState != MapScreenState.NAVIGATING &&
+                        !inPip
+        ) {
                 offlineRouteDebugMessage?.let { message ->
                         Box(
                                 modifier =
@@ -2600,7 +2708,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // === EMERGENCY FAB (hidden behind the route card while previewing/navigating) ===
         if (screenState != MapScreenState.ROUTE_PREVIEW &&
-                        screenState != MapScreenState.NAVIGATING) {
+                        screenState != MapScreenState.NAVIGATING &&
+                        !inPip
+        ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                         FloatingActionButton(
                                 onClick = {

@@ -175,8 +175,10 @@ fun LocationAwareMap(
     }
     // Navigation owns the camera (zoom/tilt/bearing); don't let the location puck fight it.
     LaunchedEffect(followUser) {
-        mapboxMap?.locationComponent?.cameraMode =
-                if (followUser) CameraMode.TRACKING else CameraMode.NONE
+        runCatching {
+            mapboxMap?.locationComponent?.cameraMode =
+                    if (followUser) CameraMode.TRACKING else CameraMode.NONE
+        }
     }
     // Swap the puck badge when the travel mode changes.
     LaunchedEffect(travelMode, hidePuck) {

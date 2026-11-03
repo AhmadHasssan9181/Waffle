@@ -1,10 +1,14 @@
 package com.noobdev.waffle
 
 import android.Manifest
+import android.app.PictureInPictureParams
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -21,6 +25,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.noobdev.waffle.data.remote.OfflineGeocoder
 import com.noobdev.waffle.core.navigation.GeoPoint
+import com.noobdev.waffle.core.navigation.NavigationService
+import com.noobdev.waffle.core.navigation.NavigationSession
+import com.noobdev.waffle.core.navigation.NavigationStore
+import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.feature.offline.OfflineMapManager
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
 import com.noobdev.waffle.design.brand.WaffleLockup
@@ -43,6 +51,42 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.Q)
     private val backgroundLocationPermission = Manifest.permission.ACCESS_BACKGROUND_LOCATION
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_navigation", false)) {
+            NavigationSession.requestOpenMap()
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && NavigationSession.isActive()) {
+            // Make sure the PiP window shows navigation, not whichever tab was open.
+            NavigationSession.requestOpenMap()
+            runCatching {
+                enterPictureInPictureMode(
+                        PictureInPictureParams.Builder()
+                                .setAspectRatio(Rational(16, 9))
+                                .build()
+                )
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+            isInPictureInPictureMode: Boolean,
+            newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        PipState.setActive(isInPictureInPictureMode)
+    }
+
+    override fun onDestroy() {
+        PipState.setActive(false)
+        super.onDestroy()
+    }
+
     private lateinit var preferencesManager: PreferencesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +97,18 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Preferences Manager
         preferencesManager = PreferencesManager(applicationContext)
+
+        // Resume a saved trip after a process restart. If the trip is already live in this
+        // process, just make sure its foreground service is still attached instead of resetting
+        // the live progress to the last saved route.
+        if (NavigationSession.isActive()) {
+            NavigationService.start(this)
+        } else {
+            NavigationStore.load(this)?.let { NavigationSession.restore(this, it) }
+        }
+        if (intent?.getBooleanExtra("open_navigation", false) == true) {
+            NavigationSession.requestOpenMap()
+        }
 
         lifecycleScope.launch(Dispatchers.IO) {
             OfflineGeocoder.load(applicationContext)

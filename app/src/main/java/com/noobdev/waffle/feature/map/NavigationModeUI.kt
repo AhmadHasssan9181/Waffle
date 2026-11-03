@@ -100,6 +100,7 @@ fun NavigationModeUI(
         onToggleSpeedUnit: () -> Unit = {},
         trafficLabel: String? = null,
         trafficColor: Color = SafeGreen,
+        isInPip: Boolean = false,
         navigationNotice: String? = null,
         isRerouting: Boolean = false,
         wrongWay: Boolean = false,
@@ -175,22 +176,24 @@ fun NavigationModeUI(
                 val stepsSheetState =
                         rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-                NavigationSpeedBadge(
-                        speedMps = speedMps,
-                        unit = speedUnit,
-                        onClick = onToggleSpeedUnit,
-                        modifier =
-                                Modifier.align(Alignment.BottomStart)
-                                        .padding(start = 16.dp, bottom = 150.dp)
-                )
-                if (speedLimitKmh != null) {
-                        SpeedLimitBadge(
-                                limitKmh = speedLimitKmh,
+                if (!isInPip) {
+                        NavigationSpeedBadge(
+                                speedMps = speedMps,
                                 unit = speedUnit,
+                                onClick = onToggleSpeedUnit,
                                 modifier =
                                         Modifier.align(Alignment.BottomStart)
-                                                .padding(start = 82.dp, bottom = 156.dp)
+                                                .padding(start = 16.dp, bottom = 150.dp)
                         )
+                        if (speedLimitKmh != null) {
+                                SpeedLimitBadge(
+                                        limitKmh = speedLimitKmh,
+                                        unit = speedUnit,
+                                        modifier =
+                                                Modifier.align(Alignment.BottomStart)
+                                                        .padding(start = 82.dp, bottom = 156.dp)
+                                )
+                        }
                 }
 
                 // Top instruction bar
@@ -202,9 +205,9 @@ fun NavigationModeUI(
                                         containerColor = MaterialTheme.colorScheme.surface
                                 )
                 ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(if (isInPip) 8.dp else 16.dp)) {
                                 AnimatedVisibility(
-                                        visible = wrongWay,
+                                        visible = !isInPip && wrongWay,
                                         enter = fadeIn() + expandVertically(),
                                         exit = fadeOut() + shrinkVertically()
                                 ) {
@@ -236,7 +239,7 @@ fun NavigationModeUI(
                                                 )
                                         }
                                 }
-                                if (wrongWay) Spacer(Modifier.height(12.dp))
+                                if (!isInPip && wrongWay) Spacer(Modifier.height(12.dp))
 
                                 Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -244,7 +247,8 @@ fun NavigationModeUI(
                                 ) {
                                         Box(
                                                 Modifier.size(
-                                                                if (approaching) 64.dp
+                                                                if (isInPip) 36.dp
+                                                                else if (approaching) 64.dp
                                                                 else 52.dp
                                                         )
                                                         .clip(CircleShape)
@@ -268,29 +272,42 @@ fun NavigationModeUI(
                                                         tint = MaterialTheme.colorScheme.primary,
                                                         modifier =
                                                                 Modifier.size(
-                                                                        if (approaching) 40.dp
+                                                                        if (isInPip) 22.dp
+                                                                        else if (approaching) 40.dp
                                                                         else 32.dp
                                                                 )
                                                 )
                                         }
-                                        Spacer(Modifier.width(16.dp))
+                                        Spacer(Modifier.width(if (isInPip) 8.dp else 16.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                         currentInstruction.ifEmpty {
                                                                 "Continue straight"
                                                         },
-                                                        style = MaterialTheme.typography.titleLarge,
+                                                        style =
+                                                                if (isInPip)
+                                                                        MaterialTheme.typography
+                                                                                .bodyMedium
+                                                                else
+                                                                        MaterialTheme.typography
+                                                                                .titleLarge,
                                                         color = MaterialTheme.colorScheme.onSurface,
                                                         fontWeight = FontWeight.Bold,
-                                                        maxLines = 2,
+                                                        maxLines = if (isInPip) 1 else 2,
                                                         overflow = TextOverflow.Ellipsis
                                                 )
                                                 if (distanceToNextTurn > 0.0) {
                                                         Text(
                                                                 "In ${formatDistance(distanceToNextTurn)}",
                                                                 style =
-                                                                        MaterialTheme.typography
-                                                                                .labelMedium,
+                                                                        if (isInPip)
+                                                                                MaterialTheme
+                                                                                        .typography
+                                                                                        .labelSmall
+                                                                        else
+                                                                                MaterialTheme
+                                                                                        .typography
+                                                                                        .labelMedium,
                                                                 color =
                                                                         MaterialTheme.colorScheme
                                                                                 .primary,
@@ -298,28 +315,31 @@ fun NavigationModeUI(
                                                         )
                                                 }
                                         }
-                                        IconButton(onClick = { showSteps = true }) {
-                                                Icon(
-                                                        Icons.Default.List,
-                                                        contentDescription = "Steps",
-                                                        tint =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant
-                                                )
-                                        }
-                                        IconButton(
-                                                onClick = { voiceEnabled = !voiceEnabled }
-                                        ) {
-                                                Icon(
-                                                        if (voiceEnabled) Icons.Default.VolumeUp
-                                                        else Icons.Default.VolumeOff,
-                                                        contentDescription =
-                                                                if (voiceEnabled) "Mute voice"
-                                                                else "Unmute voice",
-                                                        tint =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant
-                                                )
+                                        if (!isInPip) {
+                                                IconButton(onClick = { showSteps = true }) {
+                                                        Icon(
+                                                                Icons.Default.List,
+                                                                contentDescription = "Steps",
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
+                                                IconButton(
+                                                        onClick = { voiceEnabled = !voiceEnabled }
+                                                ) {
+                                                        Icon(
+                                                                if (voiceEnabled)
+                                                                        Icons.Default.VolumeUp
+                                                                else Icons.Default.VolumeOff,
+                                                                contentDescription =
+                                                                        if (voiceEnabled) "Mute voice"
+                                                                        else "Unmute voice",
+                                                                tint =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
                                         }
                                 }
 
@@ -327,7 +347,10 @@ fun NavigationModeUI(
                                 // appears silently and it is impossible to tell whether the
                                 // app noticed the deviation.
                                 AnimatedVisibility(
-                                        visible = isRerouting || !navigationNotice.isNullOrBlank(),
+                                        visible =
+                                                !isInPip &&
+                                                        (isRerouting ||
+                                                                !navigationNotice.isNullOrBlank()),
                                         enter = fadeIn() + expandVertically(),
                                         exit = fadeOut() + shrinkVertically()
                                 ) {
@@ -381,7 +404,7 @@ fun NavigationModeUI(
                                                 )
                                         }
                                 }
-                                if (trafficLabel != null) {
+                                if (!isInPip && trafficLabel != null) {
                                         Row(
                                                 modifier =
                                                         Modifier.padding(top = 10.dp)
@@ -418,6 +441,7 @@ fun NavigationModeUI(
                 }
 
                 // Bottom bar
+                if (!isInPip) {
                 Card(
                         modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
                         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -471,6 +495,7 @@ fun NavigationModeUI(
                                         ) { Text("Exit") }
                                 }
                         }
+                }
                 }
 
                 if (showSteps) {

@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -48,6 +49,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.noobdev.waffle.core.prefs.PreferencesManager
+import com.noobdev.waffle.core.navigation.NavigationSession
+import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.design.theme.AppTheme
 import com.noobdev.waffle.feature.alerts.AlertsScreen
 import com.noobdev.waffle.feature.home.HomeScreen
@@ -140,10 +143,26 @@ fun WaffleApp(preferencesManager: PreferencesManager) {
 
     val mapStyleIndex by preferencesManager.mapStyleIndex.collectAsState(initial = -1)
     val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.SYSTEM)
+    val inPip by PipState.active.collectAsState()
+    val openMap by NavigationSession.openMapRequested.collectAsState()
+
+    LaunchedEffect(openMap) {
+        if (openMap) {
+            navController.navigate(Screen.Map.route) { launchSingleTop = true }
+            NavigationSession.consumeOpenMapRequest()
+        }
+    }
+
+    // Reopening the app during a live trip goes straight back to navigation, like Maps.
+    LaunchedEffect(Unit) {
+        if (NavigationSession.isActive()) {
+            navController.navigate(Screen.Map.route) { launchSingleTop = true }
+        }
+    }
 
     Scaffold(
             bottomBar = {
-                if (bottomNavItems.any { it.route == currentRoute }) {
+                if (!inPip && bottomNavItems.any { it.route == currentRoute }) {
                     WaffleBottomNavBar(navController = navController, currentRoute = currentRoute)
                 }
             },
