@@ -88,7 +88,44 @@ val sectors = listOf(
         depthFile = "EMSR838_AOI04_DEL_PRODUCT_floodDepthA_v1.json",
         waterFile = "EMSR838_AOI04_DEL_PRODUCT_observedEventA_v1.json"
     ),
-    // ... Add the rest of your sectors here
+    Sector(
+        name = "Trimmu (AOI 05)", lat = 30.9523, lon = 72.0125,
+        limitFile = "EMSR838_AOI05_DEL_PRODUCT_areaOfInterestA_v1.json",
+        footprintFile = "EMSR838_AOI05_DEL_PRODUCT_imageFootprintA_v1.json",
+        depthFile = "EMSR838_AOI05_DEL_PRODUCT_floodDepthA_v1.json",
+        waterFile = "EMSR838_AOI05_DEL_PRODUCT_observedEventA_v1.json"
+    ),
+    Sector(
+        name = "Sahuka (AOI 07)", lat = 30.0161, lon = 72.9792,
+        limitFile = "EMSR838_AOI07_DEL_PRODUCT_areaOfInterestA_v1.json",
+        footprintFile = "EMSR838_AOI07_DEL_PRODUCT_imageFootprintA_v1.json",
+        depthFile = "EMSR838_AOI07_DEL_PRODUCT_floodDepthA_v1.json",
+        waterFile = "EMSR838_AOI07_DEL_PRODUCT_observedEventA_v1.json",
+        extentFile = "EMSR838_AOI07_DEL_PRODUCT_maximumFloodExtentA_v2.json"
+    ),
+    Sector(
+        name = "Vanike (AOI 08)", lat = 32.2043, lon = 73.5224,
+        limitFile = "EMSR838_AOI08_DEL_PRODUCT_areaOfInterestA_v1.json",
+        footprintFile = "EMSR838_AOI08_DEL_PRODUCT_imageFootprintA_v1.json",
+        depthFile = "EMSR838_AOI08_DEL_PRODUCT_floodDepthA_v1.json",
+        waterFile = "EMSR838_AOI08_DEL_PRODUCT_observedEventA_v1.json"
+    ),
+    Sector(
+        name = "Daggar (AOI 10)", lat = 34.5445, lon = 72.4624,
+        limitFile = "EMSR838_AOI10_GRA_PRODUCT_areaOfInterestA_v1.json",
+        footprintFile = "EMSR838_AOI10_GRA_PRODUCT_imageFootprintA_v1.json",
+        waterFile = "EMSR838_AOI10_GRA_PRODUCT_observedEventA_v1.json",
+        roadsFile = "EMSR838_AOI10_GRA_PRODUCT_transportationL_v1.json",
+        builtUpFile = "EMSR838_AOI10_GRA_PRODUCT_builtUpP_v1.json"
+    ),
+    Sector(
+        name = "Wakeel Abad (AOI 11)", lat = 34.4932, lon = 72.5773,
+        limitFile = "EMSR838_AOI11_GRA_PRODUCT_areaOfInterestA_v1.json",
+        footprintFile = "EMSR838_AOI11_GRA_PRODUCT_imageFootprintA_v1.json",
+        waterFile = "EMSR838_AOI11_GRA_PRODUCT_observedEventA_v1.json",
+        roadsFile = "EMSR838_AOI11_GRA_PRODUCT_transportationL_v1.json",
+        builtUpFile = "EMSR838_AOI11_GRA_PRODUCT_builtUpP_v1.json"
+    )
 )
 
 @Composable

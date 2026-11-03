@@ -19,6 +19,8 @@ The map tab. This is the most stateful screen in the app.
 | `MapFocus.kt` | One-shot hand-off: "show this place". Consumed by `MapScreen` on entry. |
 | `MapShops.kt` | Map amenity layer: vector category badges rasterised into MapLibre symbol images, clustered at low zoom, category chips with counts, OSM attribution. |
 | `MapShopsViewModel.kt` | Cache-first shops around the user **and along a planned route**; lazy photo lookup for the tapped pin. |
+| `FloodLayers.kt` | Removes the Copernicus flood layer/source IDs when a sector is cleared. |
+| `FloodLegend.kt` | Depth/water/roads/built-up legend for the active flood sector. |
 | `MapViewModel.kt` | Persisted map style index and simple map UI flags. |
 
 **Key behaviour**
@@ -75,7 +77,8 @@ The map tab. This is the most stateful screen in the app.
   reroute path restarts the simulator on the new route, so detection, planning and replacement can
   be checked without driving.
 - A shop/alert can push a pin: set `MapFocus.request(MapTarget(lat, lon, label))`, then navigate to
-  `Screen.Map.route`. `MapScreen` consumes it, draws `focus-source` and animates the camera.
+  `Screen.Map.route`. `MapScreen` consumes it, draws `focus-source` and animates the camera. A
+  `MapTarget` with `floodSector` loads the Copernicus flood layers instead and shows the legend.
 - `DisposableEffect` removes the route layers when the screen leaves composition.
 
 **Do not** upgrade MapLibre casually: offline regions were downloaded with 11.8.0 and the

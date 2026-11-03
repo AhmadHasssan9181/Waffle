@@ -12,6 +12,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Message
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Water
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.google.android.gms.location.LocationServices
+import com.noobdev.waffle.Screen
 import com.noobdev.waffle.design.components.EmergencyButton
 import com.noobdev.waffle.design.components.Eyebrow
 import com.noobdev.waffle.design.components.WaffleSecondaryButton
@@ -64,6 +69,9 @@ import com.noobdev.waffle.design.components.WaffleSpace
 import com.noobdev.waffle.design.theme.DangerRed
 import com.noobdev.waffle.design.theme.SafeGreen
 import com.noobdev.waffle.design.theme.WaffleTextStyles
+import com.noobdev.waffle.feature.flood.sectors
+import com.noobdev.waffle.feature.map.MapFocus
+import com.noobdev.waffle.feature.map.MapTarget
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -189,6 +197,79 @@ fun RescueScreen(navController: NavController) {
                         onClick = { dial(context, "1122") },
                         modifier = Modifier.fillMaxWidth()
                 )
+            }
+        }
+
+        Spacer(Modifier.height(WaffleSpace.xl))
+
+        // === FLOOD MAPS ===
+        Text(
+                text = "Flood maps",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+                text = "Copernicus EMSR838 · historical flood depth and extent",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(WaffleSpace.sm))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(WaffleSpace.sm)) {
+            items(sectors) { sector ->
+                Surface(
+                        onClick = {
+                            MapFocus.request(
+                                    MapTarget(
+                                            lat = sector.lat,
+                                            lon = sector.lon,
+                                            label = "Flood · ${sector.name}",
+                                            zoom = 9.5,
+                                            floodSector = sector
+                                    )
+                            )
+                            navController.navigate(Screen.Map.route) {
+                                launchSingleTop = true
+                            }
+                        },
+                        modifier = Modifier.width(190.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border =
+                                BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                                )
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Icon(
+                                Icons.Rounded.Water,
+                                null,
+                                Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                                sector.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                                "Historical flood layer",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                                "Open map",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
 

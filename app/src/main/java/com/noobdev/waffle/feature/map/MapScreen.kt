@@ -51,6 +51,8 @@ import com.noobdev.waffle.data.remote.*
 import com.noobdev.waffle.core.navigation.CameraTransitionManager
 import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
+import com.noobdev.waffle.feature.flood.Sector
+import com.noobdev.waffle.feature.flood.loadSectorData
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.NavigationManager
@@ -1714,8 +1716,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        // === FOCUS PIN: arrive here from "Nearby" or an alert ===
+        // === FOCUS PIN: arrive here from "Nearby", an alert, or a flood sector ===
         var focusTarget by remember { mutableStateOf<MapTarget?>(null) }
+        var activeFloodSector by remember { mutableStateOf<Sector?>(null) }
         LaunchedEffect(Unit) {
                 focusTarget = MapFocus.consume()
                 focusTarget?.let { target -> searchQuery = target.label }
@@ -1723,6 +1726,19 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         LaunchedEffect(mapInstance, selectedStyleIndex, focusTarget) {
                 val map = mapInstance ?: return@LaunchedEffect
                 val target = focusTarget ?: return@LaunchedEffect
+                if (target.floodSector != null) {
+                        activeFloodSector = target.floodSector
+                        focusTarget = null
+                        map.animateCamera(
+                                CameraUpdateFactory.newLatLngZoom(
+                                        LatLng(target.lat, target.lon),
+                                        target.zoom
+                                ),
+                                800
+                        )
+                        return@LaunchedEffect
+                }
+                activeFloodSector = null
                 map.getStyle { style ->
                         try {
                                 try {
@@ -1779,6 +1795,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         } catch (_: Exception) {
                                 // Style was mid-reload.
                         }
+                }
+        }
+
+        LaunchedEffect(mapInstance, selectedStyleIndex, activeFloodSector) {
+                val map = mapInstance ?: return@LaunchedEffect
+                val sector = activeFloodSector
+                if (sector == null) {
+                        clearFloodLayers(map)
+                } else {
+                        loadSectorData(context, map, sector)
                 }
         }
 
@@ -2183,6 +2209,23 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 )
                         }
                 }
+                }
+
+                // === FLOOD LEGEND (bottom-left, above the car button) ===
+                AnimatedVisibility(
+                        visible = activeFloodSector != null,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier =
+                                Modifier.align(Alignment.BottomStart)
+                                        .padding(start = 16.dp, bottom = 110.dp)
+                ) {
+                        activeFloodSector?.let { sector ->
+                                FloodLegend(
+                                        sector = sector,
+                                        onClose = { activeFloodSector = null }
+                                )
+                        }
                 }
         }
 

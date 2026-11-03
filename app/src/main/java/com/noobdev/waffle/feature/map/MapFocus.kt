@@ -1,5 +1,7 @@
 package com.noobdev.waffle.feature.map
 
+import com.noobdev.waffle.feature.flood.Sector
+
 /**
  * One-shot handoff from another screen to the map ("show me this place").
  *
@@ -10,7 +12,9 @@ data class MapTarget(
         val lat: Double,
         val lon: Double,
         val label: String,
-        val zoom: Double = 16.0
+        val zoom: Double = 16.0,
+        /** When set, the map loads this Copernicus flood sector instead of just a pin. */
+        val floodSector: Sector? = null
 )
 
 object MapFocus {
