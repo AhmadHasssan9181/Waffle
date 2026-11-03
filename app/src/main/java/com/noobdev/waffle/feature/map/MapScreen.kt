@@ -456,6 +456,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 currentLat = navSession.lat
                                 currentLng = navSession.lng
                                 currentBearing = navSession.bearing
+                                hasLocation = true
                         }
                         currentSpeedMps = navSession.speedMps
                         speedLimitKmh = navSession.speedLimitKmh
@@ -577,12 +578,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         )
 
         if (hasLocation) {
-                Puck3D(
+                AnimatedPuck3D(
                         map = mapInstance,
                         styleIndex = selectedStyleIndex,
-                        lat = currentLat,
-                        lng = currentLng,
-                        bearing = currentBearing,
+                        targetLat = currentLat,
+                        targetLng = currentLng,
+                        targetBearing = currentBearing,
                         travelMode = selectedProfile,
                         vehicleIcon = vehicleIcon,
                         isNavigating = screenState == MapScreenState.NAVIGATING
@@ -963,8 +964,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 val locationRequest =
                                         LocationRequest.Builder(
                                                         Priority.PRIORITY_HIGH_ACCURACY,
-                                                        1500L // Update every 1.5 seconds for
-                                                        // smoother tracking
+                                                        1000L // Match the camera animation
+                                                        // for smoother tracking
                                                         )
                                                 .build()
 
@@ -1158,12 +1159,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                         activeRoute
                                                                                                 .steps
                                                                                                 .lastIndex
-                                                                                else
-                                                                                        max(
-                                                                                                0,
-                                                                                                nextStepIndex -
-                                                                                                        1
-                                                                                        )
+                                                                                else nextStepIndex
 
                                                                         distanceToNextTurn =
                                                                                 if (nextStepIndex !=
@@ -1373,7 +1369,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         }
                                 val currentStepIndex =
                                         if (nextStepIndex == -1) activeRoute.steps.lastIndex
-                                        else max(0, nextStepIndex - 1)
+                                        else nextStepIndex
 
                                 distanceToNextTurn =
                                         if (nextStepIndex != -1)
@@ -1497,6 +1493,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 mapInstance?.getStyle { style ->
                                         // Remove existing route layer/source if any
                                         try {
+                                                style.removeLayer("route-casing")
                                                 style.removeLayer("route-layer")
                                                 style.removeSource("route-source")
                                         } catch (e: Exception) {}
@@ -1512,17 +1509,29 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                                         val newSource = GeoJsonSource("route-source", geoJson)
                                         style.addSource(newSource)
+                                        // White casing under a saturated blue line. The old
+                                        // honey line vanished into the yellow streets.
+                                        val casing = LineLayer("route-casing", "route-source")
+                                        casing.setProperties(
+                                                lineColor(AndroidColor.WHITE),
+                                                lineWidth(11f),
+                                                lineOpacity(0.95f),
+                                                lineCap(Property.LINE_CAP_ROUND),
+                                                lineJoin(Property.LINE_JOIN_ROUND)
+                                        )
                                         val layer = LineLayer("route-layer", "route-source")
                                         layer.setProperties(
-                                                lineColor(AndroidColor.parseColor("#F2A33C")),
-                                                lineWidth(6f),
-                                                lineOpacity(0.9f),
+                                                lineColor(AndroidColor.parseColor("#2F80ED")),
+                                                lineWidth(7f),
+                                                lineOpacity(1f),
                                                 lineCap(Property.LINE_CAP_ROUND),
                                                 lineJoin(Property.LINE_JOIN_ROUND)
                                         )
                                         if (style.getLayer("puck-layer") != null) {
+                                                style.addLayerBelow(casing, "puck-layer")
                                                 style.addLayerBelow(layer, "puck-layer")
                                         } else {
+                                                style.addLayer(casing)
                                                 style.addLayer(layer)
                                         }
                                         // Store reference for direct future updates
@@ -1950,6 +1959,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 onDispose {
                         mapInstance?.getStyle { style ->
                                 try {
+                                        style.removeLayer("route-casing")
                                         style.removeLayer("route-layer")
                                 } catch (_: Exception) {}
                                 try {
@@ -2331,6 +2341,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         onClose = {
                                                 mapInstance?.getStyle { style ->
                                                         try {
+                                                                style.removeLayer("route-casing")
                                                                 style.removeLayer("route-layer")
                                                                 style.removeSource("route-source")
                                                         } catch (_: Exception) {}
@@ -2503,6 +2514,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 // Clear route from map
                                 mapInstance?.getStyle { style ->
                                         try {
+                                                style.removeLayer("route-casing")
                                                 style.removeLayer("route-layer")
                                         } catch (_: Exception) {}
                                         try {

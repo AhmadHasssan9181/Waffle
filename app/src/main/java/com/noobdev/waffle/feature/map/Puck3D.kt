@@ -2,6 +2,9 @@ package com.noobdev.waffle.feature.map
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -11,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.noobdev.waffle.R
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.maps.MapLibreMap
@@ -26,6 +30,55 @@ import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+
+/**
+ * Keeps the puck animation in its own composable. Reading the animated values here means only this
+ * small subtree recomposes at 60 fps instead of the whole map screen.
+ */
+@Composable
+internal fun AnimatedPuck3D(
+        map: MapLibreMap?,
+        styleIndex: Int,
+        targetLat: Double,
+        targetLng: Double,
+        targetBearing: Double,
+        travelMode: String,
+        vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
+        isNavigating: Boolean = false
+) {
+    val lat = remember { Animatable(targetLat.toFloat()) }
+    val lng = remember { Animatable(targetLng.toFloat()) }
+    val bearing = remember { Animatable(targetBearing.toFloat()) }
+    var initialized by remember { mutableStateOf(false) }
+
+    LaunchedEffect(targetLat, targetLng, targetBearing) {
+        if (!initialized) {
+            lat.snapTo(targetLat.toFloat())
+            lng.snapTo(targetLng.toFloat())
+            bearing.snapTo(targetBearing.toFloat())
+            initialized = true
+            return@LaunchedEffect
+        }
+        launch { lat.animateTo(targetLat.toFloat(), tween(1000, easing = LinearEasing)) }
+        launch { lng.animateTo(targetLng.toFloat(), tween(1000, easing = LinearEasing)) }
+        launch {
+            val current = bearing.value
+            val delta = ((targetBearing.toFloat() - current + 540f) % 360f) - 180f
+            bearing.animateTo(current + delta, tween(1000, easing = LinearEasing))
+        }
+    }
+
+    Puck3D(
+            map = map,
+            styleIndex = styleIndex,
+            lat = lat.value.toDouble(),
+            lng = lng.value.toDouble(),
+            bearing = bearing.value.toDouble(),
+            travelMode = travelMode,
+            vehicleIcon = vehicleIcon,
+            isNavigating = isNavigating
+    )
+}
 
 /**
  * The 3D navigation puck.

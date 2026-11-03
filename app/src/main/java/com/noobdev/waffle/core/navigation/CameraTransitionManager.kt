@@ -129,7 +129,7 @@ object CameraTransitionManager {
                 CameraPosition.Builder().target(currentPosition).bearing(bearing).build()
 
         if (animate) {
-            map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 300)
+            map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1000)
         } else {
             map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
         }

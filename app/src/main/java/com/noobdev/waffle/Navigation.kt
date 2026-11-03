@@ -51,6 +51,8 @@ import androidx.navigation.compose.rememberNavController
 import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.PipState
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.noobdev.waffle.design.theme.AppTheme
 import com.noobdev.waffle.feature.alerts.AlertsScreen
 import com.noobdev.waffle.feature.home.HomeScreen
@@ -144,6 +146,12 @@ fun WaffleApp(preferencesManager: PreferencesManager) {
     val mapStyleIndex by preferencesManager.mapStyleIndex.collectAsState(initial = -1)
     val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.SYSTEM)
     val inPip by PipState.active.collectAsState()
+    // Only recompose the app shell when navigation starts or ends, not on every GPS fix.
+    val navigationActive by
+            NavigationSession.state
+                    .map { it.active }
+                    .distinctUntilChanged()
+                    .collectAsState(initial = NavigationSession.state.value.active)
     val openMap by NavigationSession.openMapRequested.collectAsState()
 
     LaunchedEffect(openMap) {
@@ -162,7 +170,7 @@ fun WaffleApp(preferencesManager: PreferencesManager) {
 
     Scaffold(
             bottomBar = {
-                if (!inPip && bottomNavItems.any { it.route == currentRoute }) {
+                if (!inPip && !navigationActive && bottomNavItems.any { it.route == currentRoute }) {
                     WaffleBottomNavBar(navController = navController, currentRoute = currentRoute)
                 }
             },

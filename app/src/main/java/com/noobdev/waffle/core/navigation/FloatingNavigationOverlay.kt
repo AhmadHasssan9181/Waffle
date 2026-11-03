@@ -683,7 +683,7 @@ class FloatingNavigationOverlay(
         if (started) {
             val casing =
                     Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#B36A18")
+                        color = Color.parseColor("#F2FFFFFF")
                         style = Paint.Style.STROKE
                         strokeWidth = 13f
                         strokeCap = Paint.Cap.ROUND
@@ -692,7 +692,7 @@ class FloatingNavigationOverlay(
             canvas.drawPath(path, casing)
             val line =
                     Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#F2A33C")
+                        color = Color.parseColor("#2F80ED")
                         style = Paint.Style.STROKE
                         strokeWidth = 8f
                         strokeCap = Paint.Cap.ROUND

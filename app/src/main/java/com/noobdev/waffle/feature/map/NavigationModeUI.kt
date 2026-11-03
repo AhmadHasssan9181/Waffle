@@ -455,7 +455,10 @@ fun NavigationModeUI(
                 // Bottom bar
                 if (!isInPip) {
                 Card(
-                        modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .align(Alignment.BottomCenter)
+                                        .navigationBarsPadding(),
                         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                         colors =
                                 CardDefaults.cardColors(

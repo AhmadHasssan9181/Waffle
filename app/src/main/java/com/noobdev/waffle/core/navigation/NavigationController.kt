@@ -87,8 +87,8 @@ class NavigationController(
             return
         }
         val request =
-                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_500L)
-                        .setMinUpdateDistanceMeters(2f)
+                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
+                        .setMinUpdateDistanceMeters(1f)
                         .build()
         runCatching {
             fused.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
@@ -165,8 +165,12 @@ class NavigationController(
 
         lat = snap.snappedLat
         lng = snap.snappedLng
-        bearing = travelBearing
-        speedMps = if (location.hasSpeed()) location.speed.coerceAtLeast(0f) else 0f
+        // Point the puck and camera along the road rather than at noisy GPS heading.
+        bearing = routeBearing ?: travelBearing
+        val rawSpeed = if (location.hasSpeed()) location.speed.coerceAtLeast(0f) else 0f
+        speedMps =
+                if (speedMps > 0f && rawSpeed > 0f) speedMps * 0.55f + rawSpeed * 0.45f
+                else rawSpeed
         matchedIndex = snap.matchedIndex
         previousLat = location.latitude
         previousLng = location.longitude
@@ -175,7 +179,7 @@ class NavigationController(
                 activeRoute.steps.indexOfFirst { it.wayPointIndex > snap.matchedIndex }
         instructionIndex =
                 if (nextStepIndex == -1) activeRoute.steps.lastIndex
-                else max(0, nextStepIndex - 1)
+                else nextStepIndex
         distanceToNextTurn =
                 if (nextStepIndex != -1) {
                     GeoGeometry.distanceToIndexMeters(
