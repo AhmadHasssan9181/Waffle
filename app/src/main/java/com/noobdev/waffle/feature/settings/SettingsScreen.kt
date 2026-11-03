@@ -1,5 +1,6 @@
 package com.noobdev.waffle.feature.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.LocalHospital
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Public
@@ -102,6 +104,18 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
     val vehicleIconKey by preferencesManager.vehicleIcon.collectAsState(initial = "SEDAN")
     val vehicleIcon = remember(vehicleIconKey) { VehicleIcon.fromKey(vehicleIconKey) }
     val mapStyleIndex by preferencesManager.mapStyleIndex.collectAsState(initial = -1)
+    var floatingSizeStep by remember {
+        mutableStateOf(
+                context.getSharedPreferences("waffle_floating", Context.MODE_PRIVATE)
+                        .getInt("size_step", 0)
+        )
+    }
+    val floatingSizeLabel =
+            when (floatingSizeStep) {
+                1 -> "Compact"
+                2 -> "Large"
+                else -> "Balanced"
+            }
     val effectiveMapStyleIndex =
             if (mapStyleIndex >= 0) mapStyleIndex
             else autoStyleIndex(MaterialTheme.colorScheme.background.luminance() < 0.5f)
@@ -193,6 +207,24 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                         title = "Vehicle icon",
                         subtitle = vehicleIcon.label,
                         onClick = { showVehiclePicker = true }
+                )
+
+                SettingsDivider()
+
+                SettingsItem(
+                        icon = Icons.Rounded.OpenInFull,
+                        title = "Floating map size",
+                        subtitle = "$floatingSizeLabel · tap to change",
+                        onClick = {
+                            floatingSizeStep = (floatingSizeStep + 1) % 3
+                            context.getSharedPreferences(
+                                            "waffle_floating",
+                                            Context.MODE_PRIVATE
+                                    )
+                                    .edit()
+                                    .putInt("size_step", floatingSizeStep)
+                                    .apply()
+                        }
                 )
 
                 SettingsDivider()

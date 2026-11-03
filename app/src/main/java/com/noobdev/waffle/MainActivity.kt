@@ -5,10 +5,13 @@ import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.util.Rational
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -61,19 +64,44 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && NavigationSession.isActive()) {
-            // Make sure the PiP window shows navigation, not whichever tab was open.
-            NavigationSession.requestOpenMap()
+        if (!NavigationSession.isActive()) return
+        NavigationSession.requestOpenMap()
+
+        // A custom overlay can be much larger than Android's system PiP window, which is
+        // capped to a small rectangle on many devices. Use it when the user has granted
+        // "display over other apps"; otherwise fall back to system PiP and ask for it.
+        if (Settings.canDrawOverlays(this)) {
+            NavigationService.showFloating(this)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             runCatching {
-                // 3:2 keeps a landscape width close to 16:9 while adding vertical room for
-                // the route and the instruction/ETA bar. Portrait/square ratios get too narrow.
-                val params =
+                enterPictureInPictureMode(
                         PictureInPictureParams.Builder()
                                 .setAspectRatio(Rational(3, 2))
                                 .build()
-                enterPictureInPictureMode(params)
+                )
             }
         }
+        Toast.makeText(
+                        this,
+                        "Allow display over other apps for the large floating map",
+                        Toast.LENGTH_LONG
+                )
+                .show()
+        runCatching {
+            startActivity(
+                    Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                    )
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (NavigationSession.isActive()) NavigationService.hideFloating(this)
     }
 
     override fun onPictureInPictureModeChanged(

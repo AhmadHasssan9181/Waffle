@@ -25,6 +25,8 @@ object NavigationStore {
                     JSONObject()
                             .put("savedAt", System.currentTimeMillis())
                             .put("profile", snapshot.profile)
+                            .put("styleIndex", snapshot.styleIndex)
+                            .put("vehicleIconKey", snapshot.vehicleIconKey)
                             .put("muted", snapshot.muted)
                             .put("destination", destination.toJson())
                             .put("stops", JSONArray(snapshot.stops.map { it.toJson() }))
@@ -55,6 +57,8 @@ object NavigationStore {
                         route = route,
                         destination = destination,
                         profile = json.optString("profile", "driving-car"),
+                        styleIndex = json.optInt("styleIndex", 1),
+                        vehicleIconKey = json.optString("vehicleIconKey", "SEDAN"),
                         stops = stops,
                         muted = json.optBoolean("muted", false),
                         remainingDistance = route.distanceMeters,

@@ -11,6 +11,8 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.provider.Settings
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.noobdev.waffle.MainActivity
@@ -34,6 +36,8 @@ class NavigationService : Service() {
     companion object {
         const val ACTION_START = "com.noobdev.waffle.navigation.START"
         const val ACTION_STOP = "com.noobdev.waffle.navigation.STOP"
+        const val ACTION_SHOW_FLOATING = "com.noobdev.waffle.navigation.SHOW_FLOATING"
+        const val ACTION_HIDE_FLOATING = "com.noobdev.waffle.navigation.HIDE_FLOATING"
         private const val CHANNEL_ID = "waffle_navigation"
         private const val NOTIFICATION_ID = 4242
         private const val WAKE_TAG = "Waffle:Navigation"
@@ -49,12 +53,28 @@ class NavigationService : Service() {
                     Intent(context, NavigationService::class.java).setAction(ACTION_STOP)
             context.startService(intent)
         }
+
+        fun showFloating(context: Context) {
+            if (!Settings.canDrawOverlays(context)) return
+            val intent =
+                    Intent(context, NavigationService::class.java)
+                            .setAction(ACTION_SHOW_FLOATING)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun hideFloating(context: Context) {
+            val intent =
+                    Intent(context, NavigationService::class.java)
+                            .setAction(ACTION_HIDE_FLOATING)
+            context.startService(intent)
+        }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var controller: NavigationController? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var foregroundStarted = false
+    private var floatingOverlay: FloatingNavigationOverlay? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -68,6 +88,7 @@ class NavigationService : Service() {
                         notificationManager().notify(NOTIFICATION_ID, buildNotification(snapshot))
                     }
                 } else if (foregroundStarted) {
+                    hideFloatingInternal()
                     stopForegroundCompat()
                     stopSelf()
                 }
@@ -80,11 +101,24 @@ class NavigationService : Service() {
             ACTION_STOP -> {
                 controller?.stop()
                 controller = null
+                hideFloatingInternal()
                 NavigationSession.update { NavigationSnapshot() }
                 NavigationStore.clear(this)
                 stopForegroundCompat()
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_SHOW_FLOATING -> {
+                val active = NavigationSession.snapshot().takeIf { it.active }
+                if (active != null) {
+                    startForegroundCompat(buildNotification(active))
+                    showFloatingInternal()
+                }
+                return START_STICKY
+            }
+            ACTION_HIDE_FLOATING -> {
+                hideFloatingInternal()
+                return START_STICKY
             }
         }
 
@@ -107,6 +141,7 @@ class NavigationService : Service() {
     }
 
     override fun onDestroy() {
+        hideFloatingInternal()
         controller?.stop()
         controller = null
         serviceScope.cancel()
@@ -116,6 +151,30 @@ class NavigationService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun showFloatingInternal() {
+        if (!Settings.canDrawOverlays(this)) return
+        if (floatingOverlay?.isShowing() != true) {
+            floatingOverlay?.hide()
+            val sizeStep =
+                    getSharedPreferences("waffle_floating", MODE_PRIVATE)
+                            .getInt("size_step", 0)
+            floatingOverlay =
+                    FloatingNavigationOverlay(
+                                    this,
+                                    getSystemService(Context.WINDOW_SERVICE) as WindowManager,
+                                    sizeStep = sizeStep
+                            )
+                            .also { overlay ->
+                                if (!overlay.show()) floatingOverlay = null
+                            }
+        }
+    }
+
+    private fun hideFloatingInternal() {
+        floatingOverlay?.hide()
+        floatingOverlay = null
+    }
 
     private fun buildNotification(snapshot: NavigationSnapshot): Notification {
         val instruction = snapshot.instruction

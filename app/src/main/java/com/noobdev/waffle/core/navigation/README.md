@@ -15,6 +15,7 @@ controller and store are the pieces that keep a trip alive when the map screen i
 | `NavigationSession.kt` | The single source of truth for the live trip. `StateFlow<NavigationSnapshot>` holds route, destination, stops, fix, instruction index, ETA, speed limit, reroute/wrong-way flags. |
 | `NavigationController.kt` | The live navigation loop: fused location, snap-to-route, instruction progress, ETA, speed limit, off-route/wrong-way reroute and hazard reroute. Lives inside the service, not the composable. |
 | `NavigationService.kt` | Foreground service with a `location` type, partial wake lock and ongoing turn-by-turn notification. Owns the controller and survives tab changes, backgrounding and PiP. |
+| `FloatingNavigationOverlay.kt` | Large draggable floating map shown over the launcher when the user leaves the app. Real MapLibre map, route, top-down vehicle, instruction, distance and ETA. Tapping the map opens full-screen navigation; the size (Compact/Balanced/Large) comes from Settings. Requires `SYSTEM_ALERT_WINDOW`; system PiP is the fallback. |
 | `NavigationStore.kt` | Persists route, destination, stops and mute state to `navigation_session.json` so a process restart can resume the trip. |
 | `PipState.kt` | Whether the activity is in picture-in-picture; the map hides its chrome and the bottom bar. |
 | `RouteSimulator.kt` | Drives the demo/navigation animation along a route. |

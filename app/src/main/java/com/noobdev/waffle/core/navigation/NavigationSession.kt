@@ -18,6 +18,8 @@ data class NavigationSnapshot(
         val route: RouteResult? = null,
         val destination: GeoSearchResult? = null,
         val profile: String = "driving-car",
+        val styleIndex: Int = 1,
+        val vehicleIconKey: String = "SEDAN",
         val stops: List<GeoSearchResult> = emptyList(),
         val lat: Double = 0.0,
         val lng: Double = 0.0,
@@ -59,7 +61,9 @@ object NavigationSession {
             route: RouteResult,
             destination: GeoSearchResult,
             profile: String,
-            stops: List<GeoSearchResult>
+            stops: List<GeoSearchResult>,
+            styleIndex: Int,
+            vehicleIconKey: String
     ) {
         _state.value =
                 NavigationSnapshot(
@@ -67,6 +71,8 @@ object NavigationSession {
                         route = route,
                         destination = destination,
                         profile = profile,
+                        styleIndex = styleIndex,
+                        vehicleIconKey = vehicleIconKey,
                         stops = stops,
                         remainingDistance = route.distanceMeters,
                         remainingDuration = route.durationSeconds,

@@ -2243,7 +2243,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         route = activeRoute,
                                                                         destination = destination,
                                                                         profile = selectedProfile,
-                                                                        stops = routeStops
+                                                                        stops = routeStops,
+                                                                        styleIndex = selectedStyleIndex,
+                                                                        vehicleIconKey = vehicleIconKey
                                                                 )
                                                         }
                                                 }
