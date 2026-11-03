@@ -276,6 +276,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
          */
         fun planTrip(profile: String) {
                 val destination = selectedDestination ?: return
+                if (!hasLocation) {
+                        offlineRouteDebugMessage =
+                                "Waiting for a GPS fix before routing. Move near a window and try again."
+                        return
+                }
                 val stops = routeStops
                 val walking = isWalkingProfile(profile)
                 val biking = isBikeProfile(profile)

@@ -211,7 +211,7 @@ fun RoutePreviewCard(
                                                                 )
                                                         )
                                                 },
-                                                label = { Text("Alternates") }
+                                                label = { Text("Alts") }
                                         )
                                 }
 

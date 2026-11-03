@@ -5,8 +5,8 @@ The map tab. This is the most stateful screen in the app.
 | File | Responsibility |
 | --- | --- |
 | `MapScreen.kt` | Orchestrator: MapLibre instance, route state, hazard layers, camera, screen state. |
-| `MapSearch.kt` | Search bar, live results card, quick chips. |
-| `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Via stops with edit/reorder, and category shortcuts (Fuel/Food/Rest/Health/Grocery). |
+| `MapSearch.kt` | Search bar, live offline results card with online OpenCage fallback, quick chips. |
+| `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Tolls/Highways/Ferries/Alts chips, Best/Alt cards, Via stops with edit/reorder, and category shortcuts (Fuel/Food/Rest/Health/Grocery). |
 | `StopPicker.kt` | Bottom sheet that lists actual shops along the route, sorted by detour, with photos, category filters, 24/7 badges and a search fallback. |
 | `NavigationModeUI.kt` | Turn-by-turn banner, structured maneuver icon, approach distance, turn list, speed bubble + speed-limit sign, voice guidance, traffic chip, navigation controls. |
 | `MapLayersSheet.kt` | Legacy layer/style sheet; map style now lives in Settings, kept for a future map menu. |
@@ -30,6 +30,11 @@ The map tab. This is the most stateful screen in the app.
   also fits the camera to those shops, and the X beside "Places" hides them. A tap queries the
   rendered `shops-symbol` layer and opens the shared `ShopDetailSheet`; "Directions" plans a
   hazard-aware route.
+- Search: `OfflineGeocoder` searches the bundled POI TSV plus the named-road index. Queries are
+  tokenised, so "Mall Road Rawalpindi" finds "Mall Road"; if the offline index has no match and the
+  phone is online, `MapSearch` falls back to OpenCage. A result click needs a real GPS fix; if the
+  destination is outside the bundled graph, routing goes online and a missing connection produces
+  a clear "No offline map for this area" message instead of snapping to a Rawalpindi street.
 - Multi-stop trips: `routeStops` are intermediate `GeoSearchResult`s. `RouteRepository.planWithStops`
   plans start -> stop -> ... -> destination leg by leg, merges the geometry/instructions/steps, and
   keeps hazard avoidance on every leg. The preview card has a Via strip, an **Add stop** picker, an

@@ -19,6 +19,12 @@ object OfflineRoutingManager {
     private const val TAG = "OfflineRoutingManager"
     private const val GRAPH_ASSET_DIR = "graph-cache"
 
+    // Bounds used by tools/graph-builder/README.md for the bundled metro graph.
+    private const val MIN_LAT = 33.45
+    private const val MAX_LAT = 33.95
+    private const val MIN_LNG = 72.85
+    private const val MAX_LNG = 73.35
+
     sealed interface State {
         data object Idle : State
         data object Loading : State
@@ -68,6 +74,10 @@ object OfflineRoutingManager {
     }
 
     fun getEngineOrNull(): LocalRoutingEngine? = engine
+
+    /** True when a coordinate is inside the bundled Islamabad–Rawalpindi graph. */
+    fun isWithinCoverage(lat: Double, lng: Double): Boolean =
+            lat in MIN_LAT..MAX_LAT && lng in MIN_LNG..MAX_LNG
 
     fun speedLimitKmhAt(lat: Double, lon: Double): Int? =
             engine?.speedLimitKmhAt(lat, lon)

@@ -43,7 +43,9 @@ data class GeoSearchResult(
         val address: String,
         val lat: Double,
         val lng: Double,
-        val type: String
+        val type: String,
+        /** Extra names/refs used only by the offline search index. */
+        val searchText: String = ""
 )
 
 interface OpenCageApiService {

@@ -47,10 +47,17 @@ object RouteRepository {
     ): RoutePlan {
         val detour = HazardDetourPlanner.plan(start, end, hazards)
         var offlineError: String? = null
+        val offlineCoverage =
+                OfflineRoutingManager.isWithinCoverage(start.latitude, start.longitude) &&
+                        OfflineRoutingManager.isWithinCoverage(end.latitude, end.longitude) &&
+                        detour.waypoints.all {
+                            OfflineRoutingManager.isWithinCoverage(it.latitude, it.longitude)
+                        }
 
         // GraphHopper 1.0 has no avoid-toll/highway/ferry weighting. If the user asks for one,
         // route online where ORS can honour it rather than silently ignoring the choice.
-        val useOffline = preferOffline && !options.needsOnline
+        // Never let the metro graph snap a Karachi destination to a Rawalpindi street.
+        val useOffline = preferOffline && !options.needsOnline && offlineCoverage
         if (useOffline) {
             OfflineRoutingManager.getEngineOrNull()?.let { engine ->
                 val results =
@@ -113,10 +120,12 @@ object RouteRepository {
                         )
 
         val message =
-                if (!online.success && !offlineError.isNullOrBlank()) {
-                    "${online.errorMessage ?: "Online routing failed"} (offline: $offlineError)"
-                } else {
-                    online.errorMessage
+                when {
+                    !online.success && !offlineCoverage ->
+                            "No offline map for this area; connect to the internet"
+                    !online.success && !offlineError.isNullOrBlank() ->
+                            "${online.errorMessage ?: "Online routing failed"} (offline: $offlineError)"
+                    else -> online.errorMessage
                 }
 
         return RoutePlan(

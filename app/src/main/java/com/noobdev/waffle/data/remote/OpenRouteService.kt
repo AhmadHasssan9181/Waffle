@@ -9,6 +9,7 @@ import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.ManeuverType
 import com.noobdev.waffle.core.navigation.cleanInstruction
 import java.util.concurrent.TimeUnit
+import kotlin.jvm.JvmSuppressWildcards
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -122,7 +123,7 @@ interface OpenRouteServiceApi {
         suspend fun postDirections(
                 @Path("profile") profile: String,
                 @Header("Authorization") apiKey: String,
-                @Body body: Map<String, Any>
+                @Body body: Map<String, @JvmSuppressWildcards Any>
         ): Response<DirectionsResponse>
 }
 
@@ -414,15 +415,15 @@ private suspend fun postRoutes(
                 avoidPolygons?.let { body["avoid_polygons"] = it }
                 val options = mutableMapOf<String, Any>()
                 if (avoidFeatures.isNotEmpty()) options["avoid_features"] = avoidFeatures
+                if (options.isNotEmpty()) body["options"] = options
                 if (alternatives > 1) {
-                        options["alternative_routes"] =
+                        body["alternative_routes"] =
                                 mapOf(
                                         "target_count" to alternatives,
                                         "weight_factor" to 1.6,
                                         "share_factor" to 0.6
                                 )
                 }
-                if (options.isNotEmpty()) body["options"] = options
 
                 var response =
                         ORSRetrofitInstance.api.postDirections(

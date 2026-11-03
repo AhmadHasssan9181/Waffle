@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -56,14 +57,17 @@ import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.network.NetworkState
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
 import com.noobdev.waffle.core.routing.RouteRepository
 import com.noobdev.waffle.core.routing.RouteSource
 import com.noobdev.waffle.design.theme.*
 import kotlin.math.max
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -166,18 +170,37 @@ fun GoogleSearchBar(
 
 @Composable
 fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
+        val context = LocalContext.current
         var suggestions by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
         var isLoading by remember { mutableStateOf(false) }
+        var onlineAttempted by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) { OfflineGeocoder.load(context) }
 
         LaunchedEffect(query) {
+                onlineAttempted = false
                 if (query.isBlank()) {
                         suggestions = getQuickCitySuggestions()
                 } else if (query.length >= 2) {
                         isLoading = true
-                        suggestions =
+                        if (!OfflineGeocoder.isLoaded) {
+                                withTimeoutOrNull(15_000) {
+                                        OfflineGeocoder.loaded.first { it }
+                                }
+                        }
+                        val offline =
                                 withContext(kotlinx.coroutines.Dispatchers.Default) {
                                         OfflineGeocoder.search(query)
                                 }
+                        Log.d("MapSearch", "query='$query' offline=${offline.size}")
+                        suggestions =
+                                if (offline.isEmpty() && NetworkState.isOnline(context)) {
+                                        onlineAttempted = true
+                                        searchLocations(query)
+                                } else {
+                                        offline
+                                }
+                        Log.d("MapSearch", "suggestions=${suggestions.size}")
                         isLoading = false
                 } else {
                         suggestions = emptyList()
@@ -239,7 +262,9 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                                 )
                                 ) {
                                         Text(
-                                                text = "No offline matches found",
+                                                text =
+                                                        if (onlineAttempted) "No matches found"
+                                                        else "No offline matches found",
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 style = MaterialTheme.typography.bodyMedium
                                         )
