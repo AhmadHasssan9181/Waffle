@@ -136,6 +136,10 @@ object GltfCarRenderer {
             lights: VehicleLights
     ) {
         val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
+        // The 3/4 camera sits slightly to the right of the model, so the rear of the
+        // body projects a little right of the bitmap centre. Nudge the rear lamp
+        // cluster to match the car instead of the bitmap.
+        val rearShift = 0.06f
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
         fun bar(dx: Float, dy: Float, halfWidth: Float, halfHeight: Float, color: Int, radius: Float) {
@@ -198,23 +202,26 @@ object GltfCarRenderer {
         }
 
         if (motorcycle) {
+            val rearX = rearShift * 0.8f
             if (lights.braking) {
-                glow(0f, 0.10f, 0.20f, Color.argb(110, 255, 25, 20))
+                glow(rearX, 0.10f, 0.20f, Color.argb(110, 255, 25, 20))
             }
-            bar(0f, 0.10f, 0.075f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
-            glow(0f, 0.10f, if (lights.braking) 0.16f else 0.06f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25))
+            bar(rearX, 0.10f, 0.075f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
+            glow(rearX, 0.10f, if (lights.braking) 0.16f else 0.06f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25))
         } else {
             if (lights.braking) {
                 // High-mount stop lamp on the rear window makes braking unmistakable.
-                bar(0f, 0.12f, 0.11f, 0.022f, Color.rgb(255, 45, 35), 0.01f)
-                glow(0f, 0.12f, 0.12f, Color.argb(160, 255, 25, 20))
+                val highX = rearShift
+                bar(highX, 0.12f, 0.11f, 0.022f, Color.rgb(255, 45, 35), 0.01f)
+                glow(highX, 0.12f, 0.12f, Color.argb(160, 255, 25, 20))
             }
             for (side in listOf(-1f, 1f)) {
+                val lampX = side * 0.15f + rearShift
                 if (lights.braking) {
-                    glow(side * 0.15f, 0.26f, 0.15f, Color.argb(120, 255, 25, 20))
+                    glow(lampX, 0.26f, 0.15f, Color.argb(120, 255, 25, 20))
                 }
-                bar(side * 0.15f, 0.26f, 0.07f, 0.035f, if (lights.braking) Color.rgb(255, 45, 35) else Color.argb(190, 230, 28, 28), 0.02f)
-                glow(side * 0.15f, 0.26f, if (lights.braking) 0.13f else 0.05f, if (lights.braking) Color.argb(220, 255, 30, 25) else Color.argb(85, 255, 30, 25))
+                bar(lampX, 0.26f, 0.07f, 0.035f, if (lights.braking) Color.rgb(255, 45, 35) else Color.argb(190, 230, 28, 28), 0.02f)
+                glow(lampX, 0.26f, if (lights.braking) 0.13f else 0.05f, if (lights.braking) Color.argb(220, 255, 30, 25) else Color.argb(85, 255, 30, 25))
             }
         }
 
@@ -226,18 +233,20 @@ object GltfCarRenderer {
                     if (lights.blinkOn) Color.rgb(255, 175, 35)
                     else Color.argb(120, 255, 150, 20)
             if (motorcycle) {
+                val rearX = side * 0.12f + rearShift * 0.8f
                 bar(side * 0.12f, -0.14f, 0.05f, 0.04f, amber, 0.02f)
-                bar(side * 0.12f, 0.08f, 0.05f, 0.04f, amber, 0.02f)
+                bar(rearX, 0.08f, 0.05f, 0.04f, amber, 0.02f)
                 if (lights.blinkOn) {
                     glow(side * 0.12f, -0.14f, 0.085f, Color.argb(160, 255, 175, 35))
-                    glow(side * 0.12f, 0.08f, 0.085f, Color.argb(160, 255, 175, 35))
+                    glow(rearX, 0.08f, 0.085f, Color.argb(160, 255, 175, 35))
                 }
             } else {
+                val rearX = side * 0.26f + rearShift
                 bar(side * 0.24f, -0.13f, 0.065f, 0.04f, amber, 0.02f)
-                bar(side * 0.26f, 0.26f, 0.045f, 0.035f, amber, 0.02f)
+                bar(rearX, 0.26f, 0.045f, 0.035f, amber, 0.02f)
                 if (lights.blinkOn) {
                     glow(side * 0.24f, -0.13f, 0.085f, Color.argb(160, 255, 175, 35))
-                    glow(side * 0.26f, 0.26f, 0.075f, Color.argb(160, 255, 175, 35))
+                    glow(rearX, 0.26f, 0.075f, Color.argb(160, 255, 175, 35))
                 }
             }
         }
