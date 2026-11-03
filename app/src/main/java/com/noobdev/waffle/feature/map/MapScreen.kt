@@ -111,6 +111,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val scope = rememberCoroutineScope()
         val preferencesManager = remember { PreferencesManager(context) }
         val speedUnit by preferencesManager.speedUnit.collectAsState(initial = SpeedUnit.KMH)
+        val vehicleIconKey by
+                preferencesManager.vehicleIcon.collectAsState(initial = "SEDAN")
+        val vehicleIcon = remember(vehicleIconKey) { VehicleIcon.fromKey(vehicleIconKey) }
 
         val shopsViewModel: MapShopsViewModel = viewModel()
         val mapShops by shopsViewModel.shops.collectAsState()
@@ -454,7 +457,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         lat = currentLat,
                         lng = currentLng,
                         bearing = currentBearing,
-                        travelMode = selectedProfile
+                        travelMode = selectedProfile,
+                        vehicleIcon = vehicleIcon
                 )
         }
 

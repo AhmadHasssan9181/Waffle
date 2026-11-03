@@ -41,15 +41,16 @@ internal fun Puck3D(
         lat: Double,
         lng: Double,
         bearing: Double,
-        travelMode: String
+        travelMode: String,
+        vehicleIcon: VehicleIcon = VehicleIcon.SEDAN
 ) {
     val context = LocalContext.current
-    val iconName = "puck-3d-$travelMode"
+    val iconName = "puck-3d-$travelMode-${vehicleIcon.storageKey}"
     val drawableRes =
             when (travelMode) {
                 "cycling-regular" -> R.drawable.ic_puck_bike_3d
                 "foot-walking" -> R.drawable.ic_puck_walk_3d
-                else -> R.drawable.ic_puck_car_3d
+                else -> vehicleIcon.drawable
             }
     val bitmap =
             remember(drawableRes) {

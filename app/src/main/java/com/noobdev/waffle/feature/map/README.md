@@ -11,7 +11,8 @@ The map tab. This is the most stateful screen in the app.
 | `MapLayersSheet.kt` | Bottom sheet with layer/style cards and the style picker. |
 | `MapGeometry.kt` | Route GeoJSON source updates, vanishing-trail trim, and distance-to-next-turn helpers. |
 | `MapStyles.kt` | MapTiler style URLs, `MapStyleResolver` (falls back to an installed offline layer), and `LocationAwareMap` (the AndroidView that owns the `MapView` lifecycle, travel-mode puck). |
-| `Puck3D.kt` | Extruded 3D navigation puck (car/bike/walk badge) as a rotating SymbolLayer. |
+| `Puck3D.kt` | 3D navigation puck: sedan/SUV/pickup/arrow sprites, plus bike/walk badges, rotated as a SymbolLayer. |
+| `VehicleIcon.kt` | Vehicle-icon choices and their drawable resources. |
 | `ParentMap.kt` | Simpler embedded map used by other screens. |
 | `MapFocus.kt` | One-shot hand-off: "show this place". Consumed by `MapScreen` on entry. |
 | `MapShops.kt` | Map amenity layer: vector category badges rasterised into MapLibre symbol images, clustered at low zoom, category chips with counts, OSM attribution. |
@@ -37,7 +38,8 @@ The map tab. This is the most stateful screen in the app.
   the full upcoming-steps sheet. The speed bubble can be tapped to switch km/h ↔ mph (persisted);
   the speed-limit sign reads OSM `maxspeed` from the bundled graph. Voice guidance speaks instruction
   changes, reroutes, wrong-way and stop-reached notices (mute button in the banner). The location
-  puck is a 3D extruded arrow with a car/bike/walk badge (`Puck3D`), rotated by the live bearing.
+  puck is a 3D low-poly car (sedan/SUV/pickup), arrow, or bike/walk badge (`Puck3D`), rotated by the
+  live bearing. Settings → Appearance → **Vehicle icon** opens the same chooser sheet as Google Maps.
 - Traffic/ETA: when `TOMTOM_API_KEY` is present, `TomTomTrafficRepository` samples TomTom Traffic
   Flow at the current position every 45 s. The ETA uses traffic speed, then GPS speed, then the route
   average, smoothed so it does not jump. The banner shows a Clear/Slow/Heavy/Road-closed chip. With

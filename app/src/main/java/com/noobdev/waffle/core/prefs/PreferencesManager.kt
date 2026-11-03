@@ -19,6 +19,7 @@ class PreferencesManager(private val context: Context) {
         private val THEME_KEY = stringPreferencesKey("app_theme")
         private val MAP_STYLE_INDEX_KEY = intPreferencesKey("map_style_index")
         private val SPEED_UNIT_KEY = stringPreferencesKey("speed_unit")
+        private val VEHICLE_ICON_KEY = stringPreferencesKey("vehicle_icon")
         private val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         private val FLOOD_ALERTS_KEY = booleanPreferencesKey("flood_alerts")
         private val EARTHQUAKE_ALERTS_KEY = booleanPreferencesKey("earthquake_alerts")
@@ -67,6 +68,19 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setSpeedUnit(unit: SpeedUnit) {
         context.dataStore.edit { preferences -> preferences[SPEED_UNIT_KEY] = unit.name }
+    }
+
+    // ============================================
+    // VEHICLE ICON
+    // ============================================
+
+    val vehicleIcon: Flow<String> =
+            context.dataStore.data.map { preferences ->
+                preferences[VEHICLE_ICON_KEY] ?: "SEDAN"
+            }
+
+    suspend fun setVehicleIcon(key: String) {
+        context.dataStore.edit { preferences -> preferences[VEHICLE_ICON_KEY] = key }
     }
 
     // ============================================
