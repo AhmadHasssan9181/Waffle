@@ -113,7 +113,9 @@ fun RoutePreviewCard(
         onRouteOptionsChange: (RouteOptions) -> Unit = {}
 ) {
         var showStopEditor by remember { mutableStateOf(false) }
-        val isDriving = selectedProfile == "driving-car"
+        val isCar = selectedProfile == "driving-car"
+        val isMotorcycle = selectedProfile == "driving-motorcycle"
+        val isDriving = isCar || isMotorcycle
         val isBiking = selectedProfile == "cycling-regular"
         val isWalking = selectedProfile == "foot-walking"
         val currentRoute =
@@ -667,7 +669,7 @@ fun RoutePreviewCard(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Route options - Drive / Bike / Walk
+                        // Route options - Drive / Moto / Bike / Walk
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -678,13 +680,13 @@ fun RoutePreviewCard(
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(20.dp),
                                         color =
-                                                if (isDriving)
+                                                if (isCar)
                                                         MaterialTheme.colorScheme.primary.copy(
                                                                 alpha = 0.10f
                                                         )
                                                 else MaterialTheme.colorScheme.surfaceVariant,
                                         border =
-                                                if (isDriving)
+                                                if (isCar)
                                                         BorderStroke(
                                                                 2.dp,
                                                                 MaterialTheme.colorScheme.primary
@@ -705,7 +707,7 @@ fun RoutePreviewCard(
                                                         Icons.Default.DirectionsCar,
                                                         null,
                                                         tint =
-                                                                if (isDriving)
+                                                                if (isCar)
                                                                         MaterialTheme.colorScheme
                                                                                 .primary
                                                                 else
@@ -721,7 +723,66 @@ fun RoutePreviewCard(
                                                         style =
                                                                 MaterialTheme.typography.labelMedium,
                                                         color =
-                                                                if (isDriving)
+                                                                if (isCar)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                                else
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                )
+                                        }
+                                }
+
+                                // Motorcycle option
+                                Surface(
+                                        onClick = { onProfileChange("driving-motorcycle") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(20.dp),
+                                        color =
+                                                if (isMotorcycle)
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.10f
+                                                        )
+                                                else MaterialTheme.colorScheme.surfaceVariant,
+                                        border =
+                                                if (isMotorcycle)
+                                                        BorderStroke(
+                                                                2.dp,
+                                                                MaterialTheme.colorScheme.primary
+                                                        )
+                                                else null
+                                ) {
+                                        Row(
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 8.dp,
+                                                                        vertical = 10.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                        ) {
+                                                Icon(
+                                                        Icons.Default.TwoWheeler,
+                                                        null,
+                                                        tint =
+                                                                if (isMotorcycle)
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary
+                                                                else
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant,
+                                                        modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(
+                                                        formatDuration(
+                                                                routeResult.durationSeconds
+                                                        ),
+                                                        style =
+                                                                MaterialTheme.typography.labelMedium,
+                                                        color =
+                                                                if (isMotorcycle)
                                                                         MaterialTheme.colorScheme
                                                                                 .primary
                                                                 else

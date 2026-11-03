@@ -66,6 +66,7 @@ object GltfCarRenderer {
             when (modelKey.uppercase()) {
                 "SUV" -> "suv-luxury.glb"
                 "PICKUP" -> "truck-flat.glb"
+                "MOTORCYCLE" -> "motorcycle.glb"
                 else -> "sedan-sports.glb"
             }
 
@@ -137,6 +138,31 @@ object GltfCarRenderer {
         return model
     }
 
+    private fun loadTexture(
+            context: Context,
+            json: JSONObject,
+            bufferViews: JSONArray,
+            bin: ByteArray
+    ): Bitmap? {
+        val images = json.optJSONArray("images") ?: return null
+        if (images.length() == 0) return null
+        val image = images.optJSONObject(0) ?: return null
+        if (image.has("bufferView")) {
+            val view = bufferViews.getJSONObject(image.getInt("bufferView"))
+            val offset = view.optInt("byteOffset", 0)
+            val length = view.getInt("byteLength")
+            if (offset < 0 || length <= 0 || offset + length > bin.size) return null
+            val bytes = bin.copyOfRange(offset, offset + length)
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }
+        val uri = image.optString("uri").trim()
+        if (uri.isEmpty()) return null
+        val name = uri.substringAfterLast('/')
+        return context.assets.open("$ASSET_DIR/$name").use {
+            BitmapFactory.decodeStream(it)
+        }
+    }
+
     private fun loadModel(context: Context, modelKey: String): Model? {
         val bytes = context.assets.open("$ASSET_DIR/${fileFor(modelKey)}").readBytes()
         if (bytes.size < 20) return null
@@ -154,12 +180,8 @@ object GltfCarRenderer {
         val bin = ByteArray(binLength)
         buffer.get(bin)
 
-        val texture =
-                context.assets.open("$ASSET_DIR/colormap.png").use {
-                    BitmapFactory.decodeStream(it)
-                }
-                        ?: return null
         val bufferViews = json.getJSONArray("bufferViews")
+        val texture = loadTexture(context, json, bufferViews, bin) ?: return null
         val accessors = json.getJSONArray("accessors")
         val meshes = json.getJSONArray("meshes")
         val nodes = json.getJSONArray("nodes")
@@ -329,6 +351,19 @@ object GltfCarRenderer {
                         if (primitive.has("indices")) readIndices(primitive.getInt("indices"))
                         else IntArray(positions.size / 3) { it }
                 val vertexCount = positions.size / 3
+                val hasNormals = attributes.has("NORMAL")
+                fun withFaceNormal(triangle: Triangle): Triangle {
+                    if (hasNormals) return triangle
+                    val ab = V3(triangle.b.x - triangle.a.x, triangle.b.y - triangle.a.y, triangle.b.z - triangle.a.z)
+                    val ac = V3(triangle.c.x - triangle.a.x, triangle.c.y - triangle.a.y, triangle.c.z - triangle.a.z)
+                    val normal = normalize(cross(ab, ac))
+                    return Triangle(
+                            triangle.a.copy(nx = normal.x, ny = normal.y, nz = normal.z),
+                            triangle.b.copy(nx = normal.x, ny = normal.y, nz = normal.z),
+                            triangle.c.copy(nx = normal.x, ny = normal.y, nz = normal.z),
+                            triangle.isWheel
+                    )
+                }
                 fun vertex(index: Int): V {
                     val p = transformPoint(transform, positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2])
                     val n = transformNormal(transform, normals[index * 3], normals[index * 3 + 1], normals[index * 3 + 2])
@@ -342,11 +377,13 @@ object GltfCarRenderer {
                 if (indices.isEmpty()) {
                     for (index in 0 until vertexCount step 3) {
                         triangles.add(
-                                Triangle(
-                                        vertex(index),
-                                        vertex(index + 1),
-                                        vertex(index + 2),
-                                        isWheel
+                                withFaceNormal(
+                                        Triangle(
+                                                vertex(index),
+                                                vertex(index + 1),
+                                                vertex(index + 2),
+                                                isWheel
+                                        )
                                 )
                         )
                     }
@@ -354,11 +391,13 @@ object GltfCarRenderer {
                     for (index in 0 until indices.size step 3) {
                         if (index + 2 >= indices.size) break
                         triangles.add(
-                                Triangle(
-                                        vertex(indices[index]),
-                                        vertex(indices[index + 1]),
-                                        vertex(indices[index + 2]),
-                                        isWheel
+                                withFaceNormal(
+                                        Triangle(
+                                                vertex(indices[index]),
+                                                vertex(indices[index + 1]),
+                                                vertex(indices[index + 2]),
+                                                isWheel
+                                        )
                                 )
                         )
                     }
@@ -367,6 +406,43 @@ object GltfCarRenderer {
         }
         if (triangles.isEmpty()) return null
 
+        var minX = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+        var minZ = Float.MAX_VALUE
+        var maxZ = -Float.MAX_VALUE
+        for (triangle in triangles) {
+            for (point in listOf(triangle.a, triangle.b, triangle.c)) {
+                minX = min(minX, point.x)
+                maxX = max(maxX, point.x)
+                minY = min(minY, point.y)
+                maxY = max(maxY, point.y)
+                minZ = min(minZ, point.z)
+                maxZ = max(maxZ, point.z)
+            }
+        }
+        val targetLength = if (modelKey == "MOTORCYCLE") 2.2f else 2.55f
+        val sourceLength = (maxZ - minZ).coerceAtLeast(0.001f)
+        val factor = targetLength / sourceLength
+        val centerX = (minX + maxX) / 2f
+        val centerZ = (minZ + maxZ) / 2f
+        fun scaled(point: V): V =
+                point.copy(
+                        x = (point.x - centerX) * factor,
+                        y = (point.y - minY) * factor,
+                        z = (point.z - centerZ) * factor
+                )
+        val scaledTriangles =
+                triangles.map { triangle ->
+                    Triangle(
+                            scaled(triangle.a),
+                            scaled(triangle.b),
+                            scaled(triangle.c),
+                            triangle.isWheel
+                    )
+                }
+
         val bodyHistogram = HashMap<Int, Int>()
         val wheelHistogram = HashMap<Int, Int>()
         fun sample(u: Float, v: Float): Int {
@@ -374,7 +450,7 @@ object GltfCarRenderer {
             val ty = ((v - floor(v)) * (texture.height - 1)).toInt().coerceIn(0, texture.height - 1)
             return texture.getPixel(tx, ty)
         }
-        for (triangle in triangles) {
+        for (triangle in scaledTriangles) {
             val u = (triangle.a.u + triangle.b.u + triangle.c.u) / 3f
             val v = (triangle.a.v + triangle.b.v + triangle.c.v) / 3f
             val color = sample(u, v)
@@ -395,17 +471,23 @@ object GltfCarRenderer {
                         }
                         .maxByOrNull { it.value }
                         ?.key
+        val isMotorcycle = modelKey == "MOTORCYCLE"
         val bodyTarget =
                 when (modelKey.uppercase()) {
                     "SUV" -> Color.rgb(232, 174, 38)
                     "PICKUP" -> Color.rgb(42, 126, 176)
+                    "MOTORCYCLE" -> Color.rgb(205, 65, 44)
                     else -> Color.rgb(205, 65, 44)
                 }
         return Model(
-                triangles = triangles,
+                triangles = scaledTriangles,
                 texture = texture,
-                bodyPaint = dominant(bodyHistogram, requireBright = true) ?: 0,
-                wheelPaint = dominant(wheelHistogram, requireBright = false) ?: 0,
+                bodyPaint =
+                        if (isMotorcycle) 0
+                        else dominant(bodyHistogram, requireBright = true) ?: 0,
+                wheelPaint =
+                        if (isMotorcycle) 0
+                        else dominant(wheelHistogram, requireBright = false) ?: 0,
                 bodyTarget = bodyTarget
         )
     }

@@ -37,7 +37,7 @@ internal fun Car3DOverlay(
         targetLat: Double,
         targetLng: Double,
         targetBearing: Double,
-        vehicleIcon: VehicleIcon,
+        modelKey: String,
         visible: Boolean,
         modifier: Modifier = Modifier
 ) {
@@ -104,7 +104,7 @@ internal fun Car3DOverlay(
                             centerY = point.y,
                             sizePx = sizePx,
                             bearingDegrees = relative,
-                            modelKey = vehicleIcon.storageKey
+                            modelKey = modelKey
                     )
             if (!drawn) {
                 Car3DRenderer.draw(
@@ -113,7 +113,7 @@ internal fun Car3DOverlay(
                         centerY = point.y,
                         sizePx = sizePx,
                         bearingDegrees = relative,
-                        modelKey = vehicleIcon.storageKey
+                        modelKey = modelKey
                 )
             }
         }

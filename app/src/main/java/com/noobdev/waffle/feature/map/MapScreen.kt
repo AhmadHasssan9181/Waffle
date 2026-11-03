@@ -168,11 +168,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
+        val isMotorcycleMode = selectedProfile == "driving-motorcycle"
         val use3DCar =
                 hasLocation &&
                         screenState == MapScreenState.NAVIGATING &&
-                        selectedProfile == "driving-car" &&
-                        vehicleIcon != VehicleIcon.ARROW
+                        (selectedProfile == "driving-car" || isMotorcycleMode) &&
+                        (isMotorcycleMode || vehicleIcon != VehicleIcon.ARROW)
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
         var offlineRouteDebugMessage by remember { mutableStateOf<String?>(null) }
@@ -202,6 +203,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         fun isWalkingProfile(profile: String): Boolean = profile == "foot-walking"
         fun isBikeProfile(profile: String): Boolean = profile == "cycling-regular"
+        fun isMotorcycleProfile(profile: String): Boolean = profile == "driving-motorcycle"
 
         fun offlineResponseToRouteResult(
                 response: com.graphhopper.GHResponse
@@ -242,11 +244,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 route.distanceMeters / route.durationSeconds
                         else if (selectedProfile == "driving-car") 11.0 else 1.4
                 val trafficSpeed = trafficFlow?.currentSpeedKmh?.div(3.6)
-                return when {
-                        trafficSpeed != null && trafficSpeed > 1.0 -> trafficSpeed
-                        currentSpeedMps > 2f -> currentSpeedMps.toDouble()
-                        else -> routeAverage.coerceAtLeast(1.0)
-                }
+                val trafficAdjusted =
+                        trafficSpeed
+                                ?.takeIf { it > 1.0 }
+                                ?.let {
+                                    (routeAverage * 0.7 + it * 0.3)
+                                            .coerceIn(
+                                                    routeAverage * 0.5,
+                                                    routeAverage * 1.5
+                                            )
+                                }
+                return trafficAdjusted ?: routeAverage.coerceAtLeast(1.0)
         }
         // Holds the last non-null route so NavigationModeUI never crashes during exit animation
         var lastNavigationRoute by remember { mutableStateOf<RouteResult?>(null) }
@@ -290,8 +298,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val stops = routeStops
                 val walking = isWalkingProfile(profile)
                 val biking = isBikeProfile(profile)
+                val motorcycle = isMotorcycleProfile(profile)
                 val planOptions =
-                        if (profile == "driving-car") routeOptions else RouteOptions()
+                        if (profile == "driving-car" || motorcycle) routeOptions
+                        else RouteOptions()
 
                 scope.launch {
                         if (walking) isLoadingWalk = true else isLoadingRoute = true
@@ -307,6 +317,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 when {
                                                         walking -> "foot"
                                                         biking -> "bike"
+                                                        motorcycle -> "driving-motorcycle"
                                                         else -> "car"
                                                 },
                                         hazards = HazardRegistry.active(),
@@ -738,10 +749,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val destination = selectedDestination ?: return
                 val walking = isWalkingProfile(selectedProfile)
                 val biking = isBikeProfile(selectedProfile)
+                val motorcycle = isMotorcycleProfile(selectedProfile)
                 val activeHazards = hazards
                 val session = navigationSessionId
                 val planOptions =
-                        if (selectedProfile == "driving-car") routeOptions else RouteOptions()
+                        if (selectedProfile == "driving-car" || motorcycle) routeOptions
+                        else RouteOptions()
 
                 isRerouting = true
                 if (wrongWay) wrongWayDetected = true
@@ -760,6 +773,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 when {
                                                         walking -> "foot"
                                                         biking -> "bike"
+                                                        motorcycle -> "driving-motorcycle"
                                                         else -> "car"
                                                 },
                                         hazards = activeHazards,
@@ -1930,6 +1944,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val destination = selectedDestination ?: return@LaunchedEffect
                 val isWalking = isWalkingProfile(selectedProfile)
                 val isBiking = isBikeProfile(selectedProfile)
+                val isMotorcycle = isMotorcycleProfile(selectedProfile)
                 val activeRoute = activeRouteFor(selectedProfile)
                 val currentIndex =
                         activeRoute?.coordinates?.indices?.minByOrNull { index ->
@@ -1941,7 +1956,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         } ?: -1
                 val viaStops = remainingStops(activeRoute, currentIndex)
                 val planOptions =
-                        if (selectedProfile == "driving-car") routeOptions else RouteOptions()
+                        if (selectedProfile == "driving-car" || isMotorcycle) routeOptions
+                        else RouteOptions()
 
                 isRerouting = true
                 navigationNotice = "Hazard ahead · finding a safe detour…"
@@ -1956,6 +1972,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 when {
                                                         isWalking -> "foot"
                                                         isBiking -> "bike"
+                                                        isMotorcycle -> "driving-motorcycle"
                                                         else -> "car"
                                                 },
                                         hazards = hazards,
@@ -2212,7 +2229,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 targetLat = currentLat,
                                 targetLng = currentLng,
                                 targetBearing = currentBearing,
-                                vehicleIcon = vehicleIcon,
+                                modelKey =
+                                        if (selectedProfile == "driving-motorcycle")
+                                                "MOTORCYCLE"
+                                        else vehicleIcon.storageKey,
                                 visible = true,
                                 modifier = Modifier.fillMaxSize()
                         )
@@ -2343,7 +2363,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 planTrip(selectedProfile)
                                         },
                                         alternatives =
-                                                if (selectedProfile == "driving-car")
+                                                if (selectedProfile == "driving-car" ||
+                                                                isMotorcycleMode
+                                                )
                                                         routeAlternatives
                                                 else emptyList(),
                                         selectedAlternativeIndex = selectedAlternativeIndex,

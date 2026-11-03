@@ -10,4 +10,10 @@ Models used by Waffle:
 - truck-flat.glb
 - colormap.png
 
-Credit is not required, but the source is credited here.
+Motorcycle
+https://www.get3dmodels.com/vehicles/motorcycle-2/
+Author: Quaternius
+License: Public domain / CC0 1.0
+- motorcycle.glb (texture embedded)
+
+Credit is not required, but the sources are credited here.

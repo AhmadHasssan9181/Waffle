@@ -116,6 +116,7 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
             when (profile.lowercase()) {
                 "foot", "foot-walking", "walking" -> "foot"
                 "bike", "cycling-regular", "cycling", "bicycle" -> "bike"
+                "motorcycle", "driving-motorcycle", "motorbike" -> "car"
                 else -> "car"
             }
 }

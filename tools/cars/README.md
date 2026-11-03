@@ -9,8 +9,12 @@ The packaged files are in `app/src/main/assets/cars/`:
 - `sedan-sports.glb`
 - `suv-luxury.glb`
 - `truck-flat.glb`
+- `motorcycle.glb` (Quaternius, embedded texture)
 - `colormap.png` (shared Kenney palette)
 - `LICENSE.txt`
+
+The motorcycle is from the Quaternius public-domain motorcycle model, via
+https://www.get3dmodels.com/vehicles/motorcycle-2/ (CC0).
 
 `GltfCarRenderer` parses the GLB meshes, node transforms, normals, UVs and the shared palette,
 then rasterises the car with a software z-buffer at the requested bearing. The model's body/wheel

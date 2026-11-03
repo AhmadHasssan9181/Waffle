@@ -46,6 +46,11 @@ object RouteRepository {
             options: RouteOptions = RouteOptions()
     ): RoutePlan {
         val detour = HazardDetourPlanner.plan(start, end, hazards)
+        val motorcycle = profile.lowercase() in setOf("motorcycle", "driving-motorcycle", "motorbike")
+        fun adjustDuration(result: RouteResult): RouteResult =
+                if (motorcycle && result.success)
+                        result.copy(durationSeconds = result.durationSeconds * 0.9)
+                else result
         var offlineError: String? = null
         val offlineCoverage =
                 OfflineRoutingManager.isWithinCoverage(start.latitude, start.longitude) &&
@@ -82,11 +87,12 @@ object RouteRepository {
                 val best = results.firstOrNull { it.success }
                 if (best != null) {
                     return RoutePlan(
-                            result = best,
+                            result = adjustDuration(best),
                             source = RouteSource.OFFLINE,
                             waypoints = detour.waypoints,
                             avoidedHazards = detour.avoidedHazards,
-                            alternatives = results.drop(1).filter { it.success }
+                            alternatives =
+                                    results.drop(1).filter { it.success }.map(::adjustDuration)
                     )
                 }
                 offlineError = results.firstOrNull()?.errorMessage ?: offlineError
@@ -129,12 +135,16 @@ object RouteRepository {
                 }
 
         return RoutePlan(
-                result = if (message == online.errorMessage) online else online.copy(errorMessage = message),
+                result =
+                        adjustDuration(
+                                if (message == online.errorMessage) online
+                                else online.copy(errorMessage = message)
+                        ),
                 source = if (online.success) RouteSource.ONLINE else RouteSource.NONE,
                 waypoints = detour.waypoints,
                 avoidedHazards = detour.avoidedHazards,
                 offlineError = offlineError,
-                alternatives = onlineResults.drop(1).filter { it.success }
+                alternatives = onlineResults.drop(1).filter { it.success }.map(::adjustDuration)
         )
     }
 
@@ -142,6 +152,7 @@ object RouteRepository {
             when (profile.lowercase()) {
                 "foot", "foot-walking", "walking" -> "foot-walking"
                 "bike", "cycling-regular", "cycling", "bicycle" -> "cycling-regular"
+                "motorcycle", "driving-motorcycle", "motorbike" -> "driving-car"
                 else -> "driving-car"
             }
 

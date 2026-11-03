@@ -202,11 +202,11 @@ class NavigationController(
                 if (activeRoute.durationSeconds > 0)
                         activeRoute.distanceMeters / activeRoute.durationSeconds
                 else if (profile == "foot-walking") 1.4 else 11.0
-        val liveSpeed =
-                if (speedMps > 2f) speedMps.toDouble() else routeAverage.coerceAtLeast(1.0)
-        val newDuration = remainingDistance / liveSpeed
+        // ETA is the route's average pace, not the instantaneous GPS speed. Otherwise a red
+        // light makes the ETA balloon and a fast stretch makes it collapse.
+        val newDuration = remainingDistance / routeAverage.coerceAtLeast(1.0)
         remainingDuration =
-                if (remainingDuration > 0) remainingDuration * 0.6 + newDuration * 0.4
+                if (remainingDuration > 0) remainingDuration * 0.7 + newDuration * 0.3
                 else newDuration
         arrived = remainingDistance < 25.0
         if (arrived && !arrivalAnnounced) {

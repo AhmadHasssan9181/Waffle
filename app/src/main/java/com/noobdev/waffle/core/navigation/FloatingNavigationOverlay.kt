@@ -703,8 +703,12 @@ class FloatingNavigationOverlay(
 
         val pixel = projection.project(nav.lat, nav.lng)
         if (pixel != null) {
-            if (nav.profile == "driving-car" && nav.vehicleIconKey != "ARROW") {
+            val isMotorcycle = nav.profile == "driving-motorcycle"
+            if ((nav.profile == "driving-car" || isMotorcycle) &&
+                            (isMotorcycle || nav.vehicleIconKey != "ARROW")
+            ) {
                 val carSize = (base.width * 0.22f).coerceIn(64f, 140f)
+                val modelKey = if (isMotorcycle) "MOTORCYCLE" else nav.vehicleIconKey
                 val drawn =
                         GltfCarRenderer.draw(
                                 context = context,
@@ -713,7 +717,7 @@ class FloatingNavigationOverlay(
                                 centerY = pixel.y,
                                 sizePx = carSize,
                                 bearingDegrees = 0f,
-                                modelKey = nav.vehicleIconKey
+                                modelKey = modelKey
                         )
                 if (!drawn) {
                     Car3DRenderer.draw(
@@ -722,7 +726,7 @@ class FloatingNavigationOverlay(
                             centerY = pixel.y,
                             sizePx = carSize,
                             bearingDegrees = 0f,
-                            modelKey = nav.vehicleIconKey
+                            modelKey = modelKey
                     )
                 }
             } else {
