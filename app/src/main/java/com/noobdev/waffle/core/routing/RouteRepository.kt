@@ -2,7 +2,7 @@ package com.noobdev.waffle.core.routing
 
 import com.noobdev.waffle.data.remote.NavigationStep
 import com.noobdev.waffle.data.remote.RouteResult
-import com.noobdev.waffle.data.remote.getRouteVia
+import com.noobdev.waffle.data.remote.getRoutesVia
 import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardDetourPlanner
 import com.noobdev.waffle.core.navigation.HazardZone
@@ -18,7 +18,8 @@ data class RoutePlan(
         val source: RouteSource,
         val waypoints: List<GeoPoint> = emptyList(),
         val avoidedHazards: List<HazardZone> = emptyList(),
-        val offlineError: String? = null
+        val offlineError: String? = null,
+        val alternatives: List<RouteResult> = emptyList()
 ) {
     val success: Boolean
         get() = result.success && source != RouteSource.NONE
@@ -41,52 +42,75 @@ object RouteRepository {
             end: GeoPoint,
             profile: String = "car",
             hazards: List<HazardZone> = emptyList(),
-            preferOffline: Boolean = true
+            preferOffline: Boolean = true,
+            options: RouteOptions = RouteOptions()
     ): RoutePlan {
         val detour = HazardDetourPlanner.plan(start, end, hazards)
         var offlineError: String? = null
 
-        if (preferOffline) {
+        // GraphHopper 1.0 has no avoid-toll/highway/ferry weighting. If the user asks for one,
+        // route online where ORS can honour it rather than silently ignoring the choice.
+        val useOffline = preferOffline && !options.needsOnline
+        if (useOffline) {
             OfflineRoutingManager.getEngineOrNull()?.let { engine ->
-                val offlineResult =
+                val results =
                         runCatching {
-                                    GraphHopperRouteMapper.toRouteResult(
-                                            engine.calculateRoute(
+                                    GraphHopperRouteMapper.toRouteResults(
+                                            engine.calculateRoutes(
                                                     start = start,
                                                     end = end,
                                                     profile = profile,
-                                                    waypoints = detour.waypoints
+                                                    waypoints = detour.waypoints,
+                                                    maxPaths =
+                                                            if (options.alternatives) 3 else 1
                                             )
                                     )
                                 }
                                 .getOrElse { throwable ->
                                     offlineError =
                                             throwable.message ?: throwable.javaClass.simpleName
-                                    null
+                                    emptyList()
                                 }
 
-                if (offlineResult?.success == true) {
+                val best = results.firstOrNull { it.success }
+                if (best != null) {
                     return RoutePlan(
-                            result = offlineResult,
+                            result = best,
                             source = RouteSource.OFFLINE,
                             waypoints = detour.waypoints,
-                            avoidedHazards = detour.avoidedHazards
+                            avoidedHazards = detour.avoidedHazards,
+                            alternatives = results.drop(1).filter { it.success }
                     )
                 }
-                offlineError = offlineResult?.errorMessage ?: offlineError
+                offlineError = results.firstOrNull()?.errorMessage ?: offlineError
             }
         }
 
-        val online =
-                getRouteVia(
+        val onlineResults =
+                getRoutesVia(
                         startLat = start.latitude,
                         startLng = start.longitude,
                         endLat = end.latitude,
                         endLng = end.longitude,
                         waypoints = detour.waypoints,
                         profile = orsProfile(profile),
-                        avoidHazards = detour.avoidedHazards
+                        avoidHazards = detour.avoidedHazards,
+                        avoidFeatures = options.avoidFeatures(),
+                        alternatives = if (options.alternatives) 3 else 0
                 )
+        val online =
+                onlineResults.firstOrNull()
+                        ?: RouteResult(
+                                distanceMeters = 0.0,
+                                durationSeconds = 0.0,
+                                coordinates = emptyList(),
+                                instructions = emptyList(),
+                                success = false,
+                                errorMessage =
+                                        if (options.needsOnline)
+                                                "Avoid options need an internet connection"
+                                        else "Online routing failed"
+                        )
 
         val message =
                 if (!online.success && !offlineError.isNullOrBlank()) {
@@ -100,7 +124,8 @@ object RouteRepository {
                 source = if (online.success) RouteSource.ONLINE else RouteSource.NONE,
                 waypoints = detour.waypoints,
                 avoidedHazards = detour.avoidedHazards,
-                offlineError = offlineError
+                offlineError = offlineError,
+                alternatives = onlineResults.drop(1).filter { it.success }
         )
     }
 
@@ -124,14 +149,15 @@ object RouteRepository {
             stops: List<GeoPoint>,
             profile: String = "car",
             hazards: List<HazardZone> = emptyList(),
-            preferOffline: Boolean = true
+            preferOffline: Boolean = true,
+            options: RouteOptions = RouteOptions()
     ): RoutePlan {
-        if (stops.isEmpty()) return plan(start, end, profile, hazards, preferOffline)
+        if (stops.isEmpty()) return plan(start, end, profile, hazards, preferOffline, options)
 
         val legs = ArrayList<RoutePlan>(stops.size + 1)
         var from = start
         for (to in stops + end) {
-            val leg = plan(from, to, profile, hazards, preferOffline)
+            val leg = plan(from, to, profile, hazards, preferOffline, options)
             if (!leg.success) return leg
             legs += leg
             from = to

@@ -64,6 +64,7 @@ import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.prefs.SpeedUnit
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
+import com.noobdev.waffle.core.routing.RouteOptions
 import com.noobdev.waffle.core.routing.RoutePlan
 import com.noobdev.waffle.core.routing.RouteRepository
 import com.noobdev.waffle.core.routing.RouteSource
@@ -160,6 +161,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var showStopPicker by remember { mutableStateOf(false) }
         var stopPickerCategory by remember { mutableStateOf<ShopCategory?>(null) }
         var routeResult by remember { mutableStateOf<RouteResult?>(null) }
+        var routeAlternatives by remember { mutableStateOf<List<RouteResult>>(emptyList()) }
+        var selectedAlternativeIndex by remember { mutableStateOf(0) }
+        var routeOptions by remember { mutableStateOf(RouteOptions()) }
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var selectedProfile by remember { mutableStateOf("driving-car") }
@@ -275,6 +279,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val stops = routeStops
                 val walking = isWalkingProfile(profile)
                 val biking = isBikeProfile(profile)
+                val planOptions =
+                        if (profile == "driving-car") routeOptions else RouteOptions()
 
                 scope.launch {
                         if (walking) isLoadingWalk = true else isLoadingRoute = true
@@ -293,18 +299,23 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         else -> "car"
                                                 },
                                         hazards = HazardRegistry.active(),
-                                        stops = stops.map { GeoPoint(it.lat, it.lng) }
+                                        stops = stops.map { GeoPoint(it.lat, it.lng) },
+                                        options = planOptions
                                 )
 
                         if (plan != null && plan.success) {
                                 selectedProfile = profile
                                 if (walking) {
                                         walkRouteResult = plan.result
+                                        routeAlternatives = emptyList()
                                 } else if (biking) {
                                         bikeRouteResult = plan.result
+                                        routeAlternatives = emptyList()
                                 } else {
                                         routeResult = plan.result
+                                        routeAlternatives = listOf(plan.result) + plan.alternatives
                                 }
+                                selectedAlternativeIndex = 0
                                 if (!walking) walkRouteResult = null
                                 if (!biking) bikeRouteResult = null
                                 activeRouteSource = plan.source
@@ -692,6 +703,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val biking = isBikeProfile(selectedProfile)
                 val activeHazards = hazards
                 val session = navigationSessionId
+                val planOptions =
+                        if (selectedProfile == "driving-car") routeOptions else RouteOptions()
 
                 isRerouting = true
                 if (wrongWay) wrongWayDetected = true
@@ -713,7 +726,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         else -> "car"
                                                 },
                                         hazards = activeHazards,
-                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) }
+                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) },
+                                        options = planOptions
                                 )
 
                         // The driver may have exited or started a new trip while we were planning.
@@ -1889,6 +1903,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 )
                         } ?: -1
                 val viaStops = remainingStops(activeRoute, currentIndex)
+                val planOptions =
+                        if (selectedProfile == "driving-car") routeOptions else RouteOptions()
 
                 isRerouting = true
                 navigationNotice = "Hazard ahead · finding a safe detour…"
@@ -1906,7 +1922,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         else -> "car"
                                                 },
                                         hazards = hazards,
-                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) }
+                                        stops = viaStops.map { GeoPoint(it.lat, it.lng) },
+                                        options = planOptions
                                 )
 
                         if (plan != null && plan.success) {
@@ -2274,6 +2291,31 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         },
                                         onReorderStops = { newStops ->
                                                 routeStops = newStops
+                                                planTrip(selectedProfile)
+                                        },
+                                        alternatives =
+                                                if (selectedProfile == "driving-car")
+                                                        routeAlternatives
+                                                else emptyList(),
+                                        selectedAlternativeIndex = selectedAlternativeIndex,
+                                        onAlternativeSelected = { index ->
+                                                routeAlternatives.getOrNull(index)?.let {
+                                                        alternative ->
+                                                        routeResult = alternative
+                                                        selectedAlternativeIndex = index
+                                                        navigationInstructions =
+                                                                alternative.instructions
+                                                        currentInstructionIndex = 0
+                                                        lastNavigationRoute = alternative
+                                                        remainingDistance =
+                                                                alternative.distanceMeters
+                                                        remainingDuration =
+                                                                alternative.durationSeconds
+                                                }
+                                        },
+                                        routeOptions = routeOptions,
+                                        onRouteOptionsChange = { options ->
+                                                routeOptions = options
                                                 planTrip(selectedProfile)
                                         },
                                         onStartNavigation = {
@@ -2886,7 +2928,8 @@ private suspend fun planRouteOffMain(
         destinationLng: Double,
         profile: String,
         hazards: List<HazardZone>,
-        stops: List<GeoPoint> = emptyList()
+        stops: List<GeoPoint> = emptyList(),
+        options: RouteOptions = RouteOptions()
 ): RoutePlan? =
         withContext(Dispatchers.Default) {
                 try {
@@ -2895,7 +2938,8 @@ private suspend fun planRouteOffMain(
                                 end = GeoPoint(destinationLat, destinationLng),
                                 stops = stops,
                                 profile = profile,
-                                hazards = hazards
+                                hazards = hazards,
+                                options = options
                         )
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         throw cancelled

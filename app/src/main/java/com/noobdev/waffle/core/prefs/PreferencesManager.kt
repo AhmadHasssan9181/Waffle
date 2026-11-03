@@ -20,6 +20,7 @@ class PreferencesManager(private val context: Context) {
         private val MAP_STYLE_INDEX_KEY = intPreferencesKey("map_style_index")
         private val SPEED_UNIT_KEY = stringPreferencesKey("speed_unit")
         private val VEHICLE_ICON_KEY = stringPreferencesKey("vehicle_icon")
+        private val NAV_VOICE_ENABLED_KEY = booleanPreferencesKey("nav_voice_enabled")
         private val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         private val FLOOD_ALERTS_KEY = booleanPreferencesKey("flood_alerts")
         private val EARTHQUAKE_ALERTS_KEY = booleanPreferencesKey("earthquake_alerts")
@@ -81,6 +82,19 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setVehicleIcon(key: String) {
         context.dataStore.edit { preferences -> preferences[VEHICLE_ICON_KEY] = key }
+    }
+
+    // ============================================
+    // NAVIGATION VOICE
+    // ============================================
+
+    val voiceEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences ->
+                preferences[NAV_VOICE_ENABLED_KEY] ?: true
+            }
+
+    suspend fun setVoiceEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[NAV_VOICE_ENABLED_KEY] = enabled }
     }
 
     // ============================================

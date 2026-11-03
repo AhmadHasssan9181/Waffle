@@ -21,6 +21,7 @@ fun secret(name: String): String =
                 .replace("\"", "\\\"")
 
 android {
+    testOptions { unitTests.isReturnDefaultValues = true }
     namespace = "com.noobdev.waffle"
     val buildingBundle =
             gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }

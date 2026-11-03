@@ -54,11 +54,18 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.Q)
     private val backgroundLocationPermission = Manifest.permission.ACCESS_BACKGROUND_LOCATION
 
+    private var pendingPip = false
+    private var leavingForFloating = false
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra("open_navigation", false)) {
             NavigationSession.requestOpenMap()
+        }
+        if (intent.getBooleanExtra("enter_pip", false)) {
+            pendingPip = true
+            enterPipIfRequested()
         }
     }
 
@@ -71,18 +78,11 @@ class MainActivity : ComponentActivity() {
         // capped to a small rectangle on many devices. Use it when the user has granted
         // "display over other apps"; otherwise fall back to system PiP and ask for it.
         if (Settings.canDrawOverlays(this)) {
+            leavingForFloating = true
             NavigationService.showFloating(this)
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            runCatching {
-                enterPictureInPictureMode(
-                        PictureInPictureParams.Builder()
-                                .setAspectRatio(Rational(3, 2))
-                                .build()
-                )
-            }
-        }
+        enterSystemPip()
         Toast.makeText(
                         this,
                         "Allow display over other apps for the large floating map",
@@ -99,9 +99,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun enterSystemPip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        runCatching {
+            enterPictureInPictureMode(
+                    PictureInPictureParams.Builder()
+                            .setAspectRatio(Rational(3, 2))
+                            .build()
+            )
+        }
+    }
+
+    private fun enterPipIfRequested() {
+        if (!pendingPip) return
+        if (!NavigationSession.isActive()) {
+            pendingPip = false
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            pendingPip = false
+            return
+        }
+        val entered =
+                runCatching {
+                            enterPictureInPictureMode(
+                                    PictureInPictureParams.Builder()
+                                            .setAspectRatio(Rational(3, 2))
+                                            .build()
+                            )
+                        }
+                        .getOrDefault(false)
+        if (entered) pendingPip = false
+    }
+
     override fun onResume() {
         super.onResume()
-        if (NavigationSession.isActive()) NavigationService.hideFloating(this)
+        // Do not immediately hide a floating map that was just requested by pressing Home.
+        if (!leavingForFloating && NavigationSession.isActive()) {
+            NavigationService.hideFloating(this)
+        }
+        enterPipIfRequested()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // The activity has really left; the next resume is the user opening the app again.
+        leavingForFloating = false
     }
 
     override fun onPictureInPictureModeChanged(
@@ -122,7 +165,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize MapLibre
+        if (intent?.getBooleanExtra("enter_pip", false) == true) {
+            pendingPip = true
+        }
+
+        // Initialize MapLibre (idempotent; the Application also does it for the service).
         MapLibre.getInstance(this, BuildConfig.MAPTILER_API_KEY, WellKnownTileServer.MapLibre)
 
         // Initialize Preferences Manager

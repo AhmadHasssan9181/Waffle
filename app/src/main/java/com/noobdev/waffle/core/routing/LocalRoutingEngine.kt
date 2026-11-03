@@ -49,6 +49,18 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
             end: GeoPoint,
             profile: String = "car",
             waypoints: List<GeoPoint> = emptyList()
+    ): GHResponse = calculateRoutes(start, end, profile, waypoints, maxPaths = 1)
+
+    /**
+     * Plans the best route plus optional alternatives. GraphHopper 1.0's `alternative_route`
+     * algorithm works with the CH graph that ships in the APK.
+     */
+    fun calculateRoutes(
+            start: GeoPoint,
+            end: GeoPoint,
+            profile: String = "car",
+            waypoints: List<GeoPoint> = emptyList(),
+            maxPaths: Int = 3
     ): GHResponse {
         val points = ArrayList<GHPoint>(waypoints.size + 2)
         points.add(GHPoint(start.latitude, start.longitude))
@@ -56,11 +68,28 @@ class LocalRoutingEngine(graphFolderAbsolutePath: String) {
         points.add(GHPoint(end.latitude, end.longitude))
 
         val normalizedProfile = normalizeProfile(profile)
-        val request = GHRequest(points).apply {
-            setProfile(normalizedProfile)
-            setLocale("en")
+        val request =
+                GHRequest(points).apply {
+                    setProfile(normalizedProfile)
+                    setLocale("en")
+                    if (maxPaths > 1) {
+                        setAlgorithm("alternative_route")
+                        putHint("alternative_route.max_paths", maxPaths)
+                        putHint("alternative_route.max_weight_factor", 1.6)
+                        putHint("alternative_route.max_share_factor", 0.6)
+                    }
+                }
+        val response = hopper.route(request)
+        if (maxPaths > 1 && response.hasErrors()) {
+            // A graph without alternative-route support must still return the best route.
+            val fallback =
+                    GHRequest(points).apply {
+                        setProfile(normalizedProfile)
+                        setLocale("en")
+                    }
+            return hopper.route(fallback)
         }
-        return hopper.route(request)
+        return response
     }
 
     /**

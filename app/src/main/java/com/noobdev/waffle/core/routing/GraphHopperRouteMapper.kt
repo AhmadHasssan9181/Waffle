@@ -1,8 +1,10 @@
 package com.noobdev.waffle.core.routing
 
 import com.graphhopper.GHResponse
+import com.graphhopper.ResponsePath
 import com.graphhopper.util.Instruction
 import com.noobdev.waffle.core.navigation.ManeuverType
+import com.noobdev.waffle.core.navigation.hasNonLatinLetters
 import com.noobdev.waffle.data.remote.NavigationStep
 import com.noobdev.waffle.data.remote.RouteResult
 import kotlin.math.abs
@@ -13,7 +15,11 @@ import kotlin.math.abs
  */
 object GraphHopperRouteMapper {
 
-    fun toRouteResult(response: GHResponse): RouteResult {
+    fun toRouteResult(response: GHResponse): RouteResult =
+            toRouteResults(response).firstOrNull() ?: failure("No route found")
+
+    /** Best route first, followed by any alternatives GraphHopper produced. */
+    fun toRouteResults(response: GHResponse): List<RouteResult> {
         if (response.hasErrors()) {
             val message =
                     response.errors
@@ -21,12 +27,16 @@ object GraphHopperRouteMapper {
                             .filter { it.isNotBlank() }
                             .joinToString("; ")
                             .ifBlank { "Offline route failed" }
-            return failure(message)
+            return listOf(failure(message))
         }
+        val paths = response.all
+        if (paths.isEmpty()) return listOf(failure("No route found"))
+        return paths.mapNotNull { path -> toRouteResult(path) }
+    }
 
-        val best = runCatching { response.best }.getOrNull() ?: return failure("No route found")
-        val pointList = best.points
-        if (pointList.size < 2) return failure("Offline route has no geometry")
+    private fun toRouteResult(path: ResponsePath): RouteResult? {
+        val pointList = path.points
+        if (pointList.size < 2) return null
 
         val coordinates = ArrayList<Pair<Double, Double>>(pointList.size)
         for (index in 0 until pointList.size) {
@@ -35,7 +45,7 @@ object GraphHopperRouteMapper {
 
         val instructions = mutableListOf<String>()
         val steps = mutableListOf<NavigationStep>()
-        val instructionList = best.instructions
+        val instructionList = path.instructions
         for (index in 0 until instructionList.size) {
             val instruction = instructionList.get(index)
             val text = describe(instruction)
@@ -62,8 +72,8 @@ object GraphHopperRouteMapper {
         }
 
         return RouteResult(
-                distanceMeters = best.distance,
-                durationSeconds = best.time / 1000.0,
+                distanceMeters = path.distance,
+                durationSeconds = path.time / 1000.0,
                 coordinates = coordinates,
                 instructions = instructions,
                 steps = steps,
@@ -117,7 +127,8 @@ object GraphHopperRouteMapper {
                 }
 
         val road = instruction.name?.trim().orEmpty()
-        return if (road.isEmpty()) action else "$action onto $road"
+        val latinRoad = road.takeUnless { it.hasNonLatinLetters() }.orEmpty()
+        return if (latinRoad.isEmpty()) action else "$action onto $latinRoad"
     }
 
     private fun nearestIndex(

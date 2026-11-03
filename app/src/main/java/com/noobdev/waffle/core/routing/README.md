@@ -4,10 +4,11 @@ Route planning with a strict order: **offline first, online second**.
 
 | File | Responsibility |
 | --- | --- |
-| `RouteRepository.kt` | Public entry point. Tries the bundled GraphHopper graph, falls back to OpenRouteService, then applies hazard avoidance. `planWithStops` plans each leg and `mergeRoutePlans` stitches them. |
+| `RouteRepository.kt` | Public entry point. Tries the bundled GraphHopper graph, falls back to OpenRouteService, then applies hazard avoidance. `planWithStops` plans each leg and `mergeRoutePlans` stitches them. Also carries alternate routes and the user's avoid options. |
+| `RouteOptions.kt` | Avoid tolls/highways/ferries and alternates. Avoid options force the online ORS path because GraphHopper 1.0 has no avoid weighting. |
 | `OfflineRoutingManager.kt` | Copies the graph from assets to internal storage once, then opens it. |
-| `LocalRoutingEngine.kt` | GraphHopper wrapper. Profiles must match the graph exactly. |
-| `GraphHopperRouteMapper.kt` | Converts a GraphHopper `Path` into the app's `RouteResult` + `NavigationStep`s. |
+| `LocalRoutingEngine.kt` | GraphHopper wrapper. Profiles must match the graph exactly. `calculateRoutes` uses `alternative_route` with the CH graph and falls back to the best route if the algorithm is unavailable. |
+| `GraphHopperRouteMapper.kt` | Converts every GraphHopper `ResponsePath` into the app's `RouteResult` + `NavigationStep`s. |
 
 **GraphHopper is pinned to 1.0.** It is the last release with offline support and the bundled graph
 in `app/src/main/assets/graph-cache/` was built with it. Do not bump the version without rebuilding

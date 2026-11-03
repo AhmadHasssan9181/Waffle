@@ -56,10 +56,14 @@ import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
+import com.noobdev.waffle.core.navigation.LaneGuidanceRepository
+import com.noobdev.waffle.core.navigation.LaneHint
 import com.noobdev.waffle.core.navigation.ManeuverType
 import com.noobdev.waffle.core.navigation.NavigationManager
+import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.prefs.SpeedUnit
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
 import com.noobdev.waffle.core.routing.RouteRepository
@@ -68,6 +72,7 @@ import com.noobdev.waffle.design.theme.*
 import kotlin.math.max
 import kotlin.math.roundToInt
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,8 +114,35 @@ fun NavigationModeUI(
 ) {
         val approaching = distanceToNextTurn in 1.0..180.0
         val context = LocalContext.current
+        val preferencesManager = remember { PreferencesManager(context.applicationContext) }
+        val voiceEnabled by preferencesManager.voiceEnabled.collectAsState(initial = true)
+        val scope = rememberCoroutineScope()
         var showSteps by remember { mutableStateOf(false) }
-        var voiceEnabled by remember { mutableStateOf(true) }
+        var laneHint by remember { mutableStateOf<LaneHint?>(null) }
+
+        LaunchedEffect(routeResult, currentIndex) {
+                laneHint = null
+                val step = routeResult.steps.getOrNull(currentIndex) ?: return@LaunchedEffect
+                val index = step.wayPointIndex.coerceIn(0, routeResult.coordinates.lastIndex)
+                val point = routeResult.coordinates.getOrNull(index) ?: return@LaunchedEffect
+                val previous =
+                        routeResult.coordinates.getOrNull((index - 1).coerceAtLeast(0)) ?: point
+                val bearing =
+                        CameraTransitionManager.calculateBearing(
+                                LatLng(previous.first, previous.second),
+                                LatLng(point.first, point.second)
+                        )
+                laneHint =
+                        withContext(Dispatchers.IO) {
+                                LaneGuidanceRepository.ensureLoaded(context)
+                                LaneGuidanceRepository.hintAt(
+                                        point.first,
+                                        point.second,
+                                        bearing,
+                                        step.maneuver
+                                )
+                        }
+        }
         var ttsReady by remember { mutableStateOf(false) }
         var lastSpokenInstruction by remember { mutableStateOf("") }
         var lastSpokenNotice by remember { mutableStateOf<String?>(null) }
@@ -141,6 +173,8 @@ fun NavigationModeUI(
         }
         LaunchedEffect(currentInstruction, voiceEnabled, ttsReady) {
                 if (!voiceEnabled || !ttsReady) return@LaunchedEffect
+                // Real navigation is spoken by NavigationService, even with the screen off.
+                if (NavigationSession.isActive()) return@LaunchedEffect
                 val text = currentInstruction.trim()
                 if (text.isEmpty() || text == lastSpokenInstruction) return@LaunchedEffect
                 lastSpokenInstruction = text
@@ -152,6 +186,7 @@ fun NavigationModeUI(
         }
         LaunchedEffect(navigationNotice, voiceEnabled, ttsReady) {
                 if (!voiceEnabled || !ttsReady) return@LaunchedEffect
+                if (NavigationSession.isActive()) return@LaunchedEffect
                 val notice = navigationNotice ?: return@LaunchedEffect
                 if (notice == lastSpokenNotice) return@LaunchedEffect
                 val phrase =
@@ -315,6 +350,10 @@ fun NavigationModeUI(
                                                                 fontWeight = FontWeight.SemiBold
                                                         )
                                                 }
+                                                laneHint?.let { hint ->
+                                                        Spacer(Modifier.height(4.dp))
+                                                        LaneHintRow(hint)
+                                                }
                                         }
                                         if (!isInPip) {
                                                 IconButton(onClick = { showSteps = true }) {
@@ -327,7 +366,13 @@ fun NavigationModeUI(
                                                         )
                                                 }
                                                 IconButton(
-                                                        onClick = { voiceEnabled = !voiceEnabled }
+                                                        onClick = {
+                                                        scope.launch {
+                                                                preferencesManager.setVoiceEnabled(
+                                                                        !voiceEnabled
+                                                                )
+                                                        }
+                                                }
                                                 ) {
                                                         Icon(
                                                                 if (voiceEnabled)
@@ -861,3 +906,57 @@ fun getDirectionIcon(
 // ============================================
 // MAP LAYERS SHEET
 // ============================================
+
+@Composable
+private fun LaneHintRow(hint: LaneHint) {
+        Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+        ) {
+                Text(
+                        "Lanes",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(2.dp))
+                hint.arrows.forEachIndexed { index, arrow ->
+                        val active = index in hint.activeLanes
+                        Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color =
+                                        if (active)
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                        else
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                        alpha = 0.45f
+                                                ),
+                                border =
+                                        if (active)
+                                                BorderStroke(
+                                                        1.dp,
+                                                        MaterialTheme.colorScheme.primary
+                                                )
+                                        else null
+                        ) {
+                                Text(
+                                        text = arrow,
+                                        modifier =
+                                                Modifier.padding(
+                                                        horizontal = 7.dp,
+                                                        vertical = 1.dp
+                                                ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color =
+                                                if (active)
+                                                        MaterialTheme.colorScheme.primary
+                                                else
+                                                        MaterialTheme.colorScheme
+                                                                .onSurfaceVariant,
+                                        fontWeight =
+                                                if (active) FontWeight.Bold
+                                                else FontWeight.Normal
+                                )
+                        }
+                }
+        }
+}

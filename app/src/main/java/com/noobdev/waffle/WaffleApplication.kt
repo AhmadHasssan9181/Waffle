@@ -7,10 +7,13 @@ import com.noobdev.waffle.feature.alerts.data.EmergencySyncScheduler
 import com.noobdev.waffle.data.local.AlertRepository
 import com.noobdev.waffle.data.local.AppDatabase
 import com.noobdev.waffle.core.navigation.HazardRegistry
+import com.noobdev.waffle.core.navigation.LaneGuidanceRepository
 import com.noobdev.waffle.core.notifications.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.maplibre.android.MapLibre
+import org.maplibre.android.WellKnownTileServer
 
 class WaffleApplication : Application() {
 
@@ -26,6 +29,10 @@ class WaffleApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // The navigation foreground service can create the floating map after the activity is
+        // gone, so MapLibre must be initialised at process start, not only in MainActivity.
+        MapLibre.getInstance(this, BuildConfig.MAPTILER_API_KEY, WellKnownTileServer.MapLibre)
+
         database = AppDatabase.getDatabase(this)
         repository = AlertRepository(database.alertDao(), this)
         notificationHelper = NotificationHelper(this)
@@ -38,6 +45,7 @@ class WaffleApplication : Application() {
                 HazardRegistry.updateFromAlerts(cached)
                 Log.d("WaffleApplication", "Loaded ${cached.size} cached alerts into hazard registry")
             }
+            runCatching { LaneGuidanceRepository.ensureLoaded(this@WaffleApplication) }
         }
         EmergencySyncScheduler.schedule(this)
         EmergencySyncScheduler.syncNow(this)

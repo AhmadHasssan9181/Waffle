@@ -7,6 +7,7 @@ import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.ManeuverType
+import com.noobdev.waffle.core.navigation.cleanInstruction
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -211,23 +212,25 @@ suspend fun getRoute(
 
                                         feature.properties?.segments?.forEach { segment ->
                                                 segment.steps?.forEach { step ->
-                                                        instructions.add(step.instruction)
+                                                        val maneuver = orsManeuver(step.type)
+                                                        val instruction =
+                                                                cleanInstruction(
+                                                                        step.instruction,
+                                                                        maneuver
+                                                                )
+                                                        instructions.add(instruction)
                                                         // ORS returns way_points as [startIndex,
                                                         // endIndex]
                                                         val startIndex =
                                                                 step.wayPoints?.firstOrNull() ?: 0
                                                         navigationSteps.add(
                                                                 NavigationStep(
-                                                                        instruction =
-                                                                                step.instruction,
+                                                                        instruction = instruction,
                                                                         distance = step.distance,
                                                                         duration = step.duration,
                                                                         type = step.type,
                                                                         wayPointIndex = startIndex,
-                                                                        maneuver =
-                                                                                orsManeuver(
-                                                                                        step.type
-                                                                                )
+                                                                        maneuver = maneuver
                                                                 )
                                                         )
                                                 }
@@ -299,8 +302,35 @@ suspend fun getRouteVia(
         endLng: Double,
         waypoints: List<GeoPoint> = emptyList(),
         profile: String = "driving-car",
-        avoidHazards: List<HazardZone> = emptyList()
-): RouteResult {
+        avoidHazards: List<HazardZone> = emptyList(),
+        avoidFeatures: List<String> = emptyList(),
+        alternatives: Int = 0
+): RouteResult =
+        getRoutesVia(
+                        startLat = startLat,
+                        startLng = startLng,
+                        endLat = endLat,
+                        endLng = endLng,
+                        waypoints = waypoints,
+                        profile = profile,
+                        avoidHazards = avoidHazards,
+                        avoidFeatures = avoidFeatures,
+                        alternatives = alternatives
+                )
+                .firstOrNull()
+                ?: failedRoute("No route found")
+
+suspend fun getRoutesVia(
+        startLat: Double,
+        startLng: Double,
+        endLat: Double,
+        endLng: Double,
+        waypoints: List<GeoPoint> = emptyList(),
+        profile: String = "driving-car",
+        avoidHazards: List<HazardZone> = emptyList(),
+        avoidFeatures: List<String> = emptyList(),
+        alternatives: Int = 0
+): List<RouteResult> {
         val coordinates = ArrayList<List<Double>>(waypoints.size + 2)
         coordinates.add(listOf(startLng, startLat))
         waypoints.forEach { coordinates.add(listOf(it.longitude, it.latitude)) }
@@ -329,7 +359,7 @@ suspend fun getRouteVia(
                                         }
                         )
 
-        return postRoute(profile, coordinates, avoidPolygons)
+        return postRoutes(profile, coordinates, avoidPolygons, avoidFeatures, alternatives)
 }
 
 /**
@@ -354,22 +384,26 @@ suspend fun getRouteAvoidingFloodZones(
                         mapOf("type" to "MultiPolygon", "coordinates" to avoidAreas)
                 }
 
-        return postRoute(
-                profile = "driving-car",
-                coordinates =
-                        listOf(
-                                listOf(startLng, startLat),
-                                listOf(endLng, endLat)
-                        ),
-                avoidPolygons = avoidPolygons
-        )
+        return postRoutes(
+                        profile = "driving-car",
+                        coordinates =
+                                listOf(
+                                        listOf(startLng, startLat),
+                                        listOf(endLng, endLat)
+                                ),
+                        avoidPolygons = avoidPolygons
+                )
+                .firstOrNull()
+                ?: failedRoute("No route found")
 }
 
-private suspend fun postRoute(
+private suspend fun postRoutes(
         profile: String,
         coordinates: List<List<Double>>,
-        avoidPolygons: Map<String, Any>?
-): RouteResult = withContext(Dispatchers.IO) {
+        avoidPolygons: Map<String, Any>?,
+        avoidFeatures: List<String> = emptyList(),
+        alternatives: Int = 0
+): List<RouteResult> = withContext(Dispatchers.IO) {
         try {
                 val body =
                         mutableMapOf<String, Any>(
@@ -378,6 +412,17 @@ private suspend fun postRoute(
                                 "units" to "m"
                         )
                 avoidPolygons?.let { body["avoid_polygons"] = it }
+                val options = mutableMapOf<String, Any>()
+                if (avoidFeatures.isNotEmpty()) options["avoid_features"] = avoidFeatures
+                if (alternatives > 1) {
+                        options["alternative_routes"] =
+                                mapOf(
+                                        "target_count" to alternatives,
+                                        "weight_factor" to 1.6,
+                                        "share_factor" to 0.6
+                                )
+                }
+                if (options.isNotEmpty()) body["options"] = options
 
                 var response =
                         ORSRetrofitInstance.api.postDirections(
@@ -403,52 +448,56 @@ private suspend fun postRoute(
                 if (!response.isSuccessful || payload == null) {
                         val errorBody = response.errorBody()?.string()
                         Log.e("ORS", "Route error: ${response.code()} - $errorBody")
-                        return@withContext failedRoute(
-                                "Routing service error ${response.code()}"
+                        return@withContext listOf(
+                                failedRoute("Routing service error ${response.code()}")
                         )
                 }
 
-                payload.toRouteResult()
+                payload.toRouteResults()
         } catch (exception: Exception) {
                 Log.e("ORS", "Route exception: ${exception.message}", exception)
-                failedRoute(exception.message ?: "Routing request failed")
+                listOf(failedRoute(exception.message ?: "Routing request failed"))
         }
 }
 
-private fun DirectionsResponse.toRouteResult(): RouteResult {
-        val feature = features?.firstOrNull()
-        val geometry = feature?.geometry?.coordinates
-        if (feature == null || geometry == null) {
-                return failedRoute("No route found")
-        }
+private fun DirectionsResponse.toRouteResults(): List<RouteResult> {
+        val results = features.orEmpty().mapNotNull { feature -> feature.toRouteResultOrNull() }
+        return results.ifEmpty { listOf(failedRoute("No route found")) }
+}
+
+private fun RouteFeature.toRouteResultOrNull(): RouteResult? {
+        val geometry = geometry?.coordinates ?: return null
 
         val coordinates =
                 geometry.mapNotNull { coordinate ->
                         if (coordinate.size >= 2) Pair(coordinate[1], coordinate[0]) else null
                 }
+        if (coordinates.size < 2) return null
 
         val instructions = ArrayList<String>()
         val steps = ArrayList<NavigationStep>()
 
-        feature.properties?.segments?.forEach { segment ->
+        properties?.segments?.forEach { segment ->
                 segment.steps?.forEach { step ->
-                        instructions.add(step.instruction)
+                        val maneuver = orsManeuver(step.type)
+                        val instruction = cleanInstruction(step.instruction, maneuver)
+                        instructions.add(instruction)
                         steps.add(
                                 NavigationStep(
-                                        instruction = step.instruction,
+                                        instruction = instruction,
                                         distance = step.distance,
                                         duration = step.duration,
                                         type = step.type,
                                         wayPointIndex = step.wayPoints?.firstOrNull() ?: 0,
-                                        maneuver = orsManeuver(step.type)
+                                        maneuver = maneuver
                                 )
                         )
                 }
         }
 
         return RouteResult(
-                distanceMeters = feature.properties?.summary?.distance ?: 0.0,
-                durationSeconds = feature.properties?.summary?.duration ?: 0.0,
+                distanceMeters = properties?.summary?.distance ?: 0.0,
+                durationSeconds = properties?.summary?.duration ?: 0.0,
                 coordinates = coordinates,
                 instructions = instructions,
                 steps = steps,

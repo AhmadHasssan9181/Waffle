@@ -11,7 +11,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -58,6 +60,7 @@ import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
+import com.noobdev.waffle.core.routing.RouteOptions
 import com.noobdev.waffle.core.routing.RouteRepository
 import com.noobdev.waffle.core.routing.RouteSource
 import com.noobdev.waffle.design.theme.*
@@ -102,7 +105,12 @@ fun RoutePreviewCard(
         onAddStop: (() -> Unit)? = null,
         onRemoveStop: ((GeoSearchResult) -> Unit)? = null,
         onQuickStop: ((ShopCategory) -> Unit)? = null,
-        onReorderStops: ((List<GeoSearchResult>) -> Unit)? = null
+        onReorderStops: ((List<GeoSearchResult>) -> Unit)? = null,
+        alternatives: List<RouteResult> = emptyList(),
+        selectedAlternativeIndex: Int = 0,
+        onAlternativeSelected: (Int) -> Unit = {},
+        routeOptions: RouteOptions = RouteOptions(),
+        onRouteOptionsChange: (RouteOptions) -> Unit = {}
 ) {
         var showStopEditor by remember { mutableStateOf(false) }
         val isDriving = selectedProfile == "driving-car"
@@ -143,6 +151,160 @@ fun RoutePreviewCard(
                                         )
                                 }
                                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close") }
+                        }
+
+                        if (isDriving) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                        modifier =
+                                                Modifier.fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                        FilterChip(
+                                                selected = routeOptions.avoidTolls,
+                                                onClick = {
+                                                        onRouteOptionsChange(
+                                                                routeOptions.copy(
+                                                                        avoidTolls =
+                                                                                !routeOptions
+                                                                                        .avoidTolls
+                                                                )
+                                                        )
+                                                },
+                                                label = { Text("Tolls") }
+                                        )
+                                        FilterChip(
+                                                selected = routeOptions.avoidHighways,
+                                                onClick = {
+                                                        onRouteOptionsChange(
+                                                                routeOptions.copy(
+                                                                        avoidHighways =
+                                                                                !routeOptions
+                                                                                        .avoidHighways
+                                                                )
+                                                        )
+                                                },
+                                                label = { Text("Highways") }
+                                        )
+                                        FilterChip(
+                                                selected = routeOptions.avoidFerries,
+                                                onClick = {
+                                                        onRouteOptionsChange(
+                                                                routeOptions.copy(
+                                                                        avoidFerries =
+                                                                                !routeOptions
+                                                                                        .avoidFerries
+                                                                )
+                                                        )
+                                                },
+                                                label = { Text("Ferries") }
+                                        )
+                                        FilterChip(
+                                                selected = routeOptions.alternatives,
+                                                onClick = {
+                                                        onRouteOptionsChange(
+                                                                routeOptions.copy(
+                                                                        alternatives =
+                                                                                !routeOptions
+                                                                                        .alternatives
+                                                                )
+                                                        )
+                                                },
+                                                label = { Text("Alternates") }
+                                        )
+                                }
+
+                                if (alternatives.size > 1) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        LazyRow(
+                                                horizontalArrangement =
+                                                        Arrangement.spacedBy(8.dp)
+                                        ) {
+                                                items(alternatives.size) { index ->
+                                                        val alternative = alternatives[index]
+                                                        val selected =
+                                                                selectedAlternativeIndex == index
+                                                        Surface(
+                                                                onClick = {
+                                                                        onAlternativeSelected(
+                                                                                index
+                                                                        )
+                                                                },
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                color =
+                                                                        if (selected)
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .primaryContainer
+                                                                        else
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .surfaceVariant
+                                                                                        .copy(
+                                                                                                alpha =
+                                                                                                        0.55f
+                                                                                        ),
+                                                                border =
+                                                                        if (selected)
+                                                                                BorderStroke(
+                                                                                        1.dp,
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .primary
+                                                                                )
+                                                                        else null
+                                                        ) {
+                                                                Column(
+                                                                        modifier =
+                                                                                Modifier.padding(
+                                                                                        horizontal =
+                                                                                                12.dp,
+                                                                                        vertical =
+                                                                                                6.dp
+                                                                                )
+                                                                ) {
+                                                                        Text(
+                                                                                if (index == 0)
+                                                                                        "Best"
+                                                                                else
+                                                                                        "Alt ${index}",
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .labelSmall,
+                                                                                color =
+                                                                                        MaterialTheme
+                                                                                                .colorScheme
+                                                                                                .onSurfaceVariant
+                                                                        )
+                                                                        Text(
+                                                                                formatDuration(
+                                                                                        alternative
+                                                                                                .durationSeconds
+                                                                                ),
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .titleSmall,
+                                                                                fontWeight =
+                                                                                        FontWeight.Bold
+                                                                        )
+                                                                        Text(
+                                                                                formatDistance(
+                                                                                        alternative
+                                                                                                .distanceMeters
+                                                                                ),
+                                                                                style =
+                                                                                        MaterialTheme
+                                                                                                .typography
+                                                                                                .labelSmall
+                                                                        )
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
                         }
 
                         // Stops: a compact "via" strip plus one-tap fuel/food/stay shortcuts.
