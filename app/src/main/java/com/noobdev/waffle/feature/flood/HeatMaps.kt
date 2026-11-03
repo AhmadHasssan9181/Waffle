@@ -335,14 +335,16 @@ fun loadSectorData(context: Context, map: MapLibreMap, sector: Sector) {
                     "layer-depth" -> {
                         val fillLayer = FillLayer(layerId, sourceId)
                         fillLayer.setProperties(
-                            fillColor(match(get("class"),
-                                literal("0-0.5m"), color(Color.parseColor("#4FC3F7")),
-                                literal("0.5-1m"), color(Color.parseColor("#2196F3")),
-                                literal("1-2m"), color(Color.parseColor("#1A237E")),
-                                literal(">2m"), color(Color.parseColor("#E91E63")),
+                            // EMSR838 depth features carry the band in `value`, not `class`.
+                            fillColor(match(get("value"),
+                                literal("Below 0.50"), color(Color.parseColor("#4FC3F7")),
+                                literal("0.50 - 1.00"), color(Color.parseColor("#2196F3")),
+                                literal("1.00 - 2.00"), color(Color.parseColor("#1A237E")),
+                                literal("2.00 - 4.00"), color(Color.parseColor("#E91E63")),
+                                literal("4.00 - 6.00"), color(Color.parseColor("#8E24AA")),
                                 color(Color.parseColor("#4FC3F7"))
                             )),
-                            fillOpacity(0.7f),
+                            fillOpacity(0.72f),
                             fillOutlineColor(Color.TRANSPARENT)
                         )
                         style.addLayer(fillLayer)

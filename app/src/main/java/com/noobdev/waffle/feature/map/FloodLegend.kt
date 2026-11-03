@@ -75,14 +75,22 @@ internal fun FloodLegend(
             }
             Spacer(Modifier.size(8.dp))
             if (sector.depthFile != null) {
-                Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    LegendSwatch(Color(0xFF4FC3F7), "0–0.5 m")
-                    LegendSwatch(Color(0xFF2196F3), "0.5–1 m")
-                    LegendSwatch(Color(0xFF1A237E), "1–2 m")
-                    LegendSwatch(Color(0xFFE91E63), ">2 m")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        LegendSwatch(Color(0xFF4FC3F7), "0–0.5 m")
+                        LegendSwatch(Color(0xFF2196F3), "0.5–1 m")
+                        LegendSwatch(Color(0xFF1A237E), "1–2 m")
+                    }
+                    Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        LegendSwatch(Color(0xFFE91E63), "2–4 m")
+                        LegendSwatch(Color(0xFF8E24AA), ">4 m")
+                    }
                 }
             } else {
                 Row(
