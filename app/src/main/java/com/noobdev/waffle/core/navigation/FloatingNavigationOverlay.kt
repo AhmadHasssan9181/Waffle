@@ -728,7 +728,7 @@ class FloatingNavigationOverlay(
         }
 
         val speed = nav.speedMps
-        braking = speed < 0.5f || (lastSpeed > 0f && speed < lastSpeed - 0.6f)
+        braking = speed < 1.5f || (lastSpeed > 0f && speed < lastSpeed - 0.6f)
         lastSpeed = speed
         val turnSignal =
                 turnSignalFor(nav.route?.steps?.getOrNull(nav.instructionIndex)?.maneuver)

@@ -280,7 +280,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
         LaunchedEffect(currentSpeedMps) {
                 braking =
-                        currentSpeedMps < 0.5f ||
+                        currentSpeedMps < 1.5f ||
                                 (lastSpeed > 0f && currentSpeedMps < lastSpeed - 0.6f)
                 lastSpeed = currentSpeedMps
         }
@@ -670,12 +670,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         )
 
         if (hasLocation) {
+                val useSessionPosition =
+                        navSession.active &&
+                                (navSession.lat != 0.0 || navSession.lng != 0.0)
                 AnimatedPuck3D(
                         map = mapInstance,
                         styleIndex = selectedStyleIndex,
-                        targetLat = currentLat,
-                        targetLng = currentLng,
-                        targetBearing = currentBearing,
+                        targetLat = if (useSessionPosition) navSession.lat else currentLat,
+                        targetLng = if (useSessionPosition) navSession.lng else currentLng,
+                        targetBearing =
+                                if (useSessionPosition) navSession.bearing else currentBearing,
                         travelMode = selectedProfile,
                         vehicleIcon = vehicleIcon,
                         isNavigating = screenState == MapScreenState.NAVIGATING,
@@ -2136,14 +2140,37 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 false
                                         }
                                 }
-                                // Center on Pakistan or user location
-                                map.animateCamera(
-                                        CameraUpdateFactory.newLatLngZoom(
-                                                LatLng(currentLat, currentLng),
-                                                if (hasLocation) 14.0 else 5.0
-                                        ),
-                                        1000
-                                )
+                                // Center on Pakistan, the user, or an active restored trip.
+                                val restored = NavigationSession.snapshot()
+                                if (restored.active &&
+                                                (restored.lat != 0.0 || restored.lng != 0.0)
+                                ) {
+                                        map.setPadding(0, 400, 0, 0)
+                                        map.animateCamera(
+                                                CameraUpdateFactory.newCameraPosition(
+                                                        CameraPosition.Builder()
+                                                                .target(
+                                                                        LatLng(
+                                                                                restored.lat,
+                                                                                restored.lng
+                                                                        )
+                                                                )
+                                                                .zoom(17.0)
+                                                                .tilt(55.0)
+                                                                .bearing(restored.bearing)
+                                                                .build()
+                                                ),
+                                                900
+                                        )
+                                } else {
+                                        map.animateCamera(
+                                                CameraUpdateFactory.newLatLngZoom(
+                                                        LatLng(currentLat, currentLng),
+                                                        if (hasLocation) 14.0 else 5.0
+                                                ),
+                                                1000
+                                        )
+                                }
                                 // Detect user panning to show re-center button
                                  map.addOnCameraMoveStartedListener { reason ->
                                          if (reason ==

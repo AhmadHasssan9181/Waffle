@@ -136,67 +136,112 @@ object GltfCarRenderer {
             lights: VehicleLights
     ) {
         val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
-        val radians = Math.toRadians(bearingDegrees.toDouble())
-        val cos = kotlin.math.cos(radians).toFloat()
-        val sin = kotlin.math.sin(radians).toFloat()
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
-        fun point(dx: Float, dy: Float): Pair<Float, Float> =
-                Pair(
-                        centerX + (dx * cos - dy * sin) * sizePx,
-                        centerY + (dx * sin + dy * cos) * sizePx
-                )
+        fun bar(dx: Float, dy: Float, halfWidth: Float, halfHeight: Float, color: Int, radius: Float) {
+            fill.color = color
+            val x = centerX + dx * sizePx
+            val y = centerY + dy * sizePx
+            val r = radius * sizePx
+            canvas.drawRoundRect(
+                    x - halfWidth * sizePx,
+                    y - halfHeight * sizePx,
+                    x + halfWidth * sizePx,
+                    y + halfHeight * sizePx,
+                    r,
+                    r,
+                    fill
+            )
+        }
 
-        fun glow(x: Float, y: Float, radius: Float, color: Int) {
+        fun glow(dx: Float, dy: Float, radius: Float, color: Int) {
+            val x = centerX + dx * sizePx
+            val y = centerY + dy * sizePx
             val paint =
                     Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         shader =
                                 android.graphics.RadialGradient(
                                         x,
                                         y,
-                                        radius,
+                                        radius * sizePx,
                                         intArrayOf(color, Color.TRANSPARENT),
                                         floatArrayOf(0f, 1f),
                                         android.graphics.Shader.TileMode.CLAMP
                                 )
                     }
-            canvas.drawCircle(x, y, radius, paint)
+            canvas.drawCircle(x, y, radius * sizePx, paint)
         }
+
+        canvas.save()
+        canvas.rotate(bearingDegrees, centerX, centerY)
 
         if (lights.headlights) {
             if (motorcycle) {
-                val p = point(0f, -0.26f)
-                glow(p.first, p.second, sizePx * 0.075f, Color.rgb(255, 246, 205))
+                bar(0f, -0.26f, 0.05f, 0.035f, Color.rgb(255, 246, 205), 0.02f)
+                glow(0f, -0.26f, 0.10f, Color.argb(130, 255, 246, 205))
             } else {
-                for (dx in listOf(-0.18f, 0.18f)) {
-                    val p = point(dx, -0.30f)
-                    glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 246, 205))
+                for (side in listOf(-1f, 1f)) {
+                    bar(side * 0.18f, -0.21f, 0.09f, 0.035f, Color.rgb(255, 246, 205), 0.02f)
+                    glow(side * 0.18f, -0.21f, 0.11f, Color.argb(120, 255, 246, 205))
+                }
+            }
+        } else {
+            // Cover the model's painted headlights during the day, so only the amber
+            // indicator on the turning side reads as lit.
+            if (motorcycle) {
+                bar(0f, -0.26f, 0.10f, 0.05f, Color.argb(215, 35, 35, 40), 0.03f)
+            } else {
+                for (side in listOf(-1f, 1f)) {
+                    bar(side * 0.22f, -0.21f, 0.13f, 0.06f, Color.argb(215, 35, 35, 40), 0.03f)
                 }
             }
         }
 
-        // Running tail lamps are always on; braking makes them much brighter.
-        val rear =
-                if (motorcycle) listOf(0f to 0.10f)
-                else listOf(-0.18f to 0.24f, 0.18f to 0.24f)
-        for ((dx, dy) in rear) {
-            val p = point(dx, dy)
+        if (motorcycle) {
             if (lights.braking) {
-                glow(p.first, p.second, sizePx * 0.09f, Color.rgb(255, 35, 28))
-            } else {
-                glow(p.first, p.second, sizePx * 0.05f, Color.argb(165, 255, 30, 30))
+                glow(0f, 0.10f, 0.20f, Color.argb(110, 255, 25, 20))
+            }
+            bar(0f, 0.10f, 0.075f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
+            glow(0f, 0.10f, if (lights.braking) 0.16f else 0.06f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25))
+        } else {
+            if (lights.braking) {
+                // Soft red halo across the tail so the stop lamps read from a distance.
+                glow(0f, 0.24f, 0.24f, Color.argb(95, 255, 25, 20))
+            }
+            for (side in listOf(-1f, 1f)) {
+                bar(side * 0.20f, 0.24f, 0.105f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
+                glow(side * 0.20f, 0.24f, if (lights.braking) 0.14f else 0.05f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(85, 255, 30, 25))
+            }
+            if (lights.braking) {
+                bar(0f, 0.24f, 0.075f, 0.025f, Color.rgb(255, 70, 55), 0.015f)
             }
         }
 
-        if (lights.turnSignal != TurnSignal.NONE && lights.blinkOn) {
+        if (lights.turnSignal != TurnSignal.NONE) {
             val side = if (lights.turnSignal == TurnSignal.LEFT) -1f else 1f
-            val sideX = if (motorcycle) 0.10f else 0.28f
-            val frontY = if (motorcycle) -0.14f else -0.22f
-            val rearY = if (motorcycle) 0.08f else 0.20f
-            for (dy in listOf(frontY, rearY)) {
-                val p = point(side * sideX, dy)
-                glow(p.first, p.second, sizePx * 0.06f, Color.rgb(255, 170, 35))
+            // Keep the amber housing faintly lit between blinks so the indicator never
+            // looks dead, then flash it brightly on the blink phase.
+            val amber =
+                    if (lights.blinkOn) Color.rgb(255, 175, 35)
+                    else Color.argb(120, 255, 150, 20)
+            if (motorcycle) {
+                bar(side * 0.12f, -0.14f, 0.05f, 0.04f, amber, 0.02f)
+                bar(side * 0.12f, 0.08f, 0.05f, 0.04f, amber, 0.02f)
+                if (lights.blinkOn) {
+                    glow(side * 0.12f, -0.14f, 0.085f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.12f, 0.08f, 0.085f, Color.argb(160, 255, 175, 35))
+                }
+            } else {
+                bar(side * 0.24f, -0.13f, 0.065f, 0.04f, amber, 0.02f)
+                bar(side * 0.28f, 0.20f, 0.065f, 0.04f, amber, 0.02f)
+                if (lights.blinkOn) {
+                    glow(side * 0.24f, -0.13f, 0.085f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.28f, 0.20f, 0.085f, Color.argb(160, 255, 175, 35))
+                }
             }
         }
+
+        canvas.restore()
     }
 
     private fun drawShadow(canvas: Canvas, centerX: Float, centerY: Float, sizePx: Float) {
