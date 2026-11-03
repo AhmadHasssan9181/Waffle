@@ -20,6 +20,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.noobdev.waffle.core.navigation.Car3DRenderer
 import com.noobdev.waffle.core.navigation.GltfCarRenderer
+import com.noobdev.waffle.core.navigation.TurnSignal
+import com.noobdev.waffle.core.navigation.VehicleLights
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -39,14 +42,34 @@ internal fun Car3DOverlay(
         targetBearing: Double,
         modelKey: String,
         visible: Boolean,
+        speedMps: Float = 0f,
+        turnSignal: TurnSignal = TurnSignal.NONE,
+        night: Boolean = false,
         modifier: Modifier = Modifier
 ) {
     val lat = remember { Animatable(targetLat.toFloat()) }
     val lng = remember { Animatable(targetLng.toFloat()) }
     val bearing = remember { Animatable(targetBearing.toFloat()) }
     var initialized by remember { mutableStateOf(false) }
-    var screen by remember { mutableStateOf<Offset?>(null) }
     var cameraTick by remember { mutableIntStateOf(0) }
+    var blinkOn by remember { mutableStateOf(true) }
+    var braking by remember { mutableStateOf(false) }
+    var lastSpeed by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(turnSignal) {
+        if (turnSignal == TurnSignal.NONE) {
+            blinkOn = true
+            return@LaunchedEffect
+        }
+        while (true) {
+            blinkOn = !blinkOn
+            delay(450)
+        }
+    }
+    LaunchedEffect(speedMps) {
+        braking = speedMps < 0.5f || (lastSpeed > 0f && speedMps < lastSpeed - 0.6f)
+        lastSpeed = speedMps
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val density = LocalDensity.current
     val sizePx = with(density) { 100.dp.toPx() }
@@ -74,27 +97,32 @@ internal fun Car3DOverlay(
         onDispose { map?.removeOnCameraMoveListener(listener) }
     }
 
-    LaunchedEffect(map, lat.value, lng.value, cameraTick, visible) {
-        if (!visible || map == null) {
-            screen = null
-            return@LaunchedEffect
-        }
-        screen =
+    if (!visible) return
+
+    // Reading the camera revision in the composable body forces a redraw on every camera move;
+    // the projection is then resolved in the draw phase, so the car cannot lag behind a zoom.
+    val cameraRevision = cameraTick
+
+    Canvas(modifier = modifier) {
+        val mapLibre = map ?: return@Canvas
+        if (cameraRevision < 0) return@Canvas
+        val point =
                 runCatching {
-                            map.projection.toScreenLocation(
+                            mapLibre.projection.toScreenLocation(
                                     LatLng(lat.value.toDouble(), lng.value.toDouble())
                             )
                         }
                         .getOrNull()
-                        ?.let { Offset(it.x, it.y) }
-    }
-
-    if (!visible) return
-
-    Canvas(modifier = modifier) {
-        val point = screen ?: return@Canvas
-        val mapBearing = (map?.cameraPosition?.bearing ?: 0.0).toFloat()
+                        ?: return@Canvas
+        val mapBearing = mapLibre.cameraPosition.bearing.toFloat()
         val relative = ((bearing.value - mapBearing + 540f) % 360f) - 180f
+        val lights =
+                VehicleLights(
+                        headlights = night,
+                        braking = braking,
+                        turnSignal = turnSignal,
+                        blinkOn = blinkOn
+                )
         drawIntoCanvas { canvas ->
             val drawn =
                     GltfCarRenderer.draw(
@@ -104,7 +132,8 @@ internal fun Car3DOverlay(
                             centerY = point.y,
                             sizePx = sizePx,
                             bearingDegrees = relative,
-                            modelKey = modelKey
+                            modelKey = modelKey,
+                            lights = lights
                     )
             if (!drawn) {
                 Car3DRenderer.draw(

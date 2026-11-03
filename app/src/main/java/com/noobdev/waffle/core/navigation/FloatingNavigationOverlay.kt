@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.maplibre.android.camera.CameraPosition
@@ -73,6 +74,10 @@ class FloatingNavigationOverlay(
     private var detailView: TextView? = null
     private var arrowView: TextView? = null
     private var collectJob: Job? = null
+    private var blinkJob: Job? = null
+    private var blinkOn = true
+    private var lastSpeed = 0f
+    private var braking = false
     private var resizeToken = 0
 
     private var baseBitmap: Bitmap? = null
@@ -429,6 +434,9 @@ class FloatingNavigationOverlay(
     fun hide() {
         collectJob?.cancel()
         collectJob = null
+        blinkJob?.cancel()
+        blinkJob = null
+        blinkOn = true
         snapshotGeneration++
         snapshotInFlight = false
         snapshotPending = false
@@ -653,6 +661,24 @@ class FloatingNavigationOverlay(
                 .onFailure { snapshotInFlight = false }
     }
 
+    private fun updateBlink(turnSignal: TurnSignal) {
+        if (turnSignal == TurnSignal.NONE) {
+            blinkJob?.cancel()
+            blinkJob = null
+            blinkOn = true
+            return
+        }
+        if (blinkJob?.isActive == true) return
+        blinkJob =
+                scope.launch {
+                    while (true) {
+                        blinkOn = !blinkOn
+                        redrawComposite()
+                        delay(450)
+                    }
+                }
+    }
+
     private fun redrawComposite() {
         runCatching {
         val base = baseBitmap ?: return
@@ -701,6 +727,20 @@ class FloatingNavigationOverlay(
             canvas.drawPath(path, line)
         }
 
+        val speed = nav.speedMps
+        braking = speed < 0.5f || (lastSpeed > 0f && speed < lastSpeed - 0.6f)
+        lastSpeed = speed
+        val turnSignal =
+                turnSignalFor(nav.route?.steps?.getOrNull(nav.instructionIndex)?.maneuver)
+        updateBlink(turnSignal)
+        val lights =
+                VehicleLights(
+                        headlights = isNightTime(),
+                        braking = braking,
+                        turnSignal = turnSignal,
+                        blinkOn = blinkOn
+                )
+
         val pixel = projection.project(nav.lat, nav.lng)
         if (pixel != null) {
             val isMotorcycle = nav.profile == "driving-motorcycle"
@@ -717,7 +757,8 @@ class FloatingNavigationOverlay(
                                 centerY = pixel.y,
                                 sizePx = carSize,
                                 bearingDegrees = 0f,
-                                modelKey = modelKey
+                                modelKey = modelKey,
+                                lights = lights
                         )
                 if (!drawn) {
                     Car3DRenderer.draw(

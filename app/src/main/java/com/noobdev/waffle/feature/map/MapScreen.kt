@@ -61,6 +61,8 @@ import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.navigation.isNightTime
+import com.noobdev.waffle.core.navigation.turnSignalFor
 import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.prefs.SpeedUnit
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
@@ -1532,10 +1534,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 val fusedLocationClient =
                                         LocationServices.getFusedLocationProviderClient(context)
                                 fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                        location?.let {
-                                                currentLat = it.latitude
-                                                currentLng = it.longitude
-                                                hasLocation = true
+                                        // While the service owns the trip, its snapped position is
+                                        // authoritative. Overwriting it with the raw last fix is what
+                                        // made the 3D car drift off the route when zooming out.
+                                        if (!NavigationSession.isActive()) {
+                                                location?.let {
+                                                        currentLat = it.latitude
+                                                        currentLng = it.longitude
+                                                        hasLocation = true
+                                                }
                                         }
                                 }
                         } catch (e: SecurityException) {}
@@ -2223,6 +2230,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         )
                 }
 
+                val currentTurnSignal =
+                        turnSignalFor(
+                                lastNavigationRoute
+                                        ?.steps
+                                        ?.getOrNull(currentInstructionIndex)
+                                        ?.maneuver
+                        )
+                val night = remember { isNightTime() }
+
                 if (use3DCar) {
                         Car3DOverlay(
                                 map = mapInstance,
@@ -2234,6 +2250,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 "MOTORCYCLE"
                                         else vehicleIcon.storageKey,
                                 visible = true,
+                                speedMps = if (isSimulationMode) simSpeed else currentSpeedMps,
+                                turnSignal = currentTurnSignal,
+                                night = night,
                                 modifier = Modifier.fillMaxSize()
                         )
                 }

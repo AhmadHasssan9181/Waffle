@@ -53,7 +53,8 @@ object GltfCarRenderer {
             val texture: Bitmap,
             val bodyPaint: Int,
             val wheelPaint: Int,
-            val bodyTarget: Int
+            val bodyTarget: Int,
+            val yawOffset: Float
     )
 
     private val modelCache = HashMap<String, Model?>()
@@ -81,7 +82,8 @@ object GltfCarRenderer {
             centerY: Float,
             sizePx: Float,
             bearingDegrees: Float,
-            modelKey: String
+            modelKey: String,
+            lights: VehicleLights = VehicleLights()
     ): Boolean {
         val model = modelFor(context, modelKey) ?: return false
         drawShadow(canvas, centerX, centerY, sizePx)
@@ -99,7 +101,89 @@ object GltfCarRenderer {
                         centerY + sizePx / 2f
                 )
         canvas.drawBitmap(bitmap, null, rect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        drawVehicleLights(canvas, centerX, centerY, sizePx, bearingDegrees, modelKey, lights)
         return true
+    }
+
+    private fun drawVehicleLights(
+            canvas: Canvas,
+            centerX: Float,
+            centerY: Float,
+            sizePx: Float,
+            bearingDegrees: Float,
+            modelKey: String,
+            lights: VehicleLights
+    ) {
+        if (!lights.headlights && !lights.braking && lights.turnSignal == TurnSignal.NONE) return
+        val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
+        val radians = Math.toRadians(bearingDegrees.toDouble())
+        val cos = kotlin.math.cos(radians).toFloat()
+        val sin = kotlin.math.sin(radians).toFloat()
+
+        fun point(dx: Float, dy: Float): Pair<Float, Float> =
+                Pair(
+                        centerX + (dx * cos - dy * sin) * sizePx,
+                        centerY + (dx * sin + dy * cos) * sizePx
+                )
+
+        fun glow(x: Float, y: Float, radius: Float, color: Int) {
+            val paint =
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        shader =
+                                android.graphics.RadialGradient(
+                                        x,
+                                        y,
+                                        radius,
+                                        intArrayOf(color, Color.TRANSPARENT),
+                                        floatArrayOf(0f, 1f),
+                                        android.graphics.Shader.TileMode.CLAMP
+                                )
+                    }
+            canvas.drawCircle(x, y, radius, paint)
+        }
+
+        if (lights.headlights) {
+            if (motorcycle) {
+                val p = point(0f, -0.29f)
+                glow(p.first, p.second, sizePx * 0.12f, Color.rgb(255, 246, 205))
+            } else {
+                for (dx in listOf(-0.18f, 0.18f)) {
+                    val p = point(dx, -0.30f)
+                    glow(p.first, p.second, sizePx * 0.11f, Color.rgb(255, 246, 205))
+                }
+            }
+            // Dim tail lamps whenever the headlights are on.
+            if (!lights.braking) {
+                val rear =
+                        if (motorcycle) listOf(0f to 0.26f)
+                        else listOf(-0.18f to 0.28f, 0.18f to 0.28f)
+                for ((dx, dy) in rear) {
+                    val p = point(dx, dy)
+                    glow(p.first, p.second, sizePx * 0.055f, Color.argb(120, 255, 30, 30))
+                }
+            }
+        }
+
+        if (lights.braking) {
+            val rear =
+                    if (motorcycle) listOf(0f to 0.26f)
+                    else listOf(-0.18f to 0.28f, 0.18f to 0.28f)
+            for ((dx, dy) in rear) {
+                val p = point(dx, dy)
+                glow(p.first, p.second, sizePx * 0.12f, Color.rgb(255, 35, 28))
+            }
+        }
+
+        if (lights.turnSignal != TurnSignal.NONE && lights.blinkOn) {
+            val side = if (lights.turnSignal == TurnSignal.LEFT) -1f else 1f
+            val sideX = if (motorcycle) 0.10f else 0.28f
+            val frontY = if (motorcycle) -0.20f else -0.24f
+            val rearY = if (motorcycle) 0.20f else 0.24f
+            for (dy in listOf(frontY, rearY)) {
+                val p = point(side * sideX, dy)
+                glow(p.first, p.second, sizePx * 0.075f, Color.rgb(255, 170, 35))
+            }
+        }
     }
 
     private fun drawShadow(canvas: Canvas, centerX: Float, centerY: Float, sizePx: Float) {
@@ -488,7 +572,8 @@ object GltfCarRenderer {
                 wheelPaint =
                         if (isMotorcycle) 0
                         else dominant(wheelHistogram, requireBright = false) ?: 0,
-                bodyTarget = bodyTarget
+                bodyTarget = bodyTarget,
+                yawOffset = if (isMotorcycle) 180f else 0f
         )
     }
 
@@ -498,7 +583,7 @@ object GltfCarRenderer {
         val height = renderSize
         val pixels = IntArray(width * height)
         val depth = FloatArray(width * height) { Float.MAX_VALUE }
-        val yaw = Math.toRadians(bearingDegrees.toDouble())
+        val yaw = Math.toRadians((bearingDegrees + model.yawOffset).toDouble())
         val cosYaw = cos(yaw).toFloat()
         val sinYaw = sin(yaw).toFloat()
         val eye = V3(0.9f, 3.2f, -6.4f)
