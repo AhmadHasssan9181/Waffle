@@ -155,6 +155,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var selectedDestination by remember { mutableStateOf<GeoSearchResult?>(null) }
         var routeStops by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
         var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
+        var showStopPicker by remember { mutableStateOf(false) }
+        var stopPickerCategory by remember { mutableStateOf<ShopCategory?>(null) }
         var routeResult by remember { mutableStateOf<RouteResult?>(null) }
         var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
         var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
@@ -2209,12 +2211,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         onProfileChange = { profile -> planTrip(profile) },
                                         stops = routeStops,
                                         onAddStop = {
-                                                searchPurpose = SearchPurpose.STOP
-                                                searchQuery = ""
-                                                screenState = MapScreenState.SEARCHING
+                                                stopPickerCategory = null
+                                                showStopPicker = true
                                         },
                                         onRemoveStop = { removeStop(it) },
-                                        onQuickStop = { addQuickStop(it) },
+                                        onQuickStop = { category ->
+                                                stopPickerCategory = category
+                                                showStopPicker = true
+                                        },
                                         onReorderStops = { newStops ->
                                                 routeStops = newStops
                                                 planTrip(selectedProfile)
@@ -2309,6 +2313,32 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         }
                 }
         }
+
+        StopPickerSheet(
+                visible = showStopPicker,
+                shops = mapShops,
+                route = activeRouteFor(selectedProfile),
+                initialCategory = stopPickerCategory,
+                onSelect = { shop ->
+                        showStopPicker = false
+                        addStop(
+                                GeoSearchResult(
+                                        name = shop.name,
+                                        address = shop.address ?: "",
+                                        lat = shop.lat,
+                                        lng = shop.lon,
+                                        type = "shop"
+                                )
+                        )
+                },
+                onSearch = {
+                        showStopPicker = false
+                        searchPurpose = SearchPurpose.STOP
+                        searchQuery = ""
+                        screenState = MapScreenState.SEARCHING
+                },
+                onDismiss = { showStopPicker = false }
+        )
 
         // === NAVIGATION MODE (Full turn-by-turn) ===
         // Keep a stable reference: update lastNavigationRoute whenever routeResult becomes

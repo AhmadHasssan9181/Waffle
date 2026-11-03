@@ -335,12 +335,22 @@ fun RoutePreviewCard(
                                                                 MaterialTheme.colorScheme
                                                                         .onSurfaceVariant
                                                 )
-                                                listOf(
-                                                                ShopCategory.FUEL,
-                                                                ShopCategory.FOOD,
-                                                                ShopCategory.STAY
-                                                        )
-                                                        .forEach { category ->
+                                                LazyRow(
+                                                        modifier = Modifier.weight(1f),
+                                                        horizontalArrangement =
+                                                                Arrangement.spacedBy(6.dp),
+                                                        verticalAlignment =
+                                                                Alignment.CenterVertically
+                                                ) {
+                                                        items(
+                                                                listOf(
+                                                                        ShopCategory.FUEL,
+                                                                        ShopCategory.FOOD,
+                                                                        ShopCategory.STAY,
+                                                                        ShopCategory.HEALTH,
+                                                                        ShopCategory.GROCERY
+                                                                )
+                                                        ) { category ->
                                                                 AssistChip(
                                                                         onClick = {
                                                                                 onQuickStop(
@@ -375,6 +385,7 @@ fun RoutePreviewCard(
                                                                                 )
                                                                 )
                                                         }
+                                                }
                                         }
                                 }
                         }

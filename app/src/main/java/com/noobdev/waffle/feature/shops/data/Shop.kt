@@ -4,19 +4,55 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Hotel
-import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.LocalGroceryStore
 import androidx.compose.material.icons.rounded.LocalPharmacy
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
 import com.noobdev.waffle.design.theme.Honey
 import com.noobdev.waffle.design.theme.HoneyDeep
 import com.noobdev.waffle.design.theme.SafeGreen
 import com.noobdev.waffle.design.theme.Sky
 import com.noobdev.waffle.design.theme.StormColor
+
+/** Clean fuel-can glyph; the Material gas pump reads like an "F with dots" at chip size. */
+private val FuelCanIcon: ImageVector by lazy {
+    ImageVector.Builder(
+                    name = "FuelCan",
+                    defaultWidth = 24.dp,
+                    defaultHeight = 24.dp,
+                    viewportWidth = 24f,
+                    viewportHeight = 24f
+            )
+            .apply {
+                path(fill = SolidColor(Color.Black)) {
+                    // Can body
+                    moveTo(5f, 7f)
+                    lineTo(14f, 7f)
+                    lineTo(14f, 21f)
+                    lineTo(5f, 21f)
+                    close()
+                    // Handle
+                    moveTo(7f, 3f)
+                    lineTo(13f, 3f)
+                    lineTo(13f, 7f)
+                    lineTo(7f, 7f)
+                    close()
+                    // Spout
+                    moveTo(14f, 8f)
+                    lineTo(19f, 5.5f)
+                    lineTo(19f, 10.5f)
+                    lineTo(14f, 13f)
+                    close()
+                }
+            }
+            .build()
+}
 
 /**
  * A point of interest around the user, sourced from OpenStreetMap through Overpass.
@@ -62,11 +98,11 @@ enum class ShopCategory(
     FOOD("Food & drink", Icons.Rounded.Restaurant, Honey, "Food"),
     GROCERY("Groceries", Icons.Rounded.LocalGroceryStore, SafeGreen, "Grocery"),
     HEALTH("Health", Icons.Rounded.LocalPharmacy, Sky, "Health"),
-    FUEL("Fuel & auto", Icons.Rounded.LocalGasStation, HoneyDeep, "Fuel"),
+    FUEL("Fuel & auto", FuelCanIcon, HoneyDeep, "Fuel"),
     MONEY("Banking", Icons.Rounded.AccountBalance, StormColor, "Money"),
     SHOPPING("Shopping", Icons.Rounded.ShoppingBag, Honey, "Shops"),
     SERVICES("Services", Icons.Rounded.ContentCut, SafeGreen, "Services"),
-    STAY("Stay", Icons.Rounded.Hotel, Sky, "Stay"),
+    STAY("Rest & stay", Icons.Rounded.Hotel, Sky, "Rest"),
     OTHER("Other", Icons.Rounded.Storefront, StormColor, "Other");
 
     companion object {

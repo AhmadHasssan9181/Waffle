@@ -6,12 +6,13 @@ The map tab. This is the most stateful screen in the app.
 | --- | --- |
 | `MapScreen.kt` | Orchestrator: MapLibre instance, route state, hazard layers, camera, screen state. |
 | `MapSearch.kt` | Search bar, live results card, quick chips. |
-| `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Via stops with edit/reorder, and one-tap fuel/food/stay shortcuts. |
+| `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Via stops with edit/reorder, and category shortcuts (Fuel/Food/Rest/Health/Grocery). |
+| `StopPicker.kt` | Bottom sheet that lists actual shops along the route, sorted by detour, with photos, category filters, 24/7 badges and a search fallback. |
 | `NavigationModeUI.kt` | Turn-by-turn banner, structured maneuver icon, approach distance, turn list, speed bubble + speed-limit sign, voice guidance, traffic chip, navigation controls. |
 | `MapLayersSheet.kt` | Legacy layer/style sheet; map style now lives in Settings, kept for a future map menu. |
 | `MapGeometry.kt` | Route GeoJSON source updates, vanishing-trail trim, and distance-to-next-turn helpers. |
 | `MapStyles.kt` | MapTiler style URLs, `MapStyleResolver` (falls back to an installed offline layer), and `LocationAwareMap` (the AndroidView that owns the `MapView` lifecycle, travel-mode puck). |
-| `Puck3D.kt` | 3D navigation puck: sedan/SUV/pickup/arrow sprites, plus bike/walk badges, rotated as a SymbolLayer. |
+| `Puck3D.kt` | 3D navigation puck: top-down sedan/SUV/pickup, bike and walker sprites, plus the arrow choice, rotated as a SymbolLayer. |
 | `VehicleIcon.kt` | Vehicle-icon choices and their drawable resources. |
 | `VehicleIconPicker.kt` | Shared "Choose vehicle icon" sheet content, used by Settings and the map's car button. |
 | `ParentMap.kt` | Simpler embedded map used by other screens. |
@@ -29,10 +30,13 @@ The map tab. This is the most stateful screen in the app.
   hazard-aware route.
 - Multi-stop trips: `routeStops` are intermediate `GeoSearchResult`s. `RouteRepository.planWithStops`
   plans start -> stop -> ... -> destination leg by leg, merges the geometry/instructions/steps, and
-  keeps hazard avoidance on every leg. The preview card has a Via strip, an **Add stop** search, an
-  **Edit** sheet for reordering/removing stops, and one-tap **Fuel / Food / Stay** shortcuts. Shops
-  are loaded around the start, midpoint and destination so "along the way" works for long trips. A
-  passed stop is removed from the trip; a reroute keeps only the stops still ahead.
+  keeps hazard avoidance on every leg. The preview card has a Via strip, an **Add stop** picker, an
+  **Edit** sheet for reordering/removing stops, and **Fuel / Food / Rest / Health / Grocery**
+  shortcuts. The picker lists real places along the route with photos, detour distance and 24/7
+  status, so the driver chooses the exact fuel station or rest stop instead of taking the nearest
+  cached one. Search remains available from the picker for arbitrary places. Shops are loaded
+  around the start, midpoint and destination so "along the way" works for long trips. A passed
+  stop is removed from the trip; a reroute keeps only the stops still ahead.
 - Navigation polish: `NavigationStep.maneuver` comes from the router (GraphHopper sign / ORS type),
   so U-turns, roundabouts, merges, ramps, sharp/slight turns and forks get the right icon. The banner
   shows the distance to the next maneuver and enlarges the icon below 180 m. The list button opens
