@@ -3,17 +3,27 @@ package com.noobdev.waffle.core.navigation
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Outline
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.PointF
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,8 +32,7 @@ import com.noobdev.waffle.R
 import com.noobdev.waffle.data.remote.formatDistance
 import com.noobdev.waffle.feature.map.MapStyleResolver
 import com.noobdev.waffle.feature.map.VehicleIcon
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,41 +41,23 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
+import org.maplibre.android.snapshotter.MapSnapshot
 import org.maplibre.android.maps.Style
-import org.maplibre.android.style.expressions.Expression
-import org.maplibre.android.style.layers.LineLayer
-import org.maplibre.android.style.layers.Property
-import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
-import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
-import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
-import org.maplibre.android.style.layers.PropertyFactory.iconImage
-import org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment
-import org.maplibre.android.style.layers.PropertyFactory.iconRotate
-import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
-import org.maplibre.android.style.layers.PropertyFactory.iconSize
-import org.maplibre.android.style.layers.PropertyFactory.lineCap
-import org.maplibre.android.style.layers.PropertyFactory.lineColor
-import org.maplibre.android.style.layers.PropertyFactory.lineJoin
-import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
-import org.maplibre.android.style.layers.PropertyFactory.lineWidth
-import org.maplibre.android.style.layers.SymbolLayer
-import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.snapshotter.MapSnapshotter
 
 /**
- * A large, draggable floating navigation window shown over the launcher when the user leaves the
- * app during a trip. Android's system PiP window is capped to a very small size on many devices,
- * so this overlay is the "real" mini navigation screen: map, route, car, instruction, distance and
- * ETA at a useful size.
+ * A large, draggable, edge-resizable floating navigation window shown over the launcher when the
+ * user leaves the app. Android's system PiP window is capped to a very small rectangle on many
+ * devices, so this overlay is the "real" mini navigation screen.
  *
- * Requires `Settings.canDrawOverlays(context)`. The service owns the instance; tapping the map or
- * the instruction bar opens the app, the X hides the overlay while navigation keeps running.
+ * The map is a MapSnapshotter bitmap with the route and vehicle drawn on top. That keeps the
+ * window free of a GLSurfaceView, so dragging an edge or corner to resize it is cheap and cannot
+ * stall the main thread. The base map refreshes every few seconds; the route and car redraw on
+ * every navigation update.
+ *
+ * Requires `Settings.canDrawOverlays(context)`. Tapping the map or the ⛶ button opens the app.
  */
 class FloatingNavigationOverlay(
         private val context: Context,
@@ -75,17 +66,29 @@ class FloatingNavigationOverlay(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var root: FrameLayout? = null
-    private var mapView: MapView? = null
-    private var map: MapLibreMap? = null
+    private var imageView: ImageView? = null
     private var params: WindowManager.LayoutParams? = null
     private var instructionView: TextView? = null
     private var detailView: TextView? = null
     private var arrowView: TextView? = null
-    private var routeSource: GeoJsonSource? = null
-    private var puckSource: GeoJsonSource? = null
-    private var styleReady = false
-    private var current: NavigationSnapshot? = null
     private var collectJob: Job? = null
+    private var resizeToken = 0
+
+    private var baseBitmap: Bitmap? = null
+    private var compositeBitmap: Bitmap? = null
+    private var baseSnapshot: MapSnapshot? = null
+    private var snapshotter: MapSnapshotter? = null
+    private var carBitmap: Bitmap? = null
+    private var carDrawableRes: Int = 0
+    private var snapshotGeneration = 0
+    private var snapshotInFlight = false
+    private var snapshotPending = false
+    private var snapshotPendingForce = false
+    private var lastSnapshotAt = 0L
+    private var lastSnapshotLat = 0.0
+    private var lastSnapshotLng = 0.0
+    private var lastSnapshotBearing = 0.0
+    private var current: NavigationSnapshot? = null
 
     fun isShowing(): Boolean = root != null
 
@@ -150,6 +153,20 @@ class FloatingNavigationOverlay(
                 }
         root = frame
 
+        val image =
+                ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.FIT_XY
+                    setBackgroundColor(Color.parseColor("#10151D"))
+                }
+        imageView = image
+        frame.addView(
+                image,
+                FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                )
+        )
+
         // Tapping anywhere on the map opens the full-screen navigation screen.
         val tapLayer =
                 View(context).apply {
@@ -170,7 +187,7 @@ class FloatingNavigationOverlay(
                 LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(12), dp(9), dp(12), dp(9))
+                    setPadding(dp(10), dp(7), dp(10), dp(7))
                     background =
                             GradientDrawable().apply {
                                 setColor(Color.parseColor("#F210151D"))
@@ -184,7 +201,6 @@ class FloatingNavigationOverlay(
                                 FrameLayout.LayoutParams.WRAP_CONTENT,
                                 Gravity.BOTTOM
                         )
-                        .apply { bottomMargin = 0 }
         )
 
         arrowView =
@@ -193,7 +209,6 @@ class FloatingNavigationOverlay(
                     setTextColor(Color.parseColor("#F2A33C"))
                     textSize = 30f
                     text = "↑"
-                    setPadding(dp(2), 0, dp(2), 0)
                 }
         bar.addView(arrowView, LinearLayout.LayoutParams(dp(42), dp(52)))
 
@@ -231,6 +246,78 @@ class FloatingNavigationOverlay(
                 }
         bar.addView(fullscreen, LinearLayout.LayoutParams(dp(46), dp(44)))
 
+        // Visible resize grips, placed inside the window so Android's edge-back gesture
+        // cannot steal the drag. Hold a side or the corner to resize, like system PiP.
+        val rightGrip =
+                TextView(context).apply {
+                    text = "⇔"
+                    textSize = 18f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    contentDescription = "Drag to resize width"
+                    background =
+                            GradientDrawable().apply {
+                                setColor(Color.parseColor("#88000000"))
+                                cornerRadius = dp(14).toFloat()
+                            }
+                }
+        frame.addView(
+                rightGrip,
+                FrameLayout.LayoutParams(
+                                dp(36),
+                                dp(56),
+                                Gravity.END or Gravity.CENTER_VERTICAL
+                        )
+                        .apply { rightMargin = dp(24) }
+        )
+        attachResizeTouch(rightGrip, resizeWidth = true, resizeHeight = false)
+
+        val bottomGrip =
+                TextView(context).apply {
+                    text = "⇕"
+                    textSize = 18f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    contentDescription = "Drag to resize height"
+                    background =
+                            GradientDrawable().apply {
+                                setColor(Color.parseColor("#88000000"))
+                                cornerRadius = dp(14).toFloat()
+                            }
+                }
+        frame.addView(
+                bottomGrip,
+                FrameLayout.LayoutParams(
+                                dp(56),
+                                dp(36),
+                                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                        )
+                        .apply { bottomMargin = dp(84) }
+        )
+        attachResizeTouch(bottomGrip, resizeWidth = false, resizeHeight = true)
+
+        val corner =
+                TextView(context).apply {
+                    text = "◢"
+                    textSize = 18f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    contentDescription = "Drag to resize"
+                    background =
+                            GradientDrawable().apply {
+                                setColor(Color.parseColor("#88000000"))
+                                cornerRadius = dp(14).toFloat()
+                            }
+                }
+        frame.addView(
+                corner,
+                FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.END).apply {
+                    bottomMargin = dp(84)
+                    rightMargin = dp(24)
+                }
+        )
+        attachResizeTouch(corner, resizeWidth = true, resizeHeight = true)
+
         // Close X.
         val close =
                 TextView(context).apply {
@@ -253,7 +340,7 @@ class FloatingNavigationOverlay(
                 }
         )
 
-        // Drag handle.
+        // Full-width drag strip.
         val drag =
                 TextView(context).apply {
                     text = "≡"
@@ -299,8 +386,6 @@ class FloatingNavigationOverlay(
                     }
                 }
         )
-
-        // Keep the close button above the full-width drag strip.
         close.bringToFront()
 
         runCatching { windowManager.addView(frame, layoutParams) }
@@ -308,11 +393,12 @@ class FloatingNavigationOverlay(
                     hide()
                     return false
                 }
+
         val prefs = context.getSharedPreferences("waffle_floating", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("hint_shown", false)) {
             Toast.makeText(
                             context,
-                            "Tap map for full screen · drag ≡ to move · ⤢ changes size",
+                            "Tap map for full screen · drag ≡ to move · drag ⇔ / ⇕ / ◢ to resize",
                             Toast.LENGTH_LONG
                     )
                     .show()
@@ -327,77 +413,304 @@ class FloatingNavigationOverlay(
                             return@collect
                         }
                         current = snapshot
-                        updateText(snapshot)
-                        updateMap(snapshot)
+                        runCatching {
+                            updateText(snapshot)
+                            redrawComposite()
+                            requestSnapshot(force = false)
+                        }
                     }
                 }
 
-        attachMap()
+        runCatching { requestSnapshot(force = true) }
         return true
-    }
-
-    private fun attachMap() {
-        val frame = root ?: return
-        val view =
-                MapView(context).apply {
-                    onCreate(null)
-                    onStart()
-                    onResume()
-                }
-        mapView = view
-        frame.addView(
-                view,
-                0,
-                FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                )
-        )
-        view.getMapAsync { mapLibre ->
-            map = mapLibre
-            runCatching {
-                mapLibre.uiSettings.isLogoEnabled = false
-                mapLibre.uiSettings.isAttributionEnabled = false
-                mapLibre.uiSettings.isCompassEnabled = false
-                mapLibre.uiSettings.setAllGesturesEnabled(false)
-            }
-            val snapshot = current ?: NavigationSession.snapshot()
-            val styleUrl = MapStyleResolver.resolve(context, snapshot.styleIndex)
-            mapLibre.setStyle(Style.Builder().fromUri(styleUrl))
-            mapLibre.getStyle { style ->
-                styleReady = true
-                setupLayers(style, snapshot)
-                updateMap(snapshot)
-            }
-        }
-    }
-
-    private fun detachMap() {
-        val view = mapView ?: return
-        root?.removeView(view)
-        runCatching {
-            view.onPause()
-            view.onStop()
-            view.onDestroy()
-        }
-        mapView = null
-        map = null
-        styleReady = false
-        routeSource = null
-        puckSource = null
     }
 
     fun hide() {
         collectJob?.cancel()
         collectJob = null
+        snapshotGeneration++
+        snapshotInFlight = false
+        snapshotPending = false
+        snapshotPendingForce = false
+        runCatching { snapshotter?.cancel() }
+        snapshotter = null
+        baseSnapshot = null
+        baseBitmap = null
+        compositeBitmap = null
+        carBitmap = null
+        carDrawableRes = 0
         val view = root ?: return
-        detachMap()
         root = null
         instructionView = null
         detailView = null
         arrowView = null
+        imageView = null
         runCatching { windowManager.removeView(view) }
         params = null
+    }
+
+    private fun attachResizeTouch(
+            view: View,
+            resizeWidth: Boolean,
+            resizeHeight: Boolean
+    ) {
+        view.setOnTouchListener(
+                object : View.OnTouchListener {
+                    private var startW = 0
+                    private var startH = 0
+                    private var touchX = 0f
+                    private var touchY = 0f
+                    private var pendingW = 0
+                    private var pendingH = 0
+                    private var active = false
+
+                    override fun onTouch(v: View, event: MotionEvent): Boolean {
+                        val p = params ?: return false
+                        val frame = root ?: return false
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                startW = p.width
+                                startH = p.height
+                                pendingW = startW
+                                pendingH = startH
+                                touchX = event.rawX
+                                touchY = event.rawY
+                                active = true
+                                resizeToken++
+                                return true
+                            }
+                            MotionEvent.ACTION_MOVE -> {
+                                if (!active) return false
+                                val dm = context.resources.displayMetrics
+                                if (resizeWidth) {
+                                    pendingW =
+                                            (startW + (event.rawX - touchX).toInt())
+                                                    .coerceIn(
+                                                            dp(260),
+                                                            dm.widthPixels - dp(8)
+                                                    )
+                                }
+                                if (resizeHeight) {
+                                    pendingH =
+                                            (startH + (event.rawY - touchY).toInt())
+                                                    .coerceIn(
+                                                            dp(340),
+                                                            dm.heightPixels - dp(80)
+                                                    )
+                                }
+                                p.width = pendingW
+                                p.height = pendingH
+                                runCatching { windowManager.updateViewLayout(frame, p) }
+                                return true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                if (!active) return false
+                                active = false
+                                p.width = pendingW
+                                p.height = pendingH
+                                runCatching { windowManager.updateViewLayout(frame, p) }
+                                runCatching { requestSnapshot(force = true) }
+                                return true
+                            }
+                        }
+                        return false
+                    }
+                }
+        )
+    }
+
+    private fun requestSnapshot(force: Boolean) {
+        val snapshot = current ?: return
+        if (snapshot.route == null) return
+        if (snapshotInFlight) {
+            snapshotPending = true
+            snapshotPendingForce = snapshotPendingForce || force
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        val moved =
+                GeoGeometry.haversineMeters(
+                        GeoPoint(snapshot.lat, snapshot.lng),
+                        GeoPoint(lastSnapshotLat, lastSnapshotLng)
+                )
+        val bearingDelta = abs(snapshot.bearing - lastSnapshotBearing)
+        if (!force &&
+                        baseSnapshot != null &&
+                        now - lastSnapshotAt < 3_000L &&
+                        moved < 25.0 &&
+                        bearingDelta < 15.0
+        ) {
+            return
+        }
+        val width = params?.width ?: return
+        val height = params?.height ?: return
+        if (width <= 0 || height <= 0) return
+
+        lastSnapshotAt = now
+        lastSnapshotLat = snapshot.lat
+        lastSnapshotLng = snapshot.lng
+        lastSnapshotBearing = snapshot.bearing
+        val generation = ++snapshotGeneration
+        snapshotInFlight = true
+        runCatching { snapshotter?.cancel() }
+        val options =
+                MapSnapshotter.Options(width, height)
+                        .withStyleBuilder(
+                                Style.Builder()
+                                        .fromUri(
+                                                MapStyleResolver.resolve(
+                                                        context,
+                                                        snapshot.styleIndex
+                                                )
+                                        )
+                        )
+                        .withCameraPosition(
+                                CameraPosition.Builder()
+                                        .target(LatLng(snapshot.lat, snapshot.lng))
+                                        .zoom(15.2)
+                                        .tilt(0.0)
+                                        .bearing(snapshot.bearing)
+                                        .build()
+                        )
+                        .withLogo(false)
+                        .withPixelRatio(1f)
+        runCatching {
+                    snapshotter =
+                            MapSnapshotter(context, options).also { snap ->
+                                snap.start(
+                                        MapSnapshotter.SnapshotReadyCallback { mapSnapshot ->
+                                            Handler(Looper.getMainLooper())
+                                                    .post {
+                                                        snapshotInFlight = false
+                                                        if (generation ==
+                                                                        snapshotGeneration &&
+                                                                        root != null
+                                                        ) {
+                                                            val base =
+                                                                    runCatching {
+                                                                                    mapSnapshot
+                                                                                            .bitmap
+                                                                                            ?.copy(
+                                                                                                    Bitmap
+                                                                                                            .Config
+                                                                                                            .ARGB_8888,
+                                                                                                    false
+                                                                                            )
+                                                                            }
+                                                                            .getOrNull()
+                                                            if (base != null) {
+                                                                baseSnapshot = mapSnapshot
+                                                                baseBitmap = base
+                                                                compositeBitmap = null
+                                                                redrawComposite()
+                                                            }
+                                                        }
+                                                        if (snapshotPending) {
+                                                            snapshotPending = false
+                                                            val pendingForce =
+                                                                    snapshotPendingForce
+                                                            snapshotPendingForce = false
+                                                            runCatching { requestSnapshot(pendingForce) }
+                                                        }
+                                                    }
+                                        },
+                                        MapSnapshotter.ErrorHandler { _ ->
+                                            Handler(Looper.getMainLooper())
+                                                    .post {
+                                                        snapshotInFlight = false
+                                                        if (snapshotPending) {
+                                                            snapshotPending = false
+                                                            val pendingForce =
+                                                                    snapshotPendingForce
+                                                            snapshotPendingForce = false
+                                                            runCatching { requestSnapshot(pendingForce) }
+                                                        }
+                                                    }
+                                        }
+                                )
+                            }
+                }
+                .onFailure { snapshotInFlight = false }
+    }
+
+    private fun redrawComposite() {
+        runCatching {
+        val base = baseBitmap ?: return
+        val snapshot = baseSnapshot ?: return
+        val nav = current ?: return
+        val route = nav.route ?: return
+        if (compositeBitmap == null ||
+                        compositeBitmap?.width != base.width ||
+                        compositeBitmap?.height != base.height
+        ) {
+            compositeBitmap = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
+        }
+        val composite = compositeBitmap ?: return
+        val canvas = Canvas(composite)
+        canvas.drawBitmap(base, 0f, 0f, null)
+
+        val path = Path()
+        var started = false
+        route.coordinates.forEach { point ->
+            val pixel = snapshot.pixelForLatLng(LatLng(point.first, point.second)) ?: return@forEach
+            if (!started) {
+                path.moveTo(pixel.x, pixel.y)
+                started = true
+            } else {
+                path.lineTo(pixel.x, pixel.y)
+            }
+        }
+        if (started) {
+            val casing =
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.parseColor("#B36A18")
+                        style = Paint.Style.STROKE
+                        strokeWidth = 13f
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                    }
+            canvas.drawPath(path, casing)
+            val line =
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.parseColor("#F2A33C")
+                        style = Paint.Style.STROKE
+                        strokeWidth = 8f
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                    }
+            canvas.drawPath(path, line)
+        }
+
+        val car = carBitmap(nav, base.width) ?: return
+        val pixel = snapshot.pixelForLatLng(LatLng(nav.lat, nav.lng))
+        if (pixel != null) {
+            canvas.drawBitmap(car, pixel.x - car.width / 2f, pixel.y - car.height / 2f, null)
+        }
+        imageView?.setImageBitmap(composite)
+        }
+    }
+
+    private fun carBitmap(snapshot: NavigationSnapshot, baseWidth: Int): Bitmap? {
+        val res =
+                when {
+                        snapshot.profile == "cycling-regular" -> R.drawable.ic_puck_bike_3d
+                        snapshot.profile == "foot-walking" -> R.drawable.ic_puck_walk_3d
+                        else -> VehicleIcon.fromKey(snapshot.vehicleIconKey).drawable
+                }
+        if (res != carDrawableRes || carBitmap == null) {
+            val raw =
+                    runCatching { BitmapFactory.decodeResource(context.resources, res) }
+                            .getOrNull()
+                            ?: return null
+            val target = (baseWidth * 0.22f).toInt().coerceIn(64, 140)
+            carBitmap =
+                    runCatching {
+                                    Bitmap.createScaledBitmap(raw, target, target, true)
+                            }
+                            .getOrNull()
+            carDrawableRes = res
+        }
+        return carBitmap
     }
 
     private fun updateText(snapshot: NavigationSnapshot) {
@@ -423,100 +736,6 @@ class FloatingNavigationOverlay(
         val maneuver = snapshot.route?.steps?.getOrNull(snapshot.instructionIndex)?.maneuver
         arrowView?.text = arrowFor(snapshot.instruction, maneuver)
     }
-
-    private fun setupLayers(style: Style, snapshot: NavigationSnapshot) {
-        val route = snapshot.route ?: return
-        runCatching {
-            style.removeLayer("float-route-layer")
-            style.removeSource("float-route-source")
-            style.removeLayer("float-puck-layer")
-            style.removeSource("float-puck-source")
-            style.removeImage("float-puck")
-
-            val coords =
-                    route.coordinates.joinToString(",") { "[${it.second},${it.first}]" }
-            val routeGeoJson =
-                    """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coords]}}"""
-            val rs = GeoJsonSource("float-route-source", routeGeoJson)
-            style.addSource(rs)
-            routeSource = rs
-            style.addLayer(
-                    LineLayer("float-route-layer", "float-route-source")
-                            .withProperties(
-                                    lineColor(Color.parseColor("#F2A33C")),
-                                    lineWidth(7f),
-                                    lineOpacity(0.95f),
-                                    lineCap(Property.LINE_CAP_ROUND),
-                                    lineJoin(Property.LINE_JOIN_ROUND)
-                            )
-            )
-
-            val puckRes =
-                    when {
-                        snapshot.profile == "cycling-regular" -> R.drawable.ic_puck_bike_3d
-                        snapshot.profile == "foot-walking" -> R.drawable.ic_puck_walk_3d
-                        else ->
-                                VehicleIcon.fromKey(snapshot.vehicleIconKey).drawable
-                    }
-            val bitmap = android.graphics.BitmapFactory.decodeResource(context.resources, puckRes)
-            style.addImage("float-puck", bitmap)
-            val ps =
-                    GeoJsonSource(
-                            "float-puck-source",
-                            puckGeoJson(snapshot.lat, snapshot.lng, snapshot.bearing)
-                    )
-            style.addSource(ps)
-            puckSource = ps
-            style.addLayer(
-                    SymbolLayer("float-puck-layer", "float-puck-source")
-                            .withProperties(
-                                    iconImage("float-puck"),
-                                    iconSize(0.55f),
-                                    iconRotate(Expression.get("bearing")),
-                                    iconRotationAlignment(
-                                            Property.ICON_ROTATION_ALIGNMENT_MAP
-                                    ),
-                                    iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
-                                    iconAllowOverlap(true),
-                                    iconIgnorePlacement(true),
-                                    iconAnchor(Property.ICON_ANCHOR_CENTER)
-                            )
-            )
-        }
-    }
-
-    private fun updateMap(snapshot: NavigationSnapshot) {
-        if (!styleReady) return
-        val route = snapshot.route ?: return
-        val coords = route.coordinates.joinToString(",") { "[${it.second},${it.first}]" }
-        routeSource?.setGeoJson(
-                """{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coords]}}"""
-        )
-        puckSource?.setGeoJson(puckGeoJson(snapshot.lat, snapshot.lng, snapshot.bearing))
-        map?.animateCamera(
-                CameraUpdateFactory.newCameraPosition(
-                        CameraPosition.Builder()
-                                .target(LatLng(snapshot.lat, snapshot.lng))
-                                .zoom(15.2)
-                                .tilt(0.0)
-                                .bearing(snapshot.bearing)
-                                .build()
-                ),
-                450
-        )
-    }
-
-    private fun puckGeoJson(lat: Double, lng: Double, bearing: Double): String =
-            JSONObject()
-                    .put("type", "Feature")
-                    .put(
-                            "geometry",
-                            JSONObject()
-                                    .put("type", "Point")
-                                    .put("coordinates", JSONArray().put(lng).put(lat))
-                    )
-                    .put("properties", JSONObject().put("bearing", bearing))
-                    .toString()
 
     private fun arrowFor(instruction: String, maneuver: ManeuverType?): String {
         return when (maneuver) {
@@ -545,12 +764,15 @@ class FloatingNavigationOverlay(
     }
 
     private fun openApp() {
-        // Bring the existing task forward. A background service cannot always start an
-        // activity on newer Android versions, but moving the app's own task to the front is
-        // allowed with REORDER_TASKS and gives the full-screen navigation UI immediately.
-        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val task = am.appTasks.firstOrNull()
-        val moved = task != null && runCatching { task.moveToFront() }.isSuccess
+        val moved =
+                runCatching {
+                                val am =
+                                        context.getSystemService(Context.ACTIVITY_SERVICE)
+                                                as ActivityManager
+                                val task = am.appTasks.firstOrNull()
+                                task != null && task.moveToFront().let { true }
+                        }
+                        .getOrDefault(false)
         if (!moved) {
             runCatching {
                 context.startActivity(

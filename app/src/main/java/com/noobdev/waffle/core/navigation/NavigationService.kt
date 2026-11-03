@@ -155,24 +155,27 @@ class NavigationService : Service() {
     private fun showFloatingInternal() {
         if (!Settings.canDrawOverlays(this)) return
         if (floatingOverlay?.isShowing() != true) {
-            floatingOverlay?.hide()
+            runCatching { floatingOverlay?.hide() }
             val sizeStep =
                     getSharedPreferences("waffle_floating", MODE_PRIVATE)
                             .getInt("size_step", 0)
             floatingOverlay =
-                    FloatingNavigationOverlay(
-                                    this,
-                                    getSystemService(Context.WINDOW_SERVICE) as WindowManager,
-                                    sizeStep = sizeStep
-                            )
-                            .also { overlay ->
-                                if (!overlay.show()) floatingOverlay = null
+                    runCatching {
+                                    val overlay =
+                                            FloatingNavigationOverlay(
+                                                    this,
+                                                    getSystemService(Context.WINDOW_SERVICE)
+                                                            as WindowManager,
+                                                    sizeStep = sizeStep
+                                            )
+                                    if (overlay.show()) overlay else null
                             }
+                            .getOrNull()
         }
     }
 
     private fun hideFloatingInternal() {
-        floatingOverlay?.hide()
+        runCatching { floatingOverlay?.hide() }
         floatingOverlay = null
     }
 
