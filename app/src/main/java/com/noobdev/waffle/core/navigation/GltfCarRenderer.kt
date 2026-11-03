@@ -205,15 +205,16 @@ object GltfCarRenderer {
             glow(0f, 0.10f, if (lights.braking) 0.16f else 0.06f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25))
         } else {
             if (lights.braking) {
-                // Soft red halo across the tail so the stop lamps read from a distance.
-                glow(0f, 0.24f, 0.24f, Color.argb(95, 255, 25, 20))
+                // High-mount stop lamp on the rear window makes braking unmistakable.
+                bar(0f, 0.12f, 0.11f, 0.022f, Color.rgb(255, 45, 35), 0.01f)
+                glow(0f, 0.12f, 0.12f, Color.argb(160, 255, 25, 20))
             }
             for (side in listOf(-1f, 1f)) {
-                bar(side * 0.20f, 0.24f, 0.105f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
-                glow(side * 0.20f, 0.24f, if (lights.braking) 0.14f else 0.05f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(85, 255, 30, 25))
-            }
-            if (lights.braking) {
-                bar(0f, 0.24f, 0.075f, 0.025f, Color.rgb(255, 70, 55), 0.015f)
+                if (lights.braking) {
+                    glow(side * 0.15f, 0.26f, 0.15f, Color.argb(120, 255, 25, 20))
+                }
+                bar(side * 0.15f, 0.26f, 0.07f, 0.035f, if (lights.braking) Color.rgb(255, 45, 35) else Color.argb(190, 230, 28, 28), 0.02f)
+                glow(side * 0.15f, 0.26f, if (lights.braking) 0.13f else 0.05f, if (lights.braking) Color.argb(220, 255, 30, 25) else Color.argb(85, 255, 30, 25))
             }
         }
 
@@ -233,10 +234,10 @@ object GltfCarRenderer {
                 }
             } else {
                 bar(side * 0.24f, -0.13f, 0.065f, 0.04f, amber, 0.02f)
-                bar(side * 0.28f, 0.20f, 0.065f, 0.04f, amber, 0.02f)
+                bar(side * 0.26f, 0.26f, 0.045f, 0.035f, amber, 0.02f)
                 if (lights.blinkOn) {
                     glow(side * 0.24f, -0.13f, 0.085f, Color.argb(160, 255, 175, 35))
-                    glow(side * 0.28f, 0.20f, 0.085f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.26f, 0.26f, 0.075f, Color.argb(160, 255, 175, 35))
                 }
             }
         }
