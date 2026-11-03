@@ -57,7 +57,8 @@ import org.maplibre.android.snapshotter.MapSnapshotter
  * stall the main thread. The base map refreshes every few seconds; the route and car redraw on
  * every navigation update.
  *
- * Requires `Settings.canDrawOverlays(context)`. Tapping the map or the ⛶ button opens the app.
+ * Requires `Settings.canDrawOverlays(context)`. The map is display-only; use the ⛶ button to
+ * open the full app.
  */
 class FloatingNavigationOverlay(
         private val context: Context,
@@ -76,7 +77,7 @@ class FloatingNavigationOverlay(
 
     private var baseBitmap: Bitmap? = null
     private var compositeBitmap: Bitmap? = null
-    private var baseSnapshot: MapSnapshot? = null
+    private var projection: Projection? = null
     private var snapshotter: MapSnapshotter? = null
     private var carBitmap: Bitmap? = null
     private var carDrawableRes: Int = 0
@@ -167,12 +168,13 @@ class FloatingNavigationOverlay(
                 )
         )
 
-        // Tapping anywhere on the map opens the full-screen navigation screen.
+        // The map is display-only. Taps are swallowed here so they do not fall through to
+        // the launcher behind the overlay; only the ? button opens the full app.
         val tapLayer =
                 View(context).apply {
                     setBackgroundColor(Color.TRANSPARENT)
                     isClickable = true
-                    setOnClickListener { openApp() }
+                    setOnClickListener { }
                 }
         frame.addView(
                 tapLayer,
@@ -192,7 +194,6 @@ class FloatingNavigationOverlay(
                             GradientDrawable().apply {
                                 setColor(Color.parseColor("#F210151D"))
                             }
-                    setOnClickListener { openApp() }
                 }
         frame.addView(
                 bar,
@@ -398,7 +399,7 @@ class FloatingNavigationOverlay(
         if (!prefs.getBoolean("hint_shown", false)) {
             Toast.makeText(
                             context,
-                            "Tap map for full screen · drag ≡ to move · drag ⇔ / ⇕ / ◢ to resize",
+                            "Tap ⛶ for full screen · drag ≡ to move · drag ⇔ / ⇕ / ◢ to resize",
                             Toast.LENGTH_LONG
                     )
                     .show()
@@ -434,7 +435,7 @@ class FloatingNavigationOverlay(
         snapshotPendingForce = false
         runCatching { snapshotter?.cancel() }
         snapshotter = null
-        baseSnapshot = null
+        projection = null
         baseBitmap = null
         compositeBitmap = null
         carBitmap = null
@@ -486,7 +487,7 @@ class FloatingNavigationOverlay(
                                     pendingW =
                                             (startW + (event.rawX - touchX).toInt())
                                                     .coerceIn(
-                                                            dp(260),
+                                                            dp(180),
                                                             dm.widthPixels - dp(8)
                                                     )
                                 }
@@ -494,13 +495,17 @@ class FloatingNavigationOverlay(
                                     pendingH =
                                             (startH + (event.rawY - touchY).toInt())
                                                     .coerceIn(
-                                                            dp(340),
+                                                            dp(260),
                                                             dm.heightPixels - dp(80)
                                                     )
                                 }
                                 p.width = pendingW
                                 p.height = pendingH
-                                runCatching { windowManager.updateViewLayout(frame, p) }
+                                runCatching {
+                                    windowManager.updateViewLayout(frame, p)
+                                    frame.requestLayout()
+                                    frame.invalidate()
+                                }
                                 return true
                             }
                             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -508,7 +513,11 @@ class FloatingNavigationOverlay(
                                 active = false
                                 p.width = pendingW
                                 p.height = pendingH
-                                runCatching { windowManager.updateViewLayout(frame, p) }
+                                runCatching {
+                                    windowManager.updateViewLayout(frame, p)
+                                    frame.requestLayout()
+                                    frame.invalidate()
+                                }
                                 runCatching { requestSnapshot(force = true) }
                                 return true
                             }
@@ -535,7 +544,7 @@ class FloatingNavigationOverlay(
                 )
         val bearingDelta = abs(snapshot.bearing - lastSnapshotBearing)
         if (!force &&
-                        baseSnapshot != null &&
+                        projection != null &&
                         now - lastSnapshotAt < 3_000L &&
                         moved < 25.0 &&
                         bearingDelta < 15.0
@@ -599,10 +608,21 @@ class FloatingNavigationOverlay(
                                                                             }
                                                                             .getOrNull()
                                                             if (base != null) {
-                                                                baseSnapshot = mapSnapshot
-                                                                baseBitmap = base
-                                                                compositeBitmap = null
-                                                                redrawComposite()
+                                                                val proj =
+                                                                        runCatching {
+                                                                                        Projection.from(
+                                                                                                mapSnapshot,
+                                                                                                snapshot.lat,
+                                                                                                snapshot.lng
+                                                                                        )
+                                                                                }
+                                                                                .getOrNull()
+                                                                if (proj != null) {
+                                                                    projection = proj
+                                                                    baseBitmap = base
+                                                                    compositeBitmap = null
+                                                                    redrawComposite()
+                                                                }
                                                             }
                                                         }
                                                         if (snapshotPending) {
@@ -636,7 +656,7 @@ class FloatingNavigationOverlay(
     private fun redrawComposite() {
         runCatching {
         val base = baseBitmap ?: return
-        val snapshot = baseSnapshot ?: return
+        val projection = projection ?: return
         val nav = current ?: return
         val route = nav.route ?: return
         if (compositeBitmap == null ||
@@ -652,7 +672,7 @@ class FloatingNavigationOverlay(
         val path = Path()
         var started = false
         route.coordinates.forEach { point ->
-            val pixel = snapshot.pixelForLatLng(LatLng(point.first, point.second)) ?: return@forEach
+            val pixel = projection.project(point.first, point.second)
             if (!started) {
                 path.moveTo(pixel.x, pixel.y)
                 started = true
@@ -682,7 +702,7 @@ class FloatingNavigationOverlay(
         }
 
         val car = carBitmap(nav, base.width) ?: return
-        val pixel = snapshot.pixelForLatLng(LatLng(nav.lat, nav.lng))
+        val pixel = projection.project(nav.lat, nav.lng)
         if (pixel != null) {
             canvas.drawBitmap(car, pixel.x - car.width / 2f, pixel.y - car.height / 2f, null)
         }
@@ -791,4 +811,56 @@ class FloatingNavigationOverlay(
 
     private fun dp(value: Int): Int =
             (value * context.resources.displayMetrics.density).roundToInt()
+}
+
+/**
+ * Local affine projection derived from a MapSnapshot while that snapshot is still alive. We
+ * deliberately do not keep the MapSnapshot or call `pixelForLatLng` after the snapshotter is
+ * cancelled: that native object can be freed underneath us, which is the kind of crash a
+ * try/catch cannot intercept.
+ */
+private data class Projection(
+        val centerLat: Double,
+        val centerLng: Double,
+        val centerX: Float,
+        val centerY: Float,
+        val eastX: Float,
+        val eastY: Float,
+        val northX: Float,
+        val northY: Float
+) {
+    fun project(lat: Double, lng: Double): PointF {
+        val dLat = (lat - centerLat).toFloat()
+        val dLng = (lng - centerLng).toFloat()
+        return PointF(
+                centerX + dLng * eastX + dLat * northX,
+                centerY + dLng * eastY + dLat * northY
+        )
+    }
+
+    companion object {
+        private const val DELTA = 0.001
+
+        fun from(snapshot: MapSnapshot, centerLat: Double, centerLng: Double): Projection? {
+            val center =
+                    snapshot.pixelForLatLng(LatLng(centerLat, centerLng)) ?: return null
+            val east =
+                    snapshot.pixelForLatLng(LatLng(centerLat, centerLng + DELTA))
+                            ?: return null
+            val north =
+                    snapshot.pixelForLatLng(LatLng(centerLat + DELTA, centerLng))
+                            ?: return null
+            val delta = DELTA.toFloat()
+            return Projection(
+                    centerLat = centerLat,
+                    centerLng = centerLng,
+                    centerX = center.x,
+                    centerY = center.y,
+                    eastX = (east.x - center.x) / delta,
+                    eastY = (east.y - center.y) / delta,
+                    northX = (north.x - center.x) / delta,
+                    northY = (north.y - center.y) / delta
+            )
+        }
+    }
 }

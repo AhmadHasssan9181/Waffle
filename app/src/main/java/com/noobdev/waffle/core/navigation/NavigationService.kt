@@ -59,7 +59,11 @@ class NavigationService : Service() {
             val intent =
                     Intent(context, NavigationService::class.java)
                             .setAction(ACTION_SHOW_FLOATING)
-            ContextCompat.startForegroundService(context, intent)
+            // The overlay is requested from the visible activity. Use a normal service
+            // start here: the service is already foreground during navigation, and a
+            // startForegroundService() that races with an inactive session can throw
+            // ForegroundServiceDidNotStartInTimeException.
+            context.startService(intent)
         }
 
         fun hideFloating(context: Context) {
@@ -113,6 +117,8 @@ class NavigationService : Service() {
                 if (active != null) {
                     startForegroundCompat(buildNotification(active))
                     showFloatingInternal()
+                } else {
+                    stopSelf()
                 }
                 return START_STICKY
             }
