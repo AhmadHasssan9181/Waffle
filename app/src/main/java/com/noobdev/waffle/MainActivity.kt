@@ -65,11 +65,13 @@ class MainActivity : ComponentActivity() {
             // Make sure the PiP window shows navigation, not whichever tab was open.
             NavigationSession.requestOpenMap()
             runCatching {
-                enterPictureInPictureMode(
+                // 3:2 keeps a landscape width close to 16:9 while adding vertical room for
+                // the route and the instruction/ETA bar. Portrait/square ratios get too narrow.
+                val params =
                         PictureInPictureParams.Builder()
-                                .setAspectRatio(Rational(16, 9))
+                                .setAspectRatio(Rational(3, 2))
                                 .build()
-                )
+                enterPictureInPictureMode(params)
             }
         }
     }

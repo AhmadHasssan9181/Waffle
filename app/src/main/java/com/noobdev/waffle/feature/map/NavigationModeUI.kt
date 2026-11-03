@@ -231,7 +231,7 @@ fun NavigationModeUI(
                                                         tint = DangerRed,
                                                         modifier = Modifier.size(20.dp)
                                                 )
-                                                Spacer(Modifier.width(10.dp))
+                                                Spacer(Modifier.width(8.dp))
                                                 Text(
                                                         "Wrong way — turn around",
                                                         style = MaterialTheme.typography.titleSmall,
@@ -446,6 +446,7 @@ fun NavigationModeUI(
                         PipNavigationBar(
                                 instruction = currentInstruction,
                                 distanceToNextTurn = distanceToNextTurn,
+                                remainingDuration = remainingDuration,
                                 maneuver = routeResult.steps.getOrNull(currentIndex)?.maneuver,
                                 modifier = Modifier.align(Alignment.BottomCenter)
                         )
@@ -712,27 +713,28 @@ private fun SpeedLimitBadge(
 private fun PipNavigationBar(
         instruction: String,
         distanceToNextTurn: Double,
+        remainingDuration: Double,
         maneuver: ManeuverType?,
         modifier: Modifier = Modifier
 ) {
         Surface(
                 modifier = modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                tonalElevation = 4.dp
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                tonalElevation = 6.dp
         ) {
                 Row(
                         modifier =
                                 Modifier.fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                 ) {
                         Box(
-                                Modifier.size(34.dp)
+                                Modifier.size(36.dp)
                                         .clip(CircleShape)
                                         .background(
                                                 MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.14f
+                                                        alpha = 0.16f
                                                 )
                                         ),
                                 contentAlignment = Alignment.Center
@@ -749,30 +751,43 @@ private fun PipNavigationBar(
                         Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                         instruction.ifEmpty { "Continue straight" },
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                 )
-                                if (distanceToNextTurn > 0.0) {
+                                val minutes =
+                                        (remainingDuration / 60.0)
+                                                .roundToInt()
+                                                .coerceAtLeast(1)
+                                val eta =
+                                        if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m"
+                                        else "${minutes}m"
+                                val detail =
+                                        buildString {
+                                                if (distanceToNextTurn > 0.0) {
+                                                        append(
+                                                                formatDistance(
+                                                                        distanceToNextTurn
+                                                                )
+                                                        )
+                                                }
+                                                if (remainingDuration > 0.0) {
+                                                        if (isNotEmpty()) append(" · ")
+                                                        append(eta)
+                                                }
+                                        }
+                                if (detail.isNotEmpty()) {
                                         Text(
-                                                "In ${formatDistance(distanceToNextTurn)}",
-                                                style = MaterialTheme.typography.labelSmall,
+                                                detail,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.primary,
-                                                fontWeight = FontWeight.SemiBold
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1
                                         )
                                 }
                         }
-                        Text(
-                                "© OSM",
-                                style = MaterialTheme.typography.labelSmall,
-                                color =
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.55f
-                                        ),
-                                modifier = Modifier.padding(start = 6.dp)
-                        )
                 }
         }
 }
