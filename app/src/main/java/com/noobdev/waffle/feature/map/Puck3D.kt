@@ -110,7 +110,7 @@ internal fun Puck3D(
                 isCarMode && vehicleIcon == VehicleIcon.ARROW -> R.drawable.ic_puck_arrow_3d
                 else -> vehicleIcon.drawable
             }
-    val iconSize = if (isNavigating) 0.42f else 0.30f
+    val iconSize = if (isNavigating) 0.55f else 0.30f
     val bitmap =
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
@@ -146,7 +146,7 @@ internal fun Puck3D(
                                                     Property.ICON_ROTATION_ALIGNMENT_MAP
                                             ),
                                             iconPitchAlignment(
-                                                    Property.ICON_PITCH_ALIGNMENT_MAP
+                                                    Property.ICON_PITCH_ALIGNMENT_VIEWPORT
                                             ),
                                             iconAllowOverlap(true),
                                             iconIgnorePlacement(true),
