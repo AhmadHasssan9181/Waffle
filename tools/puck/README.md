@@ -6,7 +6,8 @@ Generates the navigation puck PNGs used by `feature/map/Puck3D.kt`:
   pointing up, so `iconRotate` can align them with the GPS bearing without a side-on look.
 - `ic_puck_dot` - the neutral blue location dot used outside active navigation (idle and route
   preview).
-- `ic_puck_bike_3d`, `ic_puck_walk_3d` - 3D arrow with a bike/walk badge.
+- `ic_puck_bike_3d` - a top-down 3D bicycle and rider, nose up.
+- `ic_puck_walk_3d` - a top-down 3D walker, facing up.
 - `ic_puck_arrow_3d` - the classic navigation arrow.
 
 The art is drawn programmatically so it can be regenerated and recoloured without a design tool.

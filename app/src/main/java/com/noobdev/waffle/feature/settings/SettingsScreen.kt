@@ -2,6 +2,7 @@ package com.noobdev.waffle.feature.settings
 
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -60,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -72,6 +74,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.Screen
@@ -116,6 +121,18 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                 2 -> "Large"
                 else -> "Balanced"
             }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var overlayAllowed by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+                LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        overlayAllowed = Settings.canDrawOverlays(context)
+                    }
+                }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val effectiveMapStyleIndex =
             if (mapStyleIndex >= 0) mapStyleIndex
             else autoStyleIndex(MaterialTheme.colorScheme.background.luminance() < 0.5f)
@@ -224,6 +241,26 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                                     .edit()
                                     .putInt("size_step", floatingSizeStep)
                                     .apply()
+                        }
+                )
+
+                SettingsDivider()
+
+                SettingsItem(
+                        icon = Icons.Rounded.OpenInFull,
+                        title = "Floating navigation window",
+                        subtitle =
+                                if (overlayAllowed) "Allowed · tap to manage"
+                                else "Allow display over other apps",
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                        Intent(
+                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                Uri.parse("package:${context.packageName}")
+                                        )
+                                )
+                            }
                         }
                 )
 

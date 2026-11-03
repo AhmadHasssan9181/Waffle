@@ -2,8 +2,8 @@
 
 - sedan / SUV / pickup: a top-down 3D car with the nose pointing up, so `iconRotate` can align it
   with the GPS bearing without the car looking sideways.
-- bike: a 3/4 isometric bicycle badge
-- walk: a 3/4 low-poly walker badge
+- bike: a top-down 3D bicycle with a rider
+- walk: a top-down 3D walker
 - arrow: the classic navigation arrow
 - dot: the neutral location dot used outside active navigation
 
@@ -329,6 +329,90 @@ def dot():
     return img
 
 
+def topdown_bike():
+    img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    shadow(img, (150, 120, 362, 420), 110, offset=(8, 16), blur=16, alpha=110)
+
+    # Wheels: front at the top, rear at the bottom.
+    for cy in (150, 370):
+        d.ellipse((196, cy - 58, 316, cy + 58), fill=(15, 20, 27, 255), outline=INK, width=4)
+        d.ellipse((210, cy - 44, 302, cy + 44), fill=(40, 48, 60, 255), outline=(70, 82, 96, 255), width=3)
+        d.ellipse((242, cy - 12, 270, cy + 12), fill=HUB, outline=(70, 82, 96, 255), width=2)
+        for angle in range(0, 360, 30):
+            a = math.radians(angle)
+            d.line(
+                [(256, cy), (256 + math.cos(a) * 44, cy + math.sin(a) * 44)],
+                fill=(150, 162, 176, 180),
+                width=2,
+            )
+
+    # Frame.
+    frame = (242, 163, 60, 255)
+    d.line([(256, 370), (256, 280), (256, 210), (256, 150)], fill=frame, width=10)
+    d.line([(256, 280), (310, 250)], fill=frame, width=9)
+    d.line([(256, 210), (202, 250)], fill=frame, width=9)
+    d.line([(202, 250), (256, 280)], fill=frame, width=9)
+    d.line([(256, 210), (256, 150)], fill=(255, 255, 255, 90), width=3)
+    # Handlebar.
+    d.line([(198, 174), (314, 174)], fill=(30, 38, 48, 255), width=12)
+    d.ellipse((190, 164, 210, 184), fill=HONEY, outline=INK, width=3)
+    d.ellipse((302, 164, 322, 184), fill=HONEY, outline=INK, width=3)
+    # Seat.
+    d.rounded_rectangle((226, 206, 286, 232), radius=10, fill=(40, 48, 60, 255), outline=INK, width=3)
+
+    # Rider: helmet, shoulders, arms and legs.
+    d.ellipse((226, 226, 286, 286), fill=(242, 163, 60, 255), outline=INK, width=4)
+    d.ellipse((236, 216, 276, 248), fill=(236, 239, 242, 255), outline=INK, width=3)
+    d.rounded_rectangle((214, 278, 298, 326), radius=18, fill=(38, 54, 72, 255), outline=INK, width=3)
+    d.line([(226, 288), (208, 182)], fill=(38, 54, 72, 255), width=10)
+    d.line([(286, 288), (304, 182)], fill=(38, 54, 72, 255), width=10)
+    d.line([(232, 320), (214, 350)], fill=(28, 36, 46, 255), width=12)
+    d.line([(280, 320), (298, 350)], fill=(28, 36, 46, 255), width=12)
+    d.ellipse((204, 344, 226, 362), fill=(20, 26, 34, 255))
+    d.ellipse((290, 344, 312, 362), fill=(20, 26, 34, 255))
+    return img
+
+
+def topdown_walk():
+    img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    shadow(img, (170, 150, 342, 430), 100, offset=(8, 18), blur=16, alpha=105)
+
+    # Legs, one forward and one back.
+    d.rounded_rectangle((222, 300, 252, 408), radius=14, fill=(32, 40, 52, 255), outline=INK, width=3)
+    d.rounded_rectangle((260, 300, 290, 424), radius=14, fill=(42, 52, 66, 255), outline=INK, width=3)
+    d.rounded_rectangle((216, 398, 252, 420), radius=8, fill=(18, 24, 32, 255), outline=INK, width=2)
+    d.rounded_rectangle((258, 414, 294, 436), radius=8, fill=(18, 24, 32, 255), outline=INK, width=2)
+
+    # Torso / jacket.
+    d.rounded_rectangle((206, 228, 306, 330), radius=26, fill=(226, 82, 54, 255), outline=INK, width=4)
+    d.line([(256, 238), (256, 320)], fill=(150, 46, 30, 255), width=3)
+    d.rounded_rectangle((214, 300, 298, 338), radius=12, fill=(30, 38, 48, 255), outline=INK, width=2)
+
+    # Arms.
+    d.rounded_rectangle((190, 238, 214, 332), radius=12, fill=(200, 68, 44, 255), outline=INK, width=3)
+    d.rounded_rectangle((298, 238, 322, 332), radius=12, fill=(200, 68, 44, 255), outline=INK, width=3)
+    d.ellipse((188, 320, 212, 344), fill=(214, 158, 120, 255), outline=INK, width=2)
+    d.ellipse((300, 320, 324, 344), fill=(214, 158, 120, 255), outline=INK, width=2)
+
+    # Backpack behind the shoulders.
+    d.rounded_rectangle((220, 290, 292, 338), radius=14, fill=(24, 32, 42, 255), outline=INK, width=3)
+    d.line([(238, 300), (238, 330)], fill=(70, 82, 96, 255), width=3)
+    d.line([(274, 300), (274, 330)], fill=(70, 82, 96, 255), width=3)
+
+    # Head, hair and cap.
+    d.ellipse((218, 168, 294, 244), fill=(214, 158, 120, 255), outline=INK, width=4)
+    d.pieslice((214, 158, 298, 238), 180, 360, fill=(30, 38, 48, 255), outline=INK, width=3)
+    d.rounded_rectangle((228, 154, 284, 178), radius=12, fill=(242, 163, 60, 255), outline=INK, width=3)
+    d.ellipse((246, 204, 266, 216), fill=(60, 40, 32, 200))
+    d.line([(256, 214), (256, 226)], fill=(120, 80, 60, 180), width=2)
+
+    # A little 3D highlight.
+    d.line([(222, 244), (222, 314)], fill=(255, 255, 255, 55), width=4)
+    return img
+
+
 def arrow_badge(mode):
     img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -384,8 +468,12 @@ def main():
         OUT / "ic_puck_pickup_3d.png"
     )
     dot().save(OUT / "ic_puck_dot.png")
-    arrow_badge("bike").save(OUT / "ic_puck_bike_3d.png")
-    arrow_badge("walk").save(OUT / "ic_puck_walk_3d.png")
+    topdown_bike().resize((256, 256), Image.Resampling.LANCZOS).save(
+        OUT / "ic_puck_bike_3d.png"
+    )
+    topdown_walk().resize((256, 256), Image.Resampling.LANCZOS).save(
+        OUT / "ic_puck_walk_3d.png"
+    )
     arrow().save(OUT / "ic_puck_arrow_3d.png")
     print("wrote pucks to", OUT)
 

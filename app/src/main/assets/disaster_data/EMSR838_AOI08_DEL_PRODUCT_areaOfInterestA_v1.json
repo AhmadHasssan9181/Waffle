@@ -1,8 +1,1 @@
-{
-"type": "FeatureCollection",
-"name": "EMSR838_AOI08_DEL_PRODUCT_areaOfInterestA_v1",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "emsr_id": "EMSR838", "glide_no": "FL-2025-000139-PAK", "area_id": "08", "locality": "Vanike", "map_type": "Delineation" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 73.740618, 32.4402304 ], [ 73.80731, 32.4751573 ], [ 73.8732973, 32.1792264 ], [ 73.85452, 32.156608 ], [ 73.833618, 32.131431 ], [ 73.416138, 32.026706 ], [ 73.278809, 31.989442 ], [ 73.185425, 31.87989 ], [ 73.072815, 31.933517 ], [ 73.127747, 32.140734 ], [ 73.476563, 32.380541 ], [ 73.716085, 32.434395 ], [ 73.740618, 32.4402304 ] ] ] } }
-]
-}
+{"type":"FeatureCollection","name":"EMSR838_AOI08_DEL_PRODUCT_areaOfInterestA_v1","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[{"type":"Feature","properties":{"emsr_id":"EMSR838","glide_no":"FL-2025-000139-PAK","area_id":"08","locality":"Vanike","map_type":"Delineation"},"geometry":{"type":"Polygon","coordinates":[[[73.740618,32.4402304],[73.80731,32.4751573],[73.8732973,32.1792264],[73.833618,32.131431],[73.416138,32.026706],[73.278809,31.989442],[73.185425,31.87989],[73.072815,31.933517],[73.127747,32.140734],[73.476563,32.380541],[73.716085,32.434395],[73.740618,32.4402304]]]}}]}

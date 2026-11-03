@@ -5,6 +5,15 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.noobdev.waffle.data.model.StatusLevel
 
+/**
+ * Named (not anonymous) so R8 can keep the generic signature reliably. Anonymous TypeToken
+ * subclasses inside a converter method are a classic source of "TypeToken must be created with a
+ * type argument" crashes in release builds.
+ */
+private class MapTypeToken : TypeToken<Map<String, Any>>()
+
+private val mapType = MapTypeToken().type
+
 class Converters {
 
     private val gson = Gson()
@@ -12,7 +21,6 @@ class Converters {
     @TypeConverter
     fun fromStringMap(value: String?): Map<String, Any>? {
         if (value == null) return null
-        val mapType = object : TypeToken<Map<String, Any>>() {}.type
         return try {
             gson.fromJson(value, mapType)
         } catch (e: Exception) {

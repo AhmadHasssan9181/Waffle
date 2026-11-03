@@ -1,8 +1,1 @@
-{
-"type": "FeatureCollection",
-"name": "EMSR838_AOI07_DEL_PRODUCT_areaOfInterestA_v1",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "emsr_id": "EMSR838", "glide_no": "FL-2025-000139-PAK", "area_id": "07", "locality": "Sahuka", "map_type": "Delineation" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 73.424377, 30.152252 ], [ 72.949219, 29.940655 ], [ 72.814636, 29.876374 ], [ 72.636108, 29.778682 ], [ 72.512512, 29.747686 ], [ 72.4823, 29.873992 ], [ 72.704773, 30.035811 ], [ 73.089294, 30.157002 ], [ 73.304853, 30.28114 ], [ 73.42847, 30.181738 ], [ 73.424377, 30.152252 ] ] ] } }
-]
-}
+{"type":"FeatureCollection","name":"EMSR838_AOI07_DEL_PRODUCT_areaOfInterestA_v1","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[{"type":"Feature","properties":{"emsr_id":"EMSR838","glide_no":"FL-2025-000139-PAK","area_id":"07","locality":"Sahuka","map_type":"Delineation"},"geometry":{"type":"Polygon","coordinates":[[[73.424377,30.152252],[72.949219,29.940655],[72.814636,29.876374],[72.636108,29.778682],[72.512512,29.747686],[72.4823,29.873992],[72.704773,30.035811],[73.089294,30.157002],[73.304853,30.28114],[73.42847,30.181738],[73.424377,30.152252]]]}}]}

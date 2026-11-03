@@ -22,6 +22,8 @@ fun secret(name: String): String =
 
 android {
     namespace = "com.noobdev.waffle"
+    val buildingBundle =
+            gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
     compileSdk = 36
 
     defaultConfig {
@@ -39,11 +41,34 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"${secret("GEMINI_API_KEY")}\"")
         buildConfigField("String", "OPENCAGE_API_KEY", "\"${secret("OPENCAGE_API_KEY")}\"")
         buildConfigField("String", "TOMTOM_API_KEY", "\"${secret("TOMTOM_API_KEY")}\"")
+
+        if (buildingBundle) {
+            ndk {
+                // Phone ABIs only; Play still splits per device.
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
+        }
+    }
+
+    splits {
+        abi {
+            // Bundles must not contain multiple APK splits; Play handles ABI splitting.
+            isEnable = !buildingBundle
+            reset()
+            // Keep only phone ABIs. x86/x86_64 are emulator-only and were adding
+            // ~22 MB of MapLibre native libraries to every APK.
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Local release builds are debug-signed so they can be installed for size and
+            // runtime testing. Replace with a real upload key before publishing.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
