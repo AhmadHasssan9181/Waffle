@@ -3,7 +3,6 @@ package com.noobdev.waffle.feature.settings
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -70,7 +68,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -88,6 +85,7 @@ import com.noobdev.waffle.design.theme.SafeGreen
 import com.noobdev.waffle.feature.map.autoStyleIndex
 import com.noobdev.waffle.feature.map.mapTilerStyles
 import com.noobdev.waffle.feature.map.VehicleIcon
+import com.noobdev.waffle.feature.map.VehicleIconPicker
 import com.noobdev.waffle.feature.shops.data.ShopDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -368,79 +366,6 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                     },
                     onClose = { showVehiclePicker = false }
             )
-        }
-    }
-}
-
-@Composable
-private fun VehicleIconPicker(
-        current: VehicleIcon,
-        onSelect: (VehicleIcon) -> Unit,
-        onClose: () -> Unit
-) {
-    Column(
-            modifier =
-                    Modifier.fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 24.dp)
-    ) {
-        Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                    "Choose vehicle icon",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            IconButton(onClick = onClose) {
-                Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            VehicleIcon.entries.forEach { icon ->
-                val selected = icon == current
-                Surface(
-                        onClick = { onSelect(icon) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        color =
-                                if (selected)
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                        border =
-                                BorderStroke(
-                                        2.dp,
-                                        if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                )
-                ) {
-                    Column(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Image(
-                                painter = painterResource(icon.drawable),
-                                contentDescription = icon.label,
-                                modifier = Modifier.size(54.dp)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                                icon.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color =
-                                        if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         }
     }
 }

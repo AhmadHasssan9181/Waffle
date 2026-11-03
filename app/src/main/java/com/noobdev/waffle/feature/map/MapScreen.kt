@@ -47,8 +47,6 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.noobdev.waffle.feature.flood.loadSectorData
-import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.data.remote.*
 import com.noobdev.waffle.core.navigation.CameraTransitionManager
 import com.noobdev.waffle.core.navigation.GeoGeometry
@@ -94,8 +92,7 @@ enum class MapScreenState {
         IDLE, // Default - search bar visible
         SEARCHING, // Search field active
         ROUTE_PREVIEW, // Showing route before starting navigation
-        NAVIGATING, // Turn-by-turn navigation active
-        LAYERS // Layer/style picker open
+        NAVIGATING // Turn-by-turn navigation active
 }
 
 /** Whether the current search result becomes the destination or an intermediate stop. */
@@ -133,9 +130,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // Screen state
         var screenState by remember { mutableStateOf(MapScreenState.IDLE) }
-        
-        // Track the current flood sector for cycling
-        var currentFloodSectorIndex by remember { mutableStateOf(0) }
 
         // Map style - this will be passed up to change the map
         val darkUi = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -247,6 +241,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var isSimulationMode by remember { mutableStateOf(false) }
         var selectedSimSpeed by remember { mutableStateOf(SimulationSpeed.CITY) }
         var showSimControls by remember { mutableStateOf(false) }
+        var showVehiclePicker by remember { mutableStateOf(false) }
         // A simulated deviation pauses the route-follower; the reroute restarts it on the new line.
         var pendingSimulationRestart by remember { mutableStateOf(false) }
 
@@ -1900,7 +1895,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         modifier =
                                 Modifier.align(Alignment.TopCenter)
                                         .statusBarsPadding()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        .padding(horizontal = 16.dp, vertical = 2.dp)
                 ) {
                         GoogleSearchBar(
                                 query = searchQuery,
@@ -1927,8 +1922,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 screenState = MapScreenState.IDLE
                                         }
                                 },
-                                onVoice = { /* Voice search */},
-                                onProfile = { /* Profile */},
                                 onClick = { screenState = MapScreenState.SEARCHING },
                                 placeholder =
                                         if (searchPurpose == SearchPurpose.STOP) "Add a stop"
@@ -1988,88 +1981,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         .padding(16.dp)
                                         .padding(bottom = 80.dp)
                 ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FloatingActionButton(
-                                        onClick = {
-                                                scope.launch {
-                                                        isLoadingRoute = true
-                                                        offlineRouteDebugMessage = null
-
-                                                        val startLat = if (hasLocation) currentLat else 33.6844
-                                                        val startLng = if (hasLocation) currentLng else 73.0479
-
-                                                        runCatching {
-                                                                RouteRepository.plan(
-                                                                        start = GeoPoint(startLat, startLng),
-                                                                        end = GeoPoint(33.7294, 73.0931),
-                                                                        profile = "car",
-                                                                        hazards = HazardRegistry.active()
-                                                                )
-                                                        }
-                                                                .onSuccess { plan ->
-                                                                        if (!plan.success) {
-                                                                                offlineRouteDebugMessage =
-                                                                                        "Route failed: ${plan.result.errorMessage}"
-                                                                        } else {
-                                                                                routeResult = plan.result
-                                                                                activeRouteSource = plan.source
-                                                                                avoidedHazardCount =
-                                                                                        plan.avoidedHazards.size
-                                                                                walkRouteResult = null
-                                                                                bikeRouteResult = null
-                                                                                navigationInstructions =
-                                                                                        plan.result.instructions
-                                                                                currentInstructionIndex = 0
-                                                                                screenState = MapScreenState.ROUTE_PREVIEW
-                                                                                offlineRouteDebugMessage =
-                                                                                        buildString {
-                                                                                                append(
-                                                                                                        if (plan.source ==
-                                                                                                                        RouteSource
-                                                                                                                                .OFFLINE
-                                                                                                        )
-                                                                                                                "Offline route"
-                                                                                                        else "Online route"
-                                                                                                )
-                                                                                                if (plan.avoidedHazards.isNotEmpty()) {
-                                                                                                        append(
-                                                                                                                " · avoiding ${plan.avoidedHazards.size} hazard(s)"
-                                                                                                        )
-                                                                                                }
-                                                                                        }
-                                                                        }
-                                                                }
-                                                                .onFailure { error ->
-                                                                        offlineRouteDebugMessage =
-                                                                                "Route crashed: ${error.message}"
-                                                                }
-                                                        isLoadingRoute = false
-                                                }
-                                        },
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(48.dp)
-                                ) {
-                                        Icon(
-                                                Icons.Default.CloudOff,
-                                                "Test offline-safe route",
-                                                modifier = Modifier.size(22.dp)
-                                        )
-                                }
-
-                                // Layers button
-                                FloatingActionButton(
-                                        onClick = { screenState = MapScreenState.LAYERS },
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(48.dp)
-                                ) {
-                                        Icon(
-                                                Icons.Default.Layers,
-                                                "Layers",
-                                                modifier = Modifier.size(22.dp)
-                                        )
-                                }
+                        FloatingActionButton(
+                                onClick = { showVehiclePicker = true },
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp)
+                        ) {
+                                Icon(
+                                        Icons.Default.DirectionsCar,
+                                        "Change vehicle icon",
+                                        modifier = Modifier.size(22.dp)
+                                )
                         }
                 }
 
@@ -2089,32 +2011,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 containerColor = MaterialTheme.colorScheme.surface,
                                 modifier = Modifier.size(44.dp)
                         ) { Icon(Icons.Default.Explore, "North", modifier = Modifier.size(22.dp)) }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Zoom controls
-                        FloatingActionButton(
-                                onClick = {
-                                        mapInstance?.animateCamera(
-                                                CameraUpdateFactory.zoomIn(),
-                                                300
-                                        )
-                                },
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.size(44.dp)
-                        ) { Icon(Icons.Default.Add, "Zoom In") }
-                        FloatingActionButton(
-                                onClick = {
-                                        mapInstance?.animateCamera(
-                                                CameraUpdateFactory.zoomOut(),
-                                                300
-                                        )
-                                },
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.size(44.dp)
-                        ) { Icon(Icons.Default.Remove, "Zoom Out") }
-
-                        Spacer(modifier = Modifier.height(16.dp))
 
                         // My Location
                         FloatingActionButton(
@@ -2624,42 +2520,25 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        // === LAYERS/STYLE PICKER ===
-        if (screenState == MapScreenState.LAYERS) {
+
+        // === VEHICLE ICON PICKER (also reachable from the car button) ===
+        if (showVehiclePicker) {
                 ModalBottomSheet(
-                        onDismissRequest = { screenState = MapScreenState.IDLE },
+                        onDismissRequest = { showVehiclePicker = false },
                         containerColor = MaterialTheme.colorScheme.surface,
                         sheetState = sheetState
                 ) {
-                        MapLayersSheet(
-                                currentStyleIndex = selectedStyleIndex,
-                                onStyleSelect = { index ->
-                                        selectedStyleIndex = index
-                                        screenState = MapScreenState.IDLE
-                                },
-                                onFloodHistory = {
-                                        screenState = MapScreenState.IDLE
-                                        // Load flood data
-                                        if (sectors.isNotEmpty()) {
-                                                val sector = sectors[currentFloodSectorIndex]
-                                                mapInstance?.let { map ->
-                                                        map.animateCamera(
-                                                                CameraUpdateFactory.newLatLngZoom(
-                                                                        LatLng(
-                                                                                sector.lat,
-                                                                                sector.lon
-                                                                        ),
-                                                                        12.0
-                                                                ),
-                                                                1000
-                                                        )
-                                                        loadSectorData(context, map, sector)
-                                                }
-                                                // Cycle to the next sector for the next click
-                                                currentFloodSectorIndex = (currentFloodSectorIndex + 1) % sectors.size
+                        VehicleIconPicker(
+                                current = vehicleIcon,
+                                onSelect = { icon ->
+                                        scope.launch {
+                                                preferencesManager.setVehicleIcon(
+                                                        icon.storageKey
+                                                )
+                                                showVehiclePicker = false
                                         }
                                 },
-                                onClose = { screenState = MapScreenState.IDLE }
+                                onClose = { showVehiclePicker = false }
                         )
                 }
         }

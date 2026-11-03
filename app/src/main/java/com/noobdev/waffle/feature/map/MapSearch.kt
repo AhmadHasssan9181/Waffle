@@ -84,8 +84,6 @@ fun GoogleSearchBar(
         isSearching: Boolean,
         onClear: () -> Unit,
         onBack: () -> Unit,
-        onVoice: () -> Unit,
-        onProfile: () -> Unit,
         onClick: () -> Unit,
         placeholder: String = "Search here"
 ) {
@@ -154,27 +152,9 @@ fun GoogleSearchBar(
                                 )
                         }
 
-                        // Clear/Voice button
+                        // Clear button
                         if (query.isNotEmpty()) {
                                 IconButton(onClick = onClear) { Icon(Icons.Default.Clear, "Clear") }
-                        } else {
-                                IconButton(onClick = onVoice) {
-                                        Icon(
-                                                Icons.Default.Mic,
-                                                "Voice",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                }
-                        }
-
-                        // Profile/Avatar
-                        IconButton(onClick = onProfile) {
-                                Icon(
-                                        Icons.Default.AccountCircle,
-                                        "Profile",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(32.dp)
-                                )
                         }
                 }
         }

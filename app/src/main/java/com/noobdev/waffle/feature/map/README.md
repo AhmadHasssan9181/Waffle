@@ -8,11 +8,12 @@ The map tab. This is the most stateful screen in the app.
 | `MapSearch.kt` | Search bar, live results card, quick chips. |
 | `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Via stops with edit/reorder, and one-tap fuel/food/stay shortcuts. |
 | `NavigationModeUI.kt` | Turn-by-turn banner, structured maneuver icon, approach distance, turn list, speed bubble + speed-limit sign, voice guidance, traffic chip, navigation controls. |
-| `MapLayersSheet.kt` | Bottom sheet with layer/style cards and the style picker. |
+| `MapLayersSheet.kt` | Legacy layer/style sheet; map style now lives in Settings, kept for a future map menu. |
 | `MapGeometry.kt` | Route GeoJSON source updates, vanishing-trail trim, and distance-to-next-turn helpers. |
 | `MapStyles.kt` | MapTiler style URLs, `MapStyleResolver` (falls back to an installed offline layer), and `LocationAwareMap` (the AndroidView that owns the `MapView` lifecycle, travel-mode puck). |
 | `Puck3D.kt` | 3D navigation puck: sedan/SUV/pickup/arrow sprites, plus bike/walk badges, rotated as a SymbolLayer. |
 | `VehicleIcon.kt` | Vehicle-icon choices and their drawable resources. |
+| `VehicleIconPicker.kt` | Shared "Choose vehicle icon" sheet content, used by Settings and the map's car button. |
 | `ParentMap.kt` | Simpler embedded map used by other screens. |
 | `MapFocus.kt` | One-shot hand-off: "show this place". Consumed by `MapScreen` on entry. |
 | `MapShops.kt` | Map amenity layer: vector category badges rasterised into MapLibre symbol images, clustered at low zoom, category chips with counts, OSM attribution. |
@@ -39,7 +40,10 @@ The map tab. This is the most stateful screen in the app.
   the speed-limit sign reads OSM `maxspeed` from the bundled graph. Voice guidance speaks instruction
   changes, reroutes, wrong-way and stop-reached notices (mute button in the banner). The location
   puck is a 3D low-poly car (sedan/SUV/pickup), arrow, or bike/walk badge (`Puck3D`), rotated by the
-  live bearing. Settings → Appearance → **Vehicle icon** opens the same chooser sheet as Google Maps.
+  live bearing. Settings → Appearance → **Vehicle icon** opens the same chooser sheet as Google Maps;
+  the bottom-left car button opens it directly from the map. The map keeps only the car button, a
+  north/reset compass, the recenter control and SOS; zoom is pinch-only and the native compass and
+  layer FAB were removed to keep the screen calm.
 - Traffic/ETA: when `TOMTOM_API_KEY` is present, `TomTomTrafficRepository` samples TomTom Traffic
   Flow at the current position every 45 s. The ETA uses traffic speed, then GPS speed, then the route
   average, smoothed so it does not jump. The banner shows a Clear/Slow/Heavy/Road-closed chip. With

@@ -206,6 +206,8 @@ fun LocationAwareMap(
                 mv.onCreate(null)
                 mv.getMapAsync { map ->
                     mapboxMap = map
+                    // The map is gesture-first; hide MapLibre's native compass chrome.
+                    map.uiSettings.isCompassEnabled = false
                     map.setStyle(styleUrl) { style ->
                         if (hasLocationPermission) {
                             try {
