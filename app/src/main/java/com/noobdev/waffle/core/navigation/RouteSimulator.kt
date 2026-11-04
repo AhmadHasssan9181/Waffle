@@ -1,5 +1,6 @@
 package com.noobdev.waffle.core.navigation
 
+import android.os.SystemClock
 import android.util.Log
 import kotlin.math.*
 import kotlinx.coroutines.*
@@ -64,6 +65,19 @@ class RouteSimulator {
     private var segmentProgress = 0.0 // 0.0 to 1.0 within segment
     private var targetSpeed = SPEED_CITY
     private var useVariableSpeed = false
+    private var variablePhaseStartMs = 0L
+    private var variablePhaseIndex = 0
+    private val variablePhases =
+            listOf(
+                    3_000L to 30f, // hard acceleration to ~108 km/h
+                    1_800L to 30f,
+                    1_600L to 3f, // slam the brakes to ~11 km/h
+                    1_600L to 3f,
+                    2_500L to 16f, // normal fast ~58 km/h
+                    2_500L to 16f,
+                    1_500L to 0f, // stop
+                    1_500L to 0f
+            )
 
     // Dead reckoning state
     private var lastKnownPosition: LatLng? = null
@@ -93,7 +107,10 @@ class RouteSimulator {
         _currentSegmentIndex.value = 0
         segmentProgress = 0.0
         useVariableSpeed = speedMps == SPEED_VARIABLE
-        targetSpeed = if (useVariableSpeed) SPEED_CITY else speedMps
+        targetSpeed = if (useVariableSpeed) 0f else speedMps
+        _currentSpeed.value = if (useVariableSpeed) 0f else speedMps
+        variablePhaseStartMs = 0L
+        variablePhaseIndex = 0
         _hasArrived.value = false
         _isGpsActive.value = true
 
@@ -155,7 +172,10 @@ class RouteSimulator {
     /** Change simulation speed on the fly. */
     fun setSpeed(speedMps: Float) {
         useVariableSpeed = speedMps == SPEED_VARIABLE
-        if (!useVariableSpeed) {
+        if (useVariableSpeed) {
+            variablePhaseStartMs = 0L
+            variablePhaseIndex = 0
+        } else {
             targetSpeed = speedMps
             _currentSpeed.value = speedMps
         }
@@ -172,14 +192,18 @@ class RouteSimulator {
         val segmentLength =
                 CameraTransitionManager.haversineDistance(p1.first, p1.second, p2.first, p2.second)
 
-        // Auto-adjust speed for variable mode
-        if (useVariableSpeed) {
-            targetSpeed = calculateVariableSpeed(segmentLength)
-        }
-        _currentSpeed.value = targetSpeed
+        // Auto-adjust speed for variable mode: hard pulls, hard braking, a crawl
+        // and a full stop, so the simulation exercises lights, ETA and camera zoom.
+        val speedNow =
+                if (useVariableSpeed) {
+                    updateVariableSpeed()
+                } else {
+                    _currentSpeed.value = targetSpeed
+                    targetSpeed
+                }
 
         // Calculate how far we move this tick
-        val distanceThisTick = targetSpeed * (UPDATE_INTERVAL_MS / 1000.0)
+        val distanceThisTick = speedNow * (UPDATE_INTERVAL_MS / 1000.0)
 
         // Calculate new progress within segment
         val progressIncrement = distanceThisTick / segmentLength
@@ -232,15 +256,29 @@ class RouteSimulator {
     }
 
     /**
-     * Calculate variable speed based on segment characteristics. Longer straight segments = highway
-     * speed Short segments = city/turning speed
+     * Time-based variable profile: a hard pull to highway speed, a hard stop, a crawl,
+     * then a normal fast cruise. The rate limiting makes the speed change believably
+     * instead of teleporting between presets.
      */
-    private fun calculateVariableSpeed(segmentLength: Double): Float {
-        return when {
-            segmentLength > 500 -> SPEED_HIGHWAY // Long segment = highway
-            segmentLength > 100 -> SPEED_CITY // Medium = city
-            else -> SPEED_WALKING * 3 // Short segment = slow/turning
+    private fun updateVariableSpeed(): Float {
+        val now = SystemClock.elapsedRealtime()
+        if (variablePhaseStartMs == 0L) variablePhaseStartMs = now
+        if (now - variablePhaseStartMs >= variablePhases[variablePhaseIndex].first) {
+            variablePhaseStartMs = now
+            variablePhaseIndex = (variablePhaseIndex + 1) % variablePhases.size
         }
+        val target = variablePhases[variablePhaseIndex].second
+        val current = _currentSpeed.value
+        val step = if (target > current) 1.0f else 2.0f
+        val next =
+                when {
+                    target > current -> min(target, current + step)
+                    target < current -> max(target, current - step)
+                    else -> current
+                }
+        targetSpeed = next
+        _currentSpeed.value = next
+        return next
     }
 
     /** Project a position forward along a bearing. Used for dead reckoning when GPS is cut. */

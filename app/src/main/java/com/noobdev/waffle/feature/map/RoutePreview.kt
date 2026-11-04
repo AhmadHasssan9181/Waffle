@@ -95,7 +95,7 @@ fun RoutePreviewCard(
         onClose: () -> Unit,
         isSimulationMode: Boolean = false,
         onSimulationModeChange: (Boolean) -> Unit = {},
-        selectedSimSpeed: SimulationSpeed = SimulationSpeed.CITY,
+        selectedSimSpeed: SimulationSpeed = SimulationSpeed.VARIABLE,
         onSimSpeedChange: (SimulationSpeed) -> Unit = {},
         routeSource: RouteSource? = null,
         avoidedHazardCount: Int = 0,
@@ -982,10 +982,23 @@ fun RoutePreviewCard(
                                                         selected = selectedSimSpeed == speed,
                                                         onClick = { onSimSpeedChange(speed) },
                                                         label = {
+                                                                val shortLabel =
+                                                                        when (speed) {
+                                                                                SimulationSpeed
+                                                                                        .WALKING ->
+                                                                                        "Walk"
+                                                                                SimulationSpeed
+                                                                                        .CITY ->
+                                                                                        "City"
+                                                                                SimulationSpeed
+                                                                                        .HIGHWAY ->
+                                                                                        "Fast"
+                                                                                SimulationSpeed
+                                                                                        .VARIABLE ->
+                                                                                        "Auto"
+                                                                        }
                                                                 Text(
-                                                                        speed.displayName
-                                                                                .split(" ")
-                                                                                .first(),
+                                                                        shortLabel,
                                                                         style =
                                                                                 MaterialTheme
                                                                                         .typography

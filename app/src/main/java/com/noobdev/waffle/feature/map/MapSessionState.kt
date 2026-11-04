@@ -36,7 +36,7 @@ internal object MapSessionState {
     val currentSpeedMps = mutableStateOf(0f)
     val hasLocation = mutableStateOf(false)
     val isSimulationMode = mutableStateOf(false)
-    val selectedSimSpeed = mutableStateOf(SimulationSpeed.CITY)
+    val selectedSimSpeed = mutableStateOf(SimulationSpeed.VARIABLE)
 
     val routeSimulator = RouteSimulator()
 
