@@ -213,19 +213,27 @@ class NavigationController(
                         else -> 3.0
                 }
         if (speedMps > movingThreshold) lastMovingPaceMps = speedMps.toDouble()
+        // If TomTom has a flow sample for this road, use it as the expected pace.
+        // The router's free-flow average is too optimistic in congestion.
+        val trafficPace = TrafficState.paceMps
+        val expectedPace =
+                if (trafficPace != null && trafficPace > 0.8)
+                        (routeAverage * 0.35 + trafficPace * 0.65)
+                                .coerceAtMost(routeAverage * 1.3)
+                else routeAverage
         val pace =
                 when {
                         speedMps > movingThreshold ->
-                                speedMps.toDouble() * 0.9 + routeAverage * 0.1
+                                speedMps.toDouble() * 0.9 + expectedPace * 0.1
                         speedMps > movingThreshold * 0.3 ->
                                 speedMps.toDouble() * 0.5 +
                                         (if (lastMovingPaceMps > movingThreshold)
                                                         lastMovingPaceMps
-                                                else routeAverage) *
+                                                else expectedPace) *
                                                 0.5
                         else ->
                                 if (lastMovingPaceMps > movingThreshold) lastMovingPaceMps
-                                else routeAverage
+                                else expectedPace
                 }
                         .coerceAtLeast(0.8)
         val newDuration = remainingDistance / pace

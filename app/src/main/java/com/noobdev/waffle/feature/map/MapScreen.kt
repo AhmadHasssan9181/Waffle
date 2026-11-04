@@ -63,6 +63,7 @@ import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.navigation.SimulationState
+import com.noobdev.waffle.core.navigation.TrafficState
 import com.noobdev.waffle.core.navigation.VehicleLights
 import com.noobdev.waffle.core.navigation.isNightTime
 import com.noobdev.waffle.core.navigation.turnSignalFor
@@ -2185,15 +2186,21 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         LaunchedEffect(screenState) {
                 if (screenState == MapScreenState.NAVIGATING) {
                         while (true) {
-                                trafficFlow =
+                                val flow =
                                         TomTomTrafficRepository.flowAt(
                                                 currentLat,
                                                 currentLng
                                         )
+                                trafficFlow = flow
+                                TrafficState.paceMps =
+                                        flow?.currentSpeedKmh
+                                                ?.div(3.6)
+                                                ?.takeIf { it > 1.0 }
                                 delay(45_000)
                         }
                 } else {
                         trafficFlow = null
+                        TrafficState.paceMps = null
                 }
         }
 
