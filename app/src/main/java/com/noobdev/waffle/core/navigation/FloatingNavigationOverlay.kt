@@ -771,7 +771,11 @@ class FloatingNavigationOverlay(
         braking = speed < 1.5f || (lastSpeed > 0f && speed < lastSpeed - 0.6f)
         lastSpeed = speed
         val turnSignal =
-                turnSignalFor(nav.route?.steps?.getOrNull(nav.instructionIndex)?.maneuver)
+                if (nav.distanceToNextTurn in 1.0..100.0) {
+                        turnSignalFor(nav.route?.steps?.getOrNull(nav.instructionIndex)?.maneuver)
+                } else {
+                        TurnSignal.NONE
+                }
         updateBlink(turnSignal)
         val lights =
                 VehicleLights(

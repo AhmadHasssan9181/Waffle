@@ -264,12 +264,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var lastSpeed by remember { mutableStateOf(0f) }
         val night = remember { isNightTime() }
         val currentTurnSignal =
-                turnSignalFor(
-                        lastNavigationRoute
-                                ?.steps
-                                ?.getOrNull(currentInstructionIndex)
-                                ?.maneuver
-                )
+                if (distanceToNextTurn in 1.0..100.0) {
+                        turnSignalFor(
+                                lastNavigationRoute
+                                        ?.steps
+                                        ?.getOrNull(currentInstructionIndex)
+                                        ?.maneuver
+                        )
+                } else {
+                        com.noobdev.waffle.core.navigation.TurnSignal.NONE
+                }
         LaunchedEffect(currentTurnSignal) {
                 if (currentTurnSignal == com.noobdev.waffle.core.navigation.TurnSignal.NONE) {
                         blinkOn = true
@@ -702,13 +706,35 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        LaunchedEffect(navSession.matchedIndex, navSession.route, isSimulationMode) {
-                if (!isSimulationMode && navSession.active && navSession.matchedIndex >= 0) {
+        LaunchedEffect(
+                navSession.lat,
+                navSession.lng,
+                navSession.matchedIndex,
+                navSession.route,
+                isSimulationMode
+        ) {
+                if (!isSimulationMode && navSession.active) {
                         val route = navSession.route ?: return@LaunchedEffect
+                        if (navSession.lat == 0.0 && navSession.lng == 0.0) {
+                                return@LaunchedEffect
+                        }
+                        // Re-snap every fix instead of trusting a stale matched index.
+                        // This keeps the line starting at the vehicle even for fast
+                        // bike/moto fixes where the service index can lag behind.
+                        val snapped =
+                                CameraTransitionManager.snapToRoute(
+                                        navSession.lat,
+                                        navSession.lng,
+                                        route.coordinates,
+                                        80.0
+                                )
+                        val start =
+                                if (snapped.matchedIndex >= 0) snapped.matchedIndex
+                                else navSession.matchedIndex
                         trimRouteSource(
                                 routeSource,
                                 route.coordinates,
-                                navSession.matchedIndex,
+                                start,
                                 LatLng(navSession.lat, navSession.lng)
                         )
                 }
