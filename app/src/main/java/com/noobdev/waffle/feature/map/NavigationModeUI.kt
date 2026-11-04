@@ -234,14 +234,23 @@ fun NavigationModeUI(
                 // Top instruction bar (the full card is hidden in the tiny PiP window).
                 if (!isInPip) {
                 Card(
-                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-                        shape = RoundedCornerShape(0.dp),
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .statusBarsPadding()
+                                        .padding(start = 12.dp, end = 12.dp, top = 4.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors =
                                 CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surface
                                 )
                 ) {
-                        Column(modifier = Modifier.padding(if (isInPip) 8.dp else 16.dp)) {
+                        Column(
+                                modifier =
+                                        Modifier.padding(
+                                                horizontal = if (isInPip) 8.dp else 12.dp,
+                                                vertical = if (isInPip) 6.dp else 8.dp
+                                        )
+                        ) {
                                 AnimatedVisibility(
                                         visible = !isInPip && wrongWay,
                                         enter = fadeIn() + expandVertically(),
@@ -283,9 +292,9 @@ fun NavigationModeUI(
                                 ) {
                                         Box(
                                                 Modifier.size(
-                                                                if (isInPip) 36.dp
-                                                                else if (approaching) 64.dp
-                                                                else 52.dp
+                                                                if (isInPip) 32.dp
+                                                                else if (approaching) 52.dp
+                                                                else 44.dp
                                                         )
                                                         .clip(CircleShape)
                                                         .background(
@@ -308,13 +317,13 @@ fun NavigationModeUI(
                                                         tint = MaterialTheme.colorScheme.primary,
                                                         modifier =
                                                                 Modifier.size(
-                                                                        if (isInPip) 22.dp
-                                                                        else if (approaching) 40.dp
-                                                                        else 32.dp
+                                                                        if (isInPip) 20.dp
+                                                                        else if (approaching) 32.dp
+                                                                        else 26.dp
                                                                 )
                                                 )
                                         }
-                                        Spacer(Modifier.width(if (isInPip) 8.dp else 16.dp))
+                                        Spacer(Modifier.width(if (isInPip) 6.dp else 10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                         currentInstruction.ifEmpty {
@@ -326,10 +335,10 @@ fun NavigationModeUI(
                                                                                 .bodyMedium
                                                                 else
                                                                         MaterialTheme.typography
-                                                                                .titleLarge,
+                                                                                .titleMedium,
                                                         color = MaterialTheme.colorScheme.onSurface,
                                                         fontWeight = FontWeight.Bold,
-                                                        maxLines = if (isInPip) 1 else 2,
+                                                        maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                 )
                                                 if (distanceToNextTurn > 0.0) {
@@ -343,7 +352,7 @@ fun NavigationModeUI(
                                                                         else
                                                                                 MaterialTheme
                                                                                         .typography
-                                                                                        .labelMedium,
+                                                                                        .labelSmall,
                                                                 color =
                                                                         MaterialTheme.colorScheme
                                                                                 .primary,
@@ -356,7 +365,10 @@ fun NavigationModeUI(
                                                 }
                                         }
                                         if (!isInPip) {
-                                                IconButton(onClick = { showSteps = true }) {
+                                                IconButton(
+                                                        onClick = { showSteps = true },
+                                                        modifier = Modifier.size(40.dp)
+                                                ) {
                                                         Icon(
                                                                 Icons.Default.List,
                                                                 contentDescription = "Steps",
@@ -372,7 +384,8 @@ fun NavigationModeUI(
                                                                         !voiceEnabled
                                                                 )
                                                         }
-                                                }
+                                                },
+                                                        modifier = Modifier.size(40.dp)
                                                 ) {
                                                         Icon(
                                                                 if (voiceEnabled)

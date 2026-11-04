@@ -32,6 +32,7 @@ import com.noobdev.waffle.core.navigation.NavigationService
 import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.NavigationStore
 import com.noobdev.waffle.core.navigation.PipState
+import com.noobdev.waffle.core.navigation.SimulationState
 import com.noobdev.waffle.feature.offline.OfflineMapManager
 import com.noobdev.waffle.core.routing.OfflineRoutingManager
 import com.noobdev.waffle.design.brand.WaffleLockup
@@ -71,32 +72,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (!NavigationSession.isActive()) return
-        NavigationSession.requestOpenMap()
+        val live = NavigationSession.isActive()
+        val simulating = SimulationState.active.value
+        if (!live && !simulating) return
+        if (live) NavigationSession.requestOpenMap()
 
-        // A custom overlay can be much larger than Android's system PiP window, which is
-        // capped to a small rectangle on many devices. Use it when the user has granted
-        // "display over other apps"; otherwise fall back to system PiP and ask for it.
-        if (Settings.canDrawOverlays(this)) {
-            leavingForFloating = true
-            NavigationService.showFloating(this)
-            return
-        }
+        // System PiP works for both real trips and Test Mode. The large floating
+        // overlay is still available from the navigation notification's Float action.
         enterSystemPip()
-        Toast.makeText(
-                        this,
-                        "Allow display over other apps for the large floating map",
-                        Toast.LENGTH_LONG
-                )
-                .show()
-        runCatching {
-            startActivity(
-                    Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:$packageName")
-                    )
-            )
-        }
     }
 
     private fun enterSystemPip() {
@@ -112,7 +95,7 @@ class MainActivity : ComponentActivity() {
 
     private fun enterPipIfRequested() {
         if (!pendingPip) return
-        if (!NavigationSession.isActive()) {
+        if (!NavigationSession.isActive() && !SimulationState.active.value) {
             pendingPip = false
             return
         }

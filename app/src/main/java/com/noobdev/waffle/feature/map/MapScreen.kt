@@ -61,6 +61,7 @@ import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
+import com.noobdev.waffle.core.navigation.SimulationState
 import com.noobdev.waffle.core.navigation.VehicleLights
 import com.noobdev.waffle.core.navigation.isNightTime
 import com.noobdev.waffle.core.navigation.turnSignalFor
@@ -140,7 +141,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var routeSource by remember { mutableStateOf<GeoJsonSource?>(null) }
 
         // Screen state
-        var screenState by remember { mutableStateOf(MapScreenState.IDLE) }
+        var screenState by MapSessionState.screenState
         var navigationCameraReady by remember { mutableStateOf(false) }
 
         // Map style - this will be passed up to change the map
@@ -153,24 +154,24 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Location
-        var currentLat by remember { mutableStateOf(30.3753) }
-        var currentLng by remember { mutableStateOf(69.3451) }
-        var hasLocation by remember { mutableStateOf(false) }
+        var currentLat by MapSessionState.currentLat
+        var currentLng by MapSessionState.currentLng
+        var hasLocation by MapSessionState.hasLocation
 
         // Search & Routing
         var searchQuery by remember { mutableStateOf("") }
-        var selectedDestination by remember { mutableStateOf<GeoSearchResult?>(null) }
-        var routeStops by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
+        var selectedDestination by MapSessionState.selectedDestination
+        var routeStops by MapSessionState.routeStops
         var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
         var showStopPicker by remember { mutableStateOf(false) }
         var stopPickerCategory by remember { mutableStateOf<ShopCategory?>(null) }
-        var routeResult by remember { mutableStateOf<RouteResult?>(null) }
-        var routeAlternatives by remember { mutableStateOf<List<RouteResult>>(emptyList()) }
-        var selectedAlternativeIndex by remember { mutableStateOf(0) }
-        var routeOptions by remember { mutableStateOf(RouteOptions()) }
-        var walkRouteResult by remember { mutableStateOf<RouteResult?>(null) }
-        var bikeRouteResult by remember { mutableStateOf<RouteResult?>(null) }
-        var selectedProfile by remember { mutableStateOf("driving-car") }
+        var routeResult by MapSessionState.routeResult
+        var routeAlternatives by MapSessionState.routeAlternatives
+        var selectedAlternativeIndex by MapSessionState.selectedAlternativeIndex
+        var routeOptions by MapSessionState.routeOptions
+        var walkRouteResult by MapSessionState.walkRouteResult
+        var bikeRouteResult by MapSessionState.bikeRouteResult
+        var selectedProfile by MapSessionState.selectedProfile
         val isMotorcycleMode = selectedProfile == "driving-motorcycle"
         var isLoadingRoute by remember { mutableStateOf(false) }
         var isLoadingWalk by remember { mutableStateOf(false) }
@@ -224,13 +225,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Navigation - keep last non-null route to prevent crash during exit animation
-        var currentInstructionIndex by remember { mutableStateOf(0) }
-        var navigationInstructions by remember { mutableStateOf<List<String>>(emptyList()) }
-        var remainingDistance by remember { mutableStateOf(0.0) }
-        var remainingDuration by remember { mutableStateOf(0.0) }
-        var distanceToNextTurn by remember { mutableStateOf(0.0) }
-        var currentBearing by remember { mutableStateOf(0.0) }
-        var currentSpeedMps by remember { mutableStateOf(0f) }
+        var currentInstructionIndex by MapSessionState.currentInstructionIndex
+        var navigationInstructions by MapSessionState.navigationInstructions
+        var remainingDistance by MapSessionState.remainingDistance
+        var remainingDuration by MapSessionState.remainingDuration
+        var distanceToNextTurn by MapSessionState.distanceToNextTurn
+        var currentBearing by MapSessionState.currentBearing
+        var currentSpeedMps by MapSessionState.currentSpeedMps
         var speedLimitKmh by remember { mutableStateOf<Int?>(null) }
         var lastSpeedLimitCheckAt by remember { mutableStateOf(0L) }
         var trafficFlow by remember { mutableStateOf<TrafficFlow?>(null) }
@@ -297,9 +298,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var lastPanTime by remember { mutableStateOf(0L) }
 
         // Simulation Mode
-        val routeSimulator = remember { RouteSimulator() }
-        var isSimulationMode by remember { mutableStateOf(false) }
-        var selectedSimSpeed by remember { mutableStateOf(SimulationSpeed.CITY) }
+        val routeSimulator = MapSessionState.routeSimulator
+        var isSimulationMode by MapSessionState.isSimulationMode
+        var selectedSimSpeed by MapSessionState.selectedSimSpeed
         var showSimControls by remember { mutableStateOf(false) }
         var showVehiclePicker by remember { mutableStateOf(false) }
         // A simulated deviation pauses the route-follower; the reroute restarts it on the new line.
@@ -313,6 +314,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val simProgress by routeSimulator.progress.collectAsState()
         val simArrived by routeSimulator.hasArrived.collectAsState()
         val simSegmentIndex by routeSimulator.currentSegmentIndex.collectAsState()
+
+        LaunchedEffect(isSimulationMode, screenState) {
+                SimulationState.setActive(
+                        isSimulationMode && screenState == MapScreenState.NAVIGATING
+                )
+        }
 
         // Bottom sheet (unused but kept for future)
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -866,7 +873,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         routeSimulator.startSimulation(
                                                 coordinates = plan.result.coordinates,
                                                 speedMps = selectedSimSpeed.speedMps,
-                                                scope = scope
+                                                scope = MapSessionState.simulationScope
                                         )
                                 }
                         } else {
@@ -1069,8 +1076,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         remainingDuration = initialRoute?.durationSeconds ?: 0.0
 
                         if (isSimulationMode) {
-                                // Simulation mode - use RouteSimulator
-                                onDispose { routeSimulator.stopSimulation() }
+                                // Simulation mode - use RouteSimulator. Do not stop it on
+                                // dispose: switching tabs or entering PiP should keep the
+                                // simulated trip alive.
+                                onDispose {}
                         } else if (!NavigationSession.isActive()) {
                                 // Real GPS mode
                                 val locationRequest =
@@ -2401,6 +2410,40 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
+
+                        // Re-center after the user pans away. Kept below the normal map
+                        // controls so it never covers the compass/location buttons.
+                        AnimatedVisibility(
+                                visible =
+                                        isUserPanMode &&
+                                                screenState == MapScreenState.NAVIGATING
+                        ) {
+                                FloatingActionButton(
+                                        onClick = {
+                                                isUserPanMode = false
+                                                mapInstance?.let { map ->
+                                                        CameraTransitionManager
+                                                                .recenterOnPosition(
+                                                                        map,
+                                                                        LatLng(
+                                                                                currentLat,
+                                                                                currentLng
+                                                                        ),
+                                                                        currentBearing
+                                                                )
+                                                }
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = Color.White,
+                                        modifier = Modifier.size(48.dp)
+                                ) {
+                                        Icon(
+                                                Icons.Default.MyLocation,
+                                                "Re-center",
+                                                modifier = Modifier.size(22.dp)
+                                        )
+                                }
+                        }
                 }
                 }
 
@@ -2542,7 +2585,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         routeSimulator.startSimulation(
                                                                 coordinates = activeRoute.coordinates,
                                                                 speedMps = selectedSimSpeed.speedMps,
-                                                                scope = scope
+                                                                scope = MapSessionState.simulationScope
                                                         )
                                                 }
 
@@ -2952,32 +2995,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         }
                 }
         }
-
-        // === RE-CENTER BUTTON (shown when user pans away during navigation) ===
-        Box(modifier = Modifier.fillMaxSize()) {
-                AnimatedVisibility(
-                        visible = isUserPanMode && screenState == MapScreenState.NAVIGATING && !inPip,
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut(),
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-                ) {
-                        FloatingActionButton(
-                                onClick = {
-                                        isUserPanMode = false
-                                        mapInstance?.let { map ->
-                                                CameraTransitionManager.recenterOnPosition(
-                                                        map,
-                                                        LatLng(currentLat, currentLng),
-                                                        currentBearing
-                                                )
-                                        }
-                                },
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = Color.White
-                        ) { Icon(Icons.Default.MyLocation, "Re-center") }
-                }
-        }
-
 
         // === VEHICLE ICON PICKER (also reachable from the car button) ===
         if (showVehiclePicker) {
