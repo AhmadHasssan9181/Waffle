@@ -67,6 +67,7 @@ class RouteSimulator {
     private var useVariableSpeed = false
     private var variablePhaseStartMs = 0L
     private var variablePhaseIndex = 0
+    private var variableSpeedScale = 1f
     private val variablePhases =
             listOf(
                     3_000L to 30f, // hard acceleration to ~108 km/h
@@ -94,6 +95,7 @@ class RouteSimulator {
     fun startSimulation(
             coordinates: List<Pair<Double, Double>>,
             speedMps: Float = SPEED_CITY,
+            profile: String = "driving-car",
             scope: CoroutineScope
     ) {
         if (coordinates.size < 2) {
@@ -107,6 +109,12 @@ class RouteSimulator {
         _currentSegmentIndex.value = 0
         segmentProgress = 0.0
         useVariableSpeed = speedMps == SPEED_VARIABLE
+        variableSpeedScale =
+                when (profile) {
+                        "foot-walking" -> 0.065f
+                        "cycling-regular" -> 0.28f
+                        else -> 1f
+                }
         targetSpeed = if (useVariableSpeed) 0f else speedMps
         _currentSpeed.value = if (useVariableSpeed) 0f else speedMps
         variablePhaseStartMs = 0L
@@ -267,9 +275,10 @@ class RouteSimulator {
             variablePhaseStartMs = now
             variablePhaseIndex = (variablePhaseIndex + 1) % variablePhases.size
         }
-        val target = variablePhases[variablePhaseIndex].second
+        val target = variablePhases[variablePhaseIndex].second * variableSpeedScale
         val current = _currentSpeed.value
-        val step = if (target > current) 1.0f else 2.0f
+        val rawStep = if (target > current) 1.0f else 2.0f
+        val step = (rawStep * variableSpeedScale).coerceAtLeast(0.05f)
         val next =
                 when {
                     target > current -> min(target, current + step)

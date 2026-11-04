@@ -946,6 +946,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         routeSimulator.startSimulation(
                                                 coordinates = plan.result.coordinates,
                                                 speedMps = selectedSimSpeed.speedMps,
+                                                profile = selectedProfile,
                                                 scope = MapSessionState.simulationScope
                                         )
                                 }
@@ -2658,6 +2659,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         routeSimulator.startSimulation(
                                                                 coordinates = activeRoute.coordinates,
                                                                 speedMps = selectedSimSpeed.speedMps,
+                                                                profile = selectedProfile,
                                                                 scope = MapSessionState.simulationScope
                                                         )
                                                 }
