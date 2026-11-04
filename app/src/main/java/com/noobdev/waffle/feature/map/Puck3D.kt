@@ -132,6 +132,11 @@ internal fun Puck3D(
             }
     val iconName =
             "puck-3d-$travelMode-${vehicleIcon.storageKey}-${if (isNavigating) "nav" else "dot"}"
+    // The baked walker frames were shot from a 3/4 rear camera, so the body reads a
+    // few degrees to the right of the actual route tangent. Counter-rotate the
+    // bitmap slightly for walk mode only.
+    val visualBearing =
+            if (isWalkMode) (bearing + 15.0 + 360.0) % 360.0 else bearing
     val drawableRes =
             when {
                 !isNavigating -> R.drawable.ic_puck_dot
@@ -143,7 +148,7 @@ internal fun Puck3D(
     val iconSize =
             when {
                 !isNavigating -> 0.30f
-                isWalkMode -> 0.50f
+                isWalkMode -> 0.42f
                 isBikeMode -> 0.85f
                 else -> 0.55f
             }
@@ -244,7 +249,7 @@ internal fun Puck3D(
                 }
 
                 source = null
-                val geoJson = puckGeoJson(lat, lng, bearing, currentIconName, iconSize)
+                val geoJson = puckGeoJson(lat, lng, visualBearing, currentIconName, iconSize)
                 val existing = style.getSourceAs<GeoJsonSource>("puck-source")
                 val puckSource =
                         existing
@@ -281,8 +286,8 @@ internal fun Puck3D(
         }
     }
 
-    LaunchedEffect(source, lat, lng, bearing, currentIconName, iconSize) {
-        source?.setGeoJson(puckGeoJson(lat, lng, bearing, currentIconName, iconSize))
+    LaunchedEffect(source, lat, lng, visualBearing, currentIconName, iconSize) {
+        source?.setGeoJson(puckGeoJson(lat, lng, visualBearing, currentIconName, iconSize))
     }
 
     DisposableEffect(map) {
