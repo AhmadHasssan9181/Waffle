@@ -94,12 +94,13 @@ object CameraTransitionManager {
             bearing: Double,
             speedMps: Float
     ) {
-        val (zoom, tilt) =
-                when {
-                    speedMps > SPEED_HIGH -> NAV_ZOOM_HIGHWAY to 40.0 // Highway mode
-                    speedMps > SPEED_MEDIUM -> NAV_ZOOM_MEDIUM to 50.0 // City driving
-                    else -> NAV_ZOOM_STREET to NAV_TILT_DEGREES // Slow/turning
-                }
+        // Continuous speed-based framing: walking stays close, faster travel pulls
+        // the camera back and flattens the tilt. This avoids the old hard jumps
+        // between street/city/highway zoom buckets.
+        val speedKmh = speedMps.toDouble() * 3.6
+        val speedFraction = (speedKmh / 70.0).coerceIn(0.0, 1.0)
+        val zoom = 17.5 + (13.5 - 17.5) * speedFraction
+        val tilt = 58.0 + (40.0 - 58.0) * speedFraction
 
         val cameraPosition =
                 CameraPosition.Builder()

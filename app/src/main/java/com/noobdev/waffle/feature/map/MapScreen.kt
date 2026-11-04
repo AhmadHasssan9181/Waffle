@@ -518,13 +518,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         remainingDistance = navSession.remainingDistance
                         remainingDuration = navSession.remainingDuration
                         distanceToNextTurn = navSession.distanceToNextTurn
-                        if (navSession.lat != 0.0 || navSession.lng != 0.0) {
-                                currentLat = navSession.lat
-                                currentLng = navSession.lng
-                                currentBearing = navSession.bearing
-                                hasLocation = true
+                        // During Test Mode the simulator owns the live position, bearing
+                        // and speed. Do not let the service's real GPS fix overwrite them.
+                        if (!isSimulationMode) {
+                                if (navSession.lat != 0.0 || navSession.lng != 0.0) {
+                                        currentLat = navSession.lat
+                                        currentLng = navSession.lng
+                                        currentBearing = navSession.bearing
+                                        hasLocation = true
+                                }
+                                currentSpeedMps = navSession.speedMps
                         }
-                        currentSpeedMps = navSession.speedMps
                         speedLimitKmh = navSession.speedLimitKmh
                         wrongWayDetected = navSession.wrongWay
                         isRerouting = navSession.isRerouting
@@ -551,7 +555,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         // A restored trip has no start-navigation swoop. Put the camera at street level so the
         // 3D car and route do not open at world zoom.
-        LaunchedEffect(navSession.active, mapInstance) {
+        LaunchedEffect(navSession.active, mapInstance, isSimulationMode) {
+                if (isSimulationMode) return@LaunchedEffect
                 if (!navSession.active) {
                         navigationCameraReady = false
                         return@LaunchedEffect
@@ -579,8 +584,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 navSession.lng,
                 navSession.bearing,
                 navSession.active,
-                inPip
+                inPip,
+                isSimulationMode
         ) {
+                if (isSimulationMode) return@LaunchedEffect
                 if (navSession.active &&
                                 screenState == MapScreenState.NAVIGATING &&
                                 (navSession.lat != 0.0 || navSession.lng != 0.0)
@@ -641,8 +648,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        LaunchedEffect(navSession.matchedIndex, navSession.route) {
-                if (navSession.active && navSession.matchedIndex >= 0) {
+        LaunchedEffect(navSession.matchedIndex, navSession.route, isSimulationMode) {
+                if (!isSimulationMode && navSession.active && navSession.matchedIndex >= 0) {
                         val route = navSession.route ?: return@LaunchedEffect
                         trimRouteSource(
                                 routeSource,
@@ -671,7 +678,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         if (hasLocation) {
                 val useSessionPosition =
-                        navSession.active &&
+                        !isSimulationMode &&
+                                navSession.active &&
                                 (navSession.lat != 0.0 || navSession.lng != 0.0)
                 AnimatedPuck3D(
                         map = mapInstance,

@@ -143,7 +143,8 @@ internal fun Puck3D(
     val iconSize =
             when {
                 !isNavigating -> 0.30f
-                isBikeMode || isWalkMode -> 0.85f
+                isWalkMode -> 0.50f
+                isBikeMode -> 0.85f
                 else -> 0.55f
             }
     val fallbackBitmap =
