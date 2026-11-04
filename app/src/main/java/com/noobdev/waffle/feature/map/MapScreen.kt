@@ -1617,30 +1617,67 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                                         val newSource = GeoJsonSource("route-source", geoJson)
                                         style.addSource(newSource)
-                                        // White casing under a saturated blue line. The old
-                                        // honey line vanished into the yellow streets.
-                                        val casing = LineLayer("route-casing", "route-source")
-                                        casing.setProperties(
-                                                lineColor(AndroidColor.WHITE),
-                                                lineWidth(11f),
-                                                lineOpacity(0.95f),
-                                                lineCap(Property.LINE_CAP_ROUND),
-                                                lineJoin(Property.LINE_JOIN_ROUND)
-                                        )
-                                        val layer = LineLayer("route-layer", "route-source")
-                                        layer.setProperties(
-                                                lineColor(AndroidColor.parseColor("#2F80ED")),
-                                                lineWidth(7f),
-                                                lineOpacity(1f),
-                                                lineCap(Property.LINE_CAP_ROUND),
-                                                lineJoin(Property.LINE_JOIN_ROUND)
-                                        )
-                                        if (style.getLayer("puck-layer") != null) {
-                                                style.addLayerBelow(casing, "puck-layer")
-                                                style.addLayerBelow(layer, "puck-layer")
+                                        val walkingRoute = isWalkingProfile(selectedProfile)
+                                        if (walkingRoute) {
+                                                // Walking directions use dots instead of a solid
+                                                // road line, so footpaths read differently from
+                                                // driving and cycling routes.
+                                                val dots = LineLayer("route-layer", "route-source")
+                                                dots.setProperties(
+                                                        lineColor(
+                                                                AndroidColor.parseColor(
+                                                                        "#2F80ED"
+                                                                )
+                                                        ),
+                                                        lineWidth(8f),
+                                                        lineOpacity(1f),
+                                                        lineCap(Property.LINE_CAP_ROUND),
+                                                        lineJoin(Property.LINE_JOIN_ROUND),
+                                                        lineDasharray(arrayOf(0.1f, 1.8f))
+                                                )
+                                                if (style.getLayer("puck-layer") != null) {
+                                                        style.addLayerBelow(dots, "puck-layer")
+                                                } else {
+                                                        style.addLayer(dots)
+                                                }
                                         } else {
-                                                style.addLayer(casing)
-                                                style.addLayer(layer)
+                                                // White casing under a saturated blue line. The
+                                                // old honey line vanished into the yellow streets.
+                                                val casing =
+                                                        LineLayer(
+                                                                "route-casing",
+                                                                "route-source"
+                                                        )
+                                                casing.setProperties(
+                                                        lineColor(AndroidColor.WHITE),
+                                                        lineWidth(11f),
+                                                        lineOpacity(0.95f),
+                                                        lineCap(Property.LINE_CAP_ROUND),
+                                                        lineJoin(Property.LINE_JOIN_ROUND)
+                                                )
+                                                val layer =
+                                                        LineLayer(
+                                                                "route-layer",
+                                                                "route-source"
+                                                        )
+                                                layer.setProperties(
+                                                        lineColor(
+                                                                AndroidColor.parseColor(
+                                                                        "#2F80ED"
+                                                                )
+                                                        ),
+                                                        lineWidth(7f),
+                                                        lineOpacity(1f),
+                                                        lineCap(Property.LINE_CAP_ROUND),
+                                                        lineJoin(Property.LINE_JOIN_ROUND)
+                                                )
+                                                if (style.getLayer("puck-layer") != null) {
+                                                        style.addLayerBelow(casing, "puck-layer")
+                                                        style.addLayerBelow(layer, "puck-layer")
+                                                } else {
+                                                        style.addLayer(casing)
+                                                        style.addLayer(layer)
+                                                }
                                         }
                                         // Store reference for direct future updates
                                         routeSource = newSource
