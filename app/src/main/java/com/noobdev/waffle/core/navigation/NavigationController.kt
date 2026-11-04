@@ -54,6 +54,7 @@ class NavigationController(
     private var lng = initial.lng
     private var bearing = initial.bearing
     private var speedMps = initial.speedMps
+    private var lastMovingPaceMps = 0.0
     private var instructionIndex = initial.instructionIndex
     private var remainingDistance = initial.remainingDistance
     private var remainingDuration = initial.remainingDuration
@@ -202,11 +203,34 @@ class NavigationController(
                 if (activeRoute.durationSeconds > 0)
                         activeRoute.distanceMeters / activeRoute.durationSeconds
                 else if (profile == "foot-walking") 1.4 else 11.0
-        // ETA is the route's average pace, not the instantaneous GPS speed. Otherwise a red
-        // light makes the ETA balloon and a fast stretch makes it collapse.
-        val newDuration = remainingDistance / routeAverage.coerceAtLeast(1.0)
+        // Blend the current pace with the route estimate. Pure route-average ETA is
+        // wildly optimistic when traffic is slower than the router assumed; pure
+        // instantaneous speed makes a red light send the ETA to the moon.
+        val movingThreshold =
+                when (profile) {
+                        "foot-walking" -> 0.5
+                        "cycling-regular" -> 1.5
+                        else -> 3.0
+                }
+        if (speedMps > movingThreshold) lastMovingPaceMps = speedMps.toDouble()
+        val pace =
+                when {
+                        speedMps > movingThreshold ->
+                                speedMps.toDouble() * 0.9 + routeAverage * 0.1
+                        speedMps > movingThreshold * 0.3 ->
+                                speedMps.toDouble() * 0.5 +
+                                        (if (lastMovingPaceMps > movingThreshold)
+                                                        lastMovingPaceMps
+                                                else routeAverage) *
+                                                0.5
+                        else ->
+                                if (lastMovingPaceMps > movingThreshold) lastMovingPaceMps
+                                else routeAverage
+                }
+                        .coerceAtLeast(0.8)
+        val newDuration = remainingDistance / pace
         remainingDuration =
-                if (remainingDuration > 0) remainingDuration * 0.7 + newDuration * 0.3
+                if (remainingDuration > 0) remainingDuration * 0.25 + newDuration * 0.75
                 else newDuration
         arrived = remainingDistance < 25.0
         if (arrived && !arrivalAnnounced) {
