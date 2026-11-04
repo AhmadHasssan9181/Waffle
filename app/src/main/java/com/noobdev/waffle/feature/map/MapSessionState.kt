@@ -6,6 +6,7 @@ import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.routing.RouteOptions
 import com.noobdev.waffle.data.remote.GeoSearchResult
 import com.noobdev.waffle.data.remote.RouteResult
+import org.maplibre.android.geometry.LatLng
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,7 @@ internal object MapSessionState {
     val screenState = mutableStateOf(MapScreenState.IDLE)
     val selectedProfile = mutableStateOf("driving-car")
     val selectedDestination = mutableStateOf<GeoSearchResult?>(null)
+    val droppedPin = mutableStateOf<LatLng?>(null)
     val routeResult = mutableStateOf<RouteResult?>(null)
     val routeAlternatives = mutableStateOf<List<RouteResult>>(emptyList())
     val selectedAlternativeIndex = mutableStateOf(0)

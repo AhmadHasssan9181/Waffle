@@ -94,6 +94,7 @@ import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.sources.GeoJsonSource
 
@@ -164,6 +165,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // Search & Routing
         var searchQuery by remember { mutableStateOf("") }
         var selectedDestination by MapSessionState.selectedDestination
+        var droppedPin by MapSessionState.droppedPin
         var routeStops by MapSessionState.routeStops
         var searchPurpose by remember { mutableStateOf(SearchPurpose.DESTINATION) }
         var showStopPicker by remember { mutableStateOf(false) }
@@ -777,6 +779,79 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         lights = vehicleLights,
                         speedMps = currentSpeedMps.toDouble()
                 )
+        }
+
+        // Destination pin and long-press dropped pin.
+        LaunchedEffect(mapInstance, selectedStyleIndex, selectedDestination, droppedPin) {
+                val map = mapInstance ?: return@LaunchedEffect
+                map.getStyle { style ->
+                        runCatching {
+                                fun image(name: String, color: Int) {
+                                        if (style.getImage(name) == null) {
+                                                style.addImage(name, MapPins.bitmap(color))
+                                        }
+                                }
+                                image("destination-pin", AndroidColor.parseColor("#F2A33C"))
+                                image("dropped-pin", AndroidColor.parseColor("#E05252"))
+
+                                fun updatePin(
+                                        sourceId: String,
+                                        layerId: String,
+                                        imageName: String,
+                                        lat: Double?,
+                                        lng: Double?
+                                ) {
+                                        val source = style.getSourceAs<GeoJsonSource>(sourceId)
+                                        val layer = style.getLayer(layerId) as? SymbolLayer
+                                        if (lat == null || lng == null) {
+                                                layer?.setProperties(visibility(Property.NONE))
+                                                return
+                                        }
+                                        val geoJson =
+                                                """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lng,$lat]}}"""
+                                        if (source == null) {
+                                                style.addSource(GeoJsonSource(sourceId, geoJson))
+                                        } else {
+                                                source.setGeoJson(geoJson)
+                                        }
+                                        if (layer == null) {
+                                                val pin =
+                                                        SymbolLayer(layerId, sourceId)
+                                                                .withProperties(
+                                                                        iconImage(imageName),
+                                                                        iconAnchor(
+                                                                                Property.ICON_ANCHOR_BOTTOM
+                                                                        ),
+                                                                        iconAllowOverlap(true),
+                                                                        iconIgnorePlacement(true),
+                                                                        iconSize(1.0f)
+                                                                )
+                                                if (style.getLayer("puck-layer") != null) {
+                                                        style.addLayerBelow(pin, "puck-layer")
+                                                } else {
+                                                        style.addLayer(pin)
+                                                }
+                                        } else {
+                                                layer.setProperties(visibility(Property.VISIBLE))
+                                        }
+                                }
+
+                                updatePin(
+                                        "destination-source",
+                                        "destination-pin",
+                                        "destination-pin",
+                                        selectedDestination?.lat,
+                                        selectedDestination?.lng
+                                )
+                                updatePin(
+                                        "dropped-source",
+                                        "dropped-pin",
+                                        "dropped-pin",
+                                        droppedPin?.latitude,
+                                        droppedPin?.longitude
+                                )
+                        }
+                }
         }
 
         // Choosing a category should reveal it, not leave the user hunting at city zoom.
@@ -2280,6 +2355,19 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 false
                                         }
                                 }
+                                // Long-press drops a pin that can be used as a destination.
+                                map.addOnMapLongClickListener { latLng ->
+                                        if (screenState == MapScreenState.IDLE) {
+                                                droppedPin = latLng
+                                                map.animateCamera(
+                                                        CameraUpdateFactory.newLatLng(latLng),
+                                                        300
+                                                )
+                                                true
+                                        } else {
+                                                false
+                                        }
+                                }
                                 // Center on Pakistan, the user, or an active restored trip.
                                 val restored = NavigationSession.snapshot()
                                 if (restored.active &&
@@ -2340,6 +2428,98 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         modifier =
                                                 Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
+                        }
+                }
+
+                // Dropped-pin action card (long-press anywhere on the idle map).
+                droppedPin?.let { pin ->
+                        if (screenState == MapScreenState.IDLE && !inPip) {
+                                Card(
+                                        modifier =
+                                                Modifier.align(Alignment.BottomCenter)
+                                                        .padding(
+                                                                start = 16.dp,
+                                                                end = 16.dp,
+                                                                bottom = 176.dp
+                                                        ),
+                                        shape = RoundedCornerShape(20.dp),
+                                        colors =
+                                                CardDefaults.cardColors(
+                                                        containerColor =
+                                                                MaterialTheme.colorScheme
+                                                                        .surface
+                                                )
+                                ) {
+                                        Row(
+                                                modifier =
+                                                        Modifier.fillMaxWidth()
+                                                                .padding(
+                                                                        horizontal = 14.dp,
+                                                                        vertical = 10.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                Icon(
+                                                        Icons.Default.Place,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                                "Dropped pin",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .titleSmall,
+                                                                fontWeight = FontWeight.Bold
+                                                        )
+                                                        Text(
+                                                                "%.5f, %.5f".format(
+                                                                        pin.latitude,
+                                                                        pin.longitude
+                                                                ),
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelSmall,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                        )
+                                                }
+                                                TextButton(
+                                                        onClick = {
+                                                                selectedDestination =
+                                                                        GeoSearchResult(
+                                                                                name = "Dropped pin",
+                                                                                address =
+                                                                                        "%.5f, %.5f"
+                                                                                                .format(
+                                                                                                        pin.latitude,
+                                                                                                        pin.longitude
+                                                                                                ),
+                                                                                lat = pin.latitude,
+                                                                                lng = pin.longitude,
+                                                                                type = "pin"
+                                                                        )
+                                                                routeStops = emptyList()
+                                                                searchPurpose =
+                                                                        SearchPurpose.DESTINATION
+                                                                searchQuery = "Dropped pin"
+                                                                screenState = MapScreenState.IDLE
+                                                                planTrip(selectedProfile)
+                                                                droppedPin = null
+                                                        }
+                                                ) { Text("Route") }
+                                                IconButton(
+                                                        onClick = { droppedPin = null }
+                                                ) {
+                                                        Icon(
+                                                                Icons.Default.Close,
+                                                                contentDescription = "Clear pin"
+                                                        )
+                                                }
+                                        }
+                                }
                         }
                 }
 
