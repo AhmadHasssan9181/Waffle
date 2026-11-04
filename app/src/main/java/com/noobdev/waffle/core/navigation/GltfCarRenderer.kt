@@ -46,15 +46,22 @@ object GltfCarRenderer {
             val v: Float
     )
 
-    private data class Triangle(val a: V, val b: V, val c: V, val isWheel: Boolean)
+    private data class Triangle(
+            val a: V,
+            val b: V,
+            val c: V,
+            val isWheel: Boolean,
+            val textureIndex: Int = 0
+    )
 
     private data class Model(
             val triangles: List<Triangle>,
-            val texture: Bitmap,
+            val textures: List<Bitmap>,
             val bodyPaint: Int,
             val wheelPaint: Int,
             val bodyTarget: Int,
-            val yawOffset: Float
+            val yawOffset: Float,
+            val cameraX: Float
     )
 
     private val modelCache = HashMap<String, Model?>()
@@ -68,6 +75,8 @@ object GltfCarRenderer {
                 "SUV" -> "suv-luxury.glb"
                 "PICKUP" -> "truck-flat.glb"
                 "MOTORCYCLE" -> "motorcycle.glb"
+                "BICYCLE" -> "bicycle.glb"
+                "WALKER" -> "walker.glb"
                 else -> "sedan-sports.glb"
             }
 
@@ -135,6 +144,10 @@ object GltfCarRenderer {
             modelKey: String,
             lights: VehicleLights
     ) {
+        if (modelKey.equals("BICYCLE", ignoreCase = true) ||
+                        modelKey.equals("WALKER", ignoreCase = true)) {
+            return
+        }
         val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
         // The 3/4 camera sits slightly to the right of the model, so the rear of the
         // body projects a little right of the bitmap centre. Nudge the rear lamp
@@ -187,16 +200,6 @@ object GltfCarRenderer {
                 for (side in listOf(-1f, 1f)) {
                     bar(side * 0.18f, -0.21f, 0.09f, 0.035f, Color.rgb(255, 246, 205), 0.02f)
                     glow(side * 0.18f, -0.21f, 0.11f, Color.argb(120, 255, 246, 205))
-                }
-            }
-        } else {
-            // Cover the model's painted headlights during the day, so only the amber
-            // indicator on the turning side reads as lit.
-            if (motorcycle) {
-                bar(0f, -0.26f, 0.10f, 0.05f, Color.argb(215, 35, 35, 40), 0.03f)
-            } else {
-                for (side in listOf(-1f, 1f)) {
-                    bar(side * 0.22f, -0.21f, 0.13f, 0.06f, Color.argb(215, 35, 35, 40), 0.03f)
                 }
             }
         }
@@ -290,29 +293,56 @@ object GltfCarRenderer {
         return model
     }
 
-    private fun loadTexture(
+    private fun loadTextures(
             context: Context,
             json: JSONObject,
             bufferViews: JSONArray,
             bin: ByteArray
-    ): Bitmap? {
-        val images = json.optJSONArray("images") ?: return null
-        if (images.length() == 0) return null
-        val image = images.optJSONObject(0) ?: return null
-        if (image.has("bufferView")) {
-            val view = bufferViews.getJSONObject(image.getInt("bufferView"))
-            val offset = view.optInt("byteOffset", 0)
-            val length = view.getInt("byteLength")
-            if (offset < 0 || length <= 0 || offset + length > bin.size) return null
-            val bytes = bin.copyOfRange(offset, offset + length)
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    ): List<Bitmap?> {
+        val images = json.optJSONArray("images") ?: return emptyList()
+        val out = ArrayList<Bitmap?>(images.length())
+        for (index in 0 until images.length()) {
+            val image = images.optJSONObject(index)
+            if (image == null) {
+                out.add(null)
+                continue
+            }
+            val bitmap =
+                    runCatching {
+                                if (image.has("bufferView")) {
+                                    val view =
+                                            bufferViews.getJSONObject(
+                                                    image.getInt("bufferView")
+                                            )
+                                    val offset = view.optInt("byteOffset", 0)
+                                    val length = view.getInt("byteLength")
+                                    if (offset < 0 || length <= 0 || offset + length > bin.size)
+                                            null
+                                    else BitmapFactory.decodeByteArray(bin, offset, length)
+                                } else {
+                                    val uri = image.optString("uri").trim()
+                                    if (uri.isEmpty()) null
+                                    else {
+                                        val name = uri.substringAfterLast('/')
+                                        context.assets.open("$ASSET_DIR/$name").use {
+                                            BitmapFactory.decodeStream(it)
+                                        }
+                                    }
+                                }
+                            }
+                            .getOrNull()
+            out.add(bitmap?.let { downscaleTexture(it) })
         }
-        val uri = image.optString("uri").trim()
-        if (uri.isEmpty()) return null
-        val name = uri.substringAfterLast('/')
-        return context.assets.open("$ASSET_DIR/$name").use {
-            BitmapFactory.decodeStream(it)
-        }
+        return out
+    }
+
+    private fun downscaleTexture(bitmap: Bitmap): Bitmap {
+        val longest = max(bitmap.width, bitmap.height)
+        if (longest <= 1024) return bitmap
+        val scale = 512f / longest
+        val width = (bitmap.width * scale).roundToInt().coerceAtLeast(1)
+        val height = (bitmap.height * scale).roundToInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
     }
 
     private fun loadModel(context: Context, modelKey: String): Model? {
@@ -333,12 +363,31 @@ object GltfCarRenderer {
         buffer.get(bin)
 
         val bufferViews = json.getJSONArray("bufferViews")
-        val texture = loadTexture(context, json, bufferViews, bin) ?: return null
+        val imageBitmaps = loadTextures(context, json, bufferViews, bin)
+        val textures = imageBitmaps.filterNotNull()
+        if (textures.isEmpty()) return null
+        val imageToTexture = HashMap<Int, Int>()
+        var nextTexture = 0
+        for (index in imageBitmaps.indices) {
+            if (imageBitmaps[index] != null) imageToTexture[index] = nextTexture++
+        }
         val accessors = json.getJSONArray("accessors")
         val meshes = json.getJSONArray("meshes")
         val nodes = json.getJSONArray("nodes")
+        val materials = json.optJSONArray("materials")
+        val textureDefs = json.optJSONArray("textures")
         val binBuffer = ByteBuffer.wrap(bin).order(ByteOrder.LITTLE_ENDIAN)
         val triangles = ArrayList<Triangle>(4096)
+
+        fun textureIndexForMaterial(materialIndex: Int): Int {
+            if (materials == null || textureDefs == null || materialIndex < 0) return 0
+            val material = materials.optJSONObject(materialIndex) ?: return 0
+            val pbr = material.optJSONObject("pbrMetallicRoughness") ?: return 0
+            val baseColor = pbr.optJSONObject("baseColorTexture") ?: return 0
+            val texture = textureDefs.optJSONObject(baseColor.optInt("index", -1)) ?: return 0
+            val source = texture.optInt("source", -1)
+            return imageToTexture[source] ?: 0
+        }
 
         fun readFloats(accessorIndex: Int): FloatArray {
             val accessor = accessors.getJSONObject(accessorIndex)
@@ -502,6 +551,7 @@ object GltfCarRenderer {
                 val indices =
                         if (primitive.has("indices")) readIndices(primitive.getInt("indices"))
                         else IntArray(positions.size / 3) { it }
+                val textureIndex = textureIndexForMaterial(primitive.optInt("material", -1))
                 val vertexCount = positions.size / 3
                 val hasNormals = attributes.has("NORMAL")
                 fun withFaceNormal(triangle: Triangle): Triangle {
@@ -513,7 +563,8 @@ object GltfCarRenderer {
                             triangle.a.copy(nx = normal.x, ny = normal.y, nz = normal.z),
                             triangle.b.copy(nx = normal.x, ny = normal.y, nz = normal.z),
                             triangle.c.copy(nx = normal.x, ny = normal.y, nz = normal.z),
-                            triangle.isWheel
+                            triangle.isWheel,
+                            triangle.textureIndex
                     )
                 }
                 fun vertex(index: Int): V {
@@ -534,7 +585,8 @@ object GltfCarRenderer {
                                                 vertex(index),
                                                 vertex(index + 1),
                                                 vertex(index + 2),
-                                                isWheel
+                                                isWheel,
+                                                textureIndex
                                         )
                                 )
                         )
@@ -548,7 +600,8 @@ object GltfCarRenderer {
                                                 vertex(indices[index]),
                                                 vertex(indices[index + 1]),
                                                 vertex(indices[index + 2]),
-                                                isWheel
+                                                isWheel,
+                                                textureIndex
                                         )
                                 )
                         )
@@ -574,8 +627,25 @@ object GltfCarRenderer {
                 maxZ = max(maxZ, point.z)
             }
         }
-        val targetLength = if (modelKey == "MOTORCYCLE") 2.2f else 2.55f
-        val sourceLength = (maxZ - minZ).coerceAtLeast(0.001f)
+        val isBicycle = modelKey == "BICYCLE"
+        val isWalker = modelKey == "WALKER"
+        // Cars and the motorcycle are normalised by their length along Z. The bicycle
+        // is authored with its length along X, and a person has to be normalised by
+        // height instead, otherwise the software camera frames them at the wrong size.
+        val targetLength =
+                when {
+                    isWalker -> 1.4f
+                    isBicycle -> 2.2f
+                    modelKey == "MOTORCYCLE" -> 2.2f
+                    else -> 2.55f
+                }
+        val sourceLength =
+                when {
+                    isWalker -> (maxY - minY).coerceAtLeast(0.001f)
+                    isBicycle ->
+                            max(maxX - minX, maxZ - minZ).coerceAtLeast(0.001f)
+                    else -> (maxZ - minZ).coerceAtLeast(0.001f)
+                }
         val factor = targetLength / sourceLength
         val centerX = (minX + maxX) / 2f
         val centerZ = (minZ + maxZ) / 2f
@@ -591,16 +661,24 @@ object GltfCarRenderer {
                             scaled(triangle.a),
                             scaled(triangle.b),
                             scaled(triangle.c),
-                            triangle.isWheel
+                            triangle.isWheel,
+                            triangle.textureIndex
                     )
                 }
 
+        val primaryTexture = textures.first()
         val bodyHistogram = HashMap<Int, Int>()
         val wheelHistogram = HashMap<Int, Int>()
         fun sample(u: Float, v: Float): Int {
-            val tx = ((u - floor(u)) * (texture.width - 1)).toInt().coerceIn(0, texture.width - 1)
-            val ty = ((v - floor(v)) * (texture.height - 1)).toInt().coerceIn(0, texture.height - 1)
-            return texture.getPixel(tx, ty)
+            val tx =
+                    ((u - floor(u)) * (primaryTexture.width - 1))
+                            .toInt()
+                            .coerceIn(0, primaryTexture.width - 1)
+            val ty =
+                    ((v - floor(v)) * (primaryTexture.height - 1))
+                            .toInt()
+                            .coerceIn(0, primaryTexture.height - 1)
+            return primaryTexture.getPixel(tx, ty)
         }
         for (triangle in scaledTriangles) {
             val u = (triangle.a.u + triangle.b.u + triangle.c.u) / 3f
@@ -624,6 +702,7 @@ object GltfCarRenderer {
                         .maxByOrNull { it.value }
                         ?.key
         val isMotorcycle = modelKey == "MOTORCYCLE"
+        val preservePaint = isMotorcycle || isBicycle || isWalker
         val bodyTarget =
                 when (modelKey.uppercase()) {
                     "SUV" -> Color.rgb(232, 174, 38)
@@ -633,15 +712,22 @@ object GltfCarRenderer {
                 }
         return Model(
                 triangles = scaledTriangles,
-                texture = texture,
+                textures = textures,
                 bodyPaint =
-                        if (isMotorcycle) 0
+                        if (preservePaint) 0
                         else dominant(bodyHistogram, requireBright = true) ?: 0,
                 wheelPaint =
-                        if (isMotorcycle) 0
+                        if (preservePaint) 0
                         else dominant(wheelHistogram, requireBright = false) ?: 0,
                 bodyTarget = bodyTarget,
-                yawOffset = if (isMotorcycle) 180f else 0f
+                yawOffset =
+                        when {
+                            isWalker -> 0f
+                            isBicycle -> 270f
+                            isMotorcycle -> 180f
+                            else -> 0f
+                        },
+                cameraX = if (isBicycle || isWalker) 2.4f else 0.9f
         )
     }
 
@@ -654,7 +740,7 @@ object GltfCarRenderer {
         val yaw = Math.toRadians((bearingDegrees + model.yawOffset).toDouble())
         val cosYaw = cos(yaw).toFloat()
         val sinYaw = sin(yaw).toFloat()
-        val eye = V3(0.9f, 3.2f, -6.4f)
+        val eye = V3(model.cameraX, 3.2f, -6.4f)
         val target = V3(0f, 0.62f, 0f)
         val forward = normalize(sub(target, eye))
         val right = normalize(cross(forward, V3(0f, 1f, 0f)))
@@ -662,11 +748,21 @@ object GltfCarRenderer {
         val focal = (1.0 / kotlin.math.tan(Math.toRadians(30.0) / 2.0)).toFloat()
         val scale = renderSize * 0.50f
         val light = normalize(V3(-0.45f, 0.85f, -0.30f))
-        val texture = model.texture
-        val textureWidth = texture.width
-        val textureHeight = texture.height
-        val texturePixels = IntArray(textureWidth * textureHeight)
-        texture.getPixels(texturePixels, 0, textureWidth, 0, 0, textureWidth, textureHeight)
+        data class TexturePixels(val width: Int, val height: Int, val pixels: IntArray)
+        val texturePixels =
+                model.textures.map { texture ->
+                    val pixels = IntArray(texture.width * texture.height)
+                    texture.getPixels(
+                            pixels,
+                            0,
+                            texture.width,
+                            0,
+                            0,
+                            texture.width,
+                            texture.height
+                    )
+                    TexturePixels(texture.width, texture.height, pixels)
+                }
         val remap = HashMap<Int, Int>(4)
         if (model.bodyPaint != 0) remap[model.bodyPaint] = model.bodyTarget
         if (model.wheelPaint != 0) remap[model.wheelPaint] = Color.rgb(24, 28, 32)
@@ -695,6 +791,10 @@ object GltfCarRenderer {
             if (minX > maxX || minY > maxY) continue
             val denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
             if (abs(denominator) < 0.00001f) continue
+            val texture =
+                    texturePixels.getOrElse(triangle.textureIndex) {
+                        texturePixels.first()
+                    }
             for (py in minY..maxY) {
                 for (px in minX..maxX) {
                     val w0 = ((b.y - c.y) * (px - c.x) + (c.x - b.x) * (py - c.y)) / denominator
@@ -706,9 +806,15 @@ object GltfCarRenderer {
                     if (z >= depth[index]) continue
                     val u = w0 * triangle.a.u + w1 * triangle.b.u + w2 * triangle.c.u
                     val v = w0 * triangle.a.v + w1 * triangle.b.v + w2 * triangle.c.v
-                    val tx = ((u - floor(u)) * (textureWidth - 1)).toInt().coerceIn(0, textureWidth - 1)
-                    val ty = ((v - floor(v)) * (textureHeight - 1)).toInt().coerceIn(0, textureHeight - 1)
-                    val tex = texturePixels[ty * textureWidth + tx]
+                    val tx =
+                            ((u - floor(u)) * (texture.width - 1))
+                                    .toInt()
+                                    .coerceIn(0, texture.width - 1)
+                    val ty =
+                            ((v - floor(v)) * (texture.height - 1))
+                                    .toInt()
+                                    .coerceIn(0, texture.height - 1)
+                    val tex = texture.pixels[ty * texture.width + tx]
                     val finalTex = remap[tex] ?: tex
                     if (Color.alpha(finalTex) < 8) continue
                     val nx = w0 * triangle.a.nx + w1 * triangle.b.nx + w2 * triangle.c.nx

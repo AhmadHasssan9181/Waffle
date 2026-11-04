@@ -16,4 +16,16 @@ Author: Quaternius
 License: Public domain / CC0 1.0
 - motorcycle.glb (texture embedded)
 
-Credit is not required, but the sources are credited here.
+Bicycle
+https://poly.pizza/m/19VoUuA2pcN
+Author: Poly by Google
+License: Creative Commons Attribution 3.0 (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+- bicycle.glb (texture embedded)
+
+Hoodie pedestrian
+Original Waffle asset, made for this project.
+- walker.glb (texture embedded)
+
+Credit is not required for the CC0 models, but the sources are credited here.
+The bicycle is used under CC BY 3.0 and is credited above.

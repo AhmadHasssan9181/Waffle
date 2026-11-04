@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.rounded.SettingsBrightness
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Whatshot
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +59,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -144,6 +147,7 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
 
     var showMapStylePicker by remember { mutableStateOf(false) }
     var showVehiclePicker by remember { mutableStateOf(false) }
+    var showLicences by remember { mutableStateOf(false) }
 
     Column(
             modifier =
@@ -371,10 +375,8 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                 SettingsItem(
                         icon = Icons.Rounded.Description,
                         title = "Data sources & licences",
-                        subtitle = "OpenStreetMap · USGS · GDACS · Wikimedia",
-                        onClick = {
-                            Toast.makeText(context, "OpenStreetMap ODbL, USGS and GDACS public feeds", Toast.LENGTH_LONG).show()
-                        }
+                        subtitle = "OpenStreetMap · USGS · GDACS · 3D models",
+                        onClick = { showLicences = true }
                 )
                 SettingsDivider()
                 SettingsItem(
@@ -436,6 +438,37 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                     onClose = { showVehiclePicker = false }
             )
         }
+    }
+
+    if (showLicences) {
+        AlertDialog(
+                onDismissRequest = { showLicences = false },
+                title = { Text("Data sources & licences") },
+                text = {
+                    Text(
+                            text =
+                                    """
+                                    Maps, routing and hazard data
+                                    • OpenStreetMap contributors — ODbL
+                                    • MapLibre, GraphHopper, OpenRouteService
+                                    • USGS, GDACS, Wikimedia
+
+                                    3D vehicle and pedestrian models
+                                    • Kenney Car Kit — CC0 1.0
+                                    • Quaternius motorcycle — CC0 1.0
+                                    • Hoodie pedestrian — original Waffle asset
+                                    • "Bicycle" by Poly by Google, via Poly Pizza — CC BY 3.0
+                                      https://creativecommons.org/licenses/by/3.0/
+                                    """.trimIndent(),
+                            modifier =
+                                    Modifier.heightIn(max = 420.dp)
+                                            .verticalScroll(rememberScrollState())
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLicences = false }) { Text("Close") }
+                }
+        )
     }
 }
 

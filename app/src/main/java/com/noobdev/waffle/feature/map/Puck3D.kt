@@ -109,11 +109,20 @@ internal fun Puck3D(
     val density = LocalDensity.current
     val isCarMode = travelMode == "driving-car" || travelMode == "driving-motorcycle"
     val isMotorcycle = travelMode == "driving-motorcycle"
+    val isBikeMode = travelMode == "cycling-regular"
+    val isWalkMode = travelMode == "foot-walking"
     val use3DModel =
             isNavigating &&
-                    isCarMode &&
-                    (isMotorcycle || vehicleIcon != VehicleIcon.ARROW)
-    val modelKey = if (isMotorcycle) "MOTORCYCLE" else vehicleIcon.storageKey
+                    (isCarMode || isBikeMode || isWalkMode) &&
+                    (isMotorcycle || isBikeMode || isWalkMode ||
+                            vehicleIcon != VehicleIcon.ARROW)
+    val modelKey =
+            when {
+                isMotorcycle -> "MOTORCYCLE"
+                isBikeMode -> "BICYCLE"
+                isWalkMode -> "WALKER"
+                else -> vehicleIcon.storageKey
+            }
     val iconName =
             "puck-3d-$travelMode-${vehicleIcon.storageKey}-${if (isNavigating) "nav" else "dot"}"
     val drawableRes =
@@ -124,13 +133,19 @@ internal fun Puck3D(
                 isCarMode && vehicleIcon == VehicleIcon.ARROW -> R.drawable.ic_puck_arrow_3d
                 else -> vehicleIcon.drawable
             }
-    val iconSize = if (isNavigating) 0.55f else 0.30f
+    val iconSize =
+            when {
+                !isNavigating -> 0.30f
+                isBikeMode || isWalkMode -> 0.85f
+                else -> 0.55f
+            }
     val fallbackBitmap =
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
             }
     var threeDBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(context, modelKey, lights, use3DModel) {
+    val renderLights = if (isCarMode) lights else VehicleLights()
+    LaunchedEffect(context, modelKey, renderLights, use3DModel) {
         threeDBitmap =
                 if (use3DModel) {
                     GltfCarRenderer.renderBitmap(
@@ -138,11 +153,11 @@ internal fun Puck3D(
                             modelKey = modelKey,
                             sizePx = with(density) { 100.dp.toPx() },
                             bearingDegrees = 0f,
-                            lights = lights
+                            lights = renderLights
                     )
                 } else null
     }
-    val bitmap = if (use3DModel) threeDBitmap else fallbackBitmap
+    val bitmap = if (use3DModel) threeDBitmap ?: fallbackBitmap else fallbackBitmap
     var source by remember { mutableStateOf<GeoJsonSource?>(null) }
 
     LaunchedEffect(map, styleIndex, iconName, bitmap) {
