@@ -564,10 +564,16 @@ class FloatingNavigationOverlay(
                         GeoPoint(lastSnapshotLat, lastSnapshotLng)
                 )
         val bearingDelta = abs(snapshot.bearing - lastSnapshotBearing)
+        // Walking moves only a few metres per second; the old 25 m / 3 s throttle
+        // left the floating map frozen for long stretches. Refresh it more often so
+        // the route shrinks and the car/pedestrian stays centered.
+        val walking = snapshot.profile == "foot-walking"
+        val maxAge = if (walking) 1_500L else 3_000L
+        val maxMove = if (walking) 6.0 else 25.0
         if (!force &&
                         projection != null &&
-                        now - lastSnapshotAt < 3_000L &&
-                        moved < 25.0 &&
+                        now - lastSnapshotAt < maxAge &&
+                        moved < maxMove &&
                         bearingDelta < 15.0
         ) {
             return
@@ -710,7 +716,10 @@ class FloatingNavigationOverlay(
 
         val path = Path()
         var started = false
-        route.coordinates.forEach { point ->
+        // Drop the part of the route already travelled so the floating line shrinks
+        // just like the main map instead of showing the whole trip forever.
+        val firstPoint = (nav.matchedIndex - 1).coerceAtLeast(0)
+        route.coordinates.drop(firstPoint).forEach { point ->
             val pixel = projection.project(point.first, point.second)
             if (!started) {
                 path.moveTo(pixel.x, pixel.y)
