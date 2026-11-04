@@ -40,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.maplibre.android.camera.CameraPosition
@@ -64,7 +65,8 @@ import org.maplibre.android.snapshotter.MapSnapshotter
 class FloatingNavigationOverlay(
         private val context: Context,
         private val windowManager: WindowManager,
-        private val sizeStep: Int = 0
+        private val sizeStep: Int = 0,
+        private val snapshotFlow: StateFlow<NavigationSnapshot> = NavigationSession.state
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var root: FrameLayout? = null
@@ -413,7 +415,7 @@ class FloatingNavigationOverlay(
 
         collectJob =
                 scope.launch {
-                    NavigationSession.state.collect { snapshot ->
+                    snapshotFlow.collect { snapshot ->
                         if (!snapshot.active) {
                             hide()
                             return@collect

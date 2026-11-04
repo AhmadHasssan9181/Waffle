@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.noobdev.waffle.data.remote.OfflineGeocoder
+import com.noobdev.waffle.core.navigation.FloatingMapHost
 import com.noobdev.waffle.core.navigation.GeoPoint
 import com.noobdev.waffle.core.navigation.NavigationService
 import com.noobdev.waffle.core.navigation.NavigationSession
@@ -75,10 +76,18 @@ class MainActivity : ComponentActivity() {
         val live = NavigationSession.isActive()
         val simulating = SimulationState.active.value
         if (!live && !simulating) return
-        if (live) NavigationSession.requestOpenMap()
-
-        // System PiP works for both real trips and Test Mode. The large floating
-        // overlay is still available from the navigation notification's Float action.
+        if (live) {
+            NavigationSession.requestOpenMap()
+            // Live navigation gets the large custom floating map back. The service
+            // itself checks overlay permission and posts a notification if it is missing.
+            leavingForFloating = true
+            NavigationService.showFloating(this)
+            return
+        }
+        if (FloatingMapHost.show(this, SimulationState.snapshot)) {
+            leavingForFloating = true
+            return
+        }
         enterSystemPip()
     }
 
@@ -87,7 +96,7 @@ class MainActivity : ComponentActivity() {
         runCatching {
             enterPictureInPictureMode(
                     PictureInPictureParams.Builder()
-                            .setAspectRatio(Rational(3, 2))
+                            .setAspectRatio(Rational(3, 4))
                             .build()
             )
         }
@@ -107,7 +116,7 @@ class MainActivity : ComponentActivity() {
                 runCatching {
                             enterPictureInPictureMode(
                                     PictureInPictureParams.Builder()
-                                            .setAspectRatio(Rational(3, 2))
+                                            .setAspectRatio(Rational(3, 4))
                                             .build()
                             )
                         }
@@ -118,8 +127,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Do not immediately hide a floating map that was just requested by pressing Home.
-        if (!leavingForFloating && NavigationSession.isActive()) {
-            NavigationService.hideFloating(this)
+        if (!leavingForFloating) {
+            if (NavigationSession.isActive()) NavigationService.hideFloating(this)
+            FloatingMapHost.hide()
         }
         enterPipIfRequested()
     }
@@ -139,6 +149,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        FloatingMapHost.hide()
         PipState.setActive(false)
         super.onDestroy()
     }

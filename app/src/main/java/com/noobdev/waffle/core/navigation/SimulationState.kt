@@ -12,7 +12,19 @@ object SimulationState {
     private val _active = MutableStateFlow(false)
     val active: StateFlow<Boolean> = _active.asStateFlow()
 
+    private val _snapshot = MutableStateFlow(NavigationSnapshot())
+    val snapshot: StateFlow<NavigationSnapshot> = _snapshot.asStateFlow()
+
     fun setActive(active: Boolean) {
         _active.value = active
+        if (!active) _snapshot.value = NavigationSnapshot()
+    }
+
+    fun publish(snapshot: NavigationSnapshot) {
+        _snapshot.value = snapshot
+    }
+
+    fun clearSnapshot() {
+        _snapshot.value = NavigationSnapshot()
     }
 }

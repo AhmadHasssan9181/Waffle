@@ -57,6 +57,7 @@ import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.NavigationSession
+import com.noobdev.waffle.core.navigation.NavigationSnapshot
 import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.PipState
 import com.noobdev.waffle.core.navigation.RouteSimulator
@@ -319,6 +320,52 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 SimulationState.setActive(
                         isSimulationMode && screenState == MapScreenState.NAVIGATING
                 )
+        }
+        LaunchedEffect(
+                isSimulationMode,
+                screenState,
+                currentLat,
+                currentLng,
+                currentBearing,
+                currentSpeedMps,
+                currentInstructionIndex,
+                remainingDistance,
+                remainingDuration,
+                distanceToNextTurn,
+                selectedProfile,
+                selectedStyleIndex,
+                simSegmentIndex,
+                routeStops,
+                selectedDestination,
+                lastNavigationRoute
+        ) {
+                if (isSimulationMode && screenState == MapScreenState.NAVIGATING) {
+                        val route = activeRouteFor(selectedProfile)
+                        if (route != null) {
+                                SimulationState.publish(
+                                        NavigationSnapshot(
+                                                active = true,
+                                                route = route,
+                                                destination = selectedDestination,
+                                                profile = selectedProfile,
+                                                styleIndex = selectedStyleIndex,
+                                                vehicleIconKey = vehicleIcon.storageKey,
+                                                stops = routeStops,
+                                                lat = currentLat,
+                                                lng = currentLng,
+                                                bearing = currentBearing,
+                                                speedMps = currentSpeedMps,
+                                                instructionIndex = currentInstructionIndex,
+                                                remainingDistance = remainingDistance,
+                                                remainingDuration = remainingDuration,
+                                                distanceToNextTurn = distanceToNextTurn,
+                                                matchedIndex = simSegmentIndex
+                                        )
+                                )
+                        }
+                } else {
+                        SimulationState.clearSnapshot()
+                }
         }
 
         // Bottom sheet (unused but kept for future)
