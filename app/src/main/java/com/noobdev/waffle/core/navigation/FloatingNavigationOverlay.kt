@@ -564,12 +564,16 @@ class FloatingNavigationOverlay(
                         GeoPoint(lastSnapshotLat, lastSnapshotLng)
                 )
         val bearingDelta = abs(snapshot.bearing - lastSnapshotBearing)
-        // Walking moves only a few metres per second; the old 25 m / 3 s throttle
-        // left the floating map frozen for long stretches. Refresh it more often so
-        // the route shrinks and the car/pedestrian stays centered.
-        val walking = snapshot.profile == "foot-walking"
-        val maxAge = if (walking) 1_500L else 3_000L
-        val maxMove = if (walking) 6.0 else 25.0
+        // Keep the floating map close to the live navigation camera in every mode.
+        // The old car/bike throttle waited 3 s or 25 m, which felt frozen at city
+        // speeds. One second / a few metres makes the route and puck track smoothly.
+        val maxAge = 1_000L
+        val maxMove =
+                when (snapshot.profile) {
+                        "foot-walking" -> 4.0
+                        "cycling-regular" -> 8.0
+                        else -> 12.0
+                }
         if (!force &&
                         projection != null &&
                         now - lastSnapshotAt < maxAge &&
