@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
@@ -42,6 +43,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -88,6 +90,11 @@ class FloatingNavigationOverlay(
     private var snapshotter: MapSnapshotter? = null
     private var carBitmap: Bitmap? = null
     private var carDrawableRes: Int = 0
+    private var walkerFrames: List<Bitmap> = emptyList()
+    private var walkerScaledFrames: List<Bitmap> = emptyList()
+    private var walkerScaledSize = 0
+    private var walkerFrameIndex = 0
+    private var walkerJob: Job? = null
     private var snapshotGeneration = 0
     private var snapshotInFlight = false
     private var snapshotPending = false
@@ -423,6 +430,7 @@ class FloatingNavigationOverlay(
                         current = snapshot
                         runCatching {
                             updateText(snapshot)
+                            updateWalkerAnimation(snapshot)
                             redrawComposite()
                             requestSnapshot(force = false)
                         }
@@ -438,6 +446,9 @@ class FloatingNavigationOverlay(
         collectJob = null
         blinkJob?.cancel()
         blinkJob = null
+        walkerJob?.cancel()
+        walkerJob = null
+        walkerFrameIndex = 0
         blinkOn = true
         snapshotGeneration++
         snapshotInFlight = false
@@ -709,24 +720,38 @@ class FloatingNavigationOverlay(
             }
         }
         if (started) {
-            val casing =
-                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#F2FFFFFF")
-                        style = Paint.Style.STROKE
-                        strokeWidth = 13f
-                        strokeCap = Paint.Cap.ROUND
-                        strokeJoin = Paint.Join.ROUND
-                    }
-            canvas.drawPath(path, casing)
-            val line =
-                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#2F80ED")
-                        style = Paint.Style.STROKE
-                        strokeWidth = 8f
-                        strokeCap = Paint.Cap.ROUND
-                        strokeJoin = Paint.Join.ROUND
-                    }
-            canvas.drawPath(path, line)
+            if (nav.profile == "foot-walking") {
+                val dots =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.parseColor("#2F80ED")
+                            style = Paint.Style.STROKE
+                            strokeWidth = 9f
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                            pathEffect =
+                                    DashPathEffect(floatArrayOf(0.1f, 18f), 0f)
+                        }
+                canvas.drawPath(path, dots)
+            } else {
+                val casing =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.parseColor("#F2FFFFFF")
+                            style = Paint.Style.STROKE
+                            strokeWidth = 13f
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                        }
+                canvas.drawPath(path, casing)
+                val line =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.parseColor("#2F80ED")
+                            style = Paint.Style.STROKE
+                            strokeWidth = 8f
+                            strokeCap = Paint.Cap.ROUND
+                            strokeJoin = Paint.Join.ROUND
+                        }
+                canvas.drawPath(path, line)
+            }
         }
 
         val speed = nav.speedMps
@@ -782,6 +807,10 @@ class FloatingNavigationOverlay(
     }
 
     private fun carBitmap(snapshot: NavigationSnapshot, baseWidth: Int): Bitmap? {
+        if (snapshot.profile == "foot-walking") {
+            val target = (baseWidth * 0.28f).toInt().coerceIn(72, 160)
+            walkerBitmap(target)?.let { return it }
+        }
         val res =
                 when {
                         snapshot.profile == "cycling-regular" -> R.drawable.ic_puck_bike_3d
@@ -802,6 +831,67 @@ class FloatingNavigationOverlay(
             carDrawableRes = res
         }
         return carBitmap
+    }
+
+    private fun ensureWalkerFrames() {
+        if (walkerFrames.isNotEmpty()) return
+        walkerFrames =
+                buildList {
+                    for (index in 0 until 12) {
+                        val path =
+                                "walker/frame_${index.toString().padStart(2, '0')}.png"
+                        runCatching {
+                                    context.assets.open(path).use {
+                                        BitmapFactory.decodeStream(it)
+                                    }
+                                }
+                                .getOrNull()
+                                ?.let { add(it) }
+                    }
+                }
+    }
+
+    private fun walkerBitmap(target: Int): Bitmap? {
+        ensureWalkerFrames()
+        if (walkerFrames.isEmpty()) return null
+        if (walkerScaledSize != target || walkerScaledFrames.size != walkerFrames.size) {
+            walkerScaledSize = target
+            walkerScaledFrames =
+                    walkerFrames.map { frame ->
+                        Bitmap.createScaledBitmap(frame, target, target, true)
+                    }
+        }
+        val index = walkerFrameIndex.coerceIn(0, walkerScaledFrames.lastIndex)
+        return walkerScaledFrames[index]
+    }
+
+    private fun updateWalkerAnimation(snapshot: NavigationSnapshot) {
+        val moving = snapshot.profile == "foot-walking" && snapshot.speedMps > 0.3f
+        if (!moving) {
+            walkerJob?.cancel()
+            walkerJob = null
+            if (walkerFrameIndex != 0) {
+                walkerFrameIndex = 0
+                redrawComposite()
+            }
+            return
+        }
+        if (walkerJob?.isActive == true) return
+        walkerJob =
+                scope.launch {
+                    while (isActive) {
+                        val speed = (current?.speedMps ?: 1.4f).toDouble()
+                        val stepMs =
+                                (85.0 * (1.4 / speed.coerceAtLeast(0.5)))
+                                        .toLong()
+                                        .coerceIn(55L, 140L)
+                        delay(stepMs)
+                        ensureWalkerFrames()
+                        if (walkerFrames.isEmpty()) continue
+                        walkerFrameIndex = (walkerFrameIndex + 1) % walkerFrames.size
+                        redrawComposite()
+                    }
+                }
     }
 
     private fun updateText(snapshot: NavigationSnapshot) {
