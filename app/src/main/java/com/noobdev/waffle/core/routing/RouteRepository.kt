@@ -63,41 +63,41 @@ object RouteRepository {
         // route online where ORS can honour it rather than silently ignoring the choice.
         // Never let the metro graph snap a Karachi destination to a Rawalpindi street.
         val useOffline = preferOffline && !options.needsOnline && offlineCoverage
-        if (useOffline) {
-            OfflineRoutingManager.getEngineOrNull()?.let { engine ->
-                val results =
-                        runCatching {
-                                    GraphHopperRouteMapper.toRouteResults(
-                                            engine.calculateRoutes(
-                                                    start = start,
-                                                    end = end,
-                                                    profile = profile,
-                                                    waypoints = detour.waypoints,
-                                                    maxPaths =
-                                                            if (options.alternatives) 3 else 1
-                                            )
-                                    )
-                                }
-                                .getOrElse { throwable ->
-                                    offlineError =
-                                            throwable.message ?: throwable.javaClass.simpleName
-                                    emptyList()
-                                }
+        fun tryOffline(): RoutePlan? {
+            val engine = OfflineRoutingManager.getEngineOrNull() ?: return null
+            val results =
+                    runCatching {
+                                GraphHopperRouteMapper.toRouteResults(
+                                        engine.calculateRoutes(
+                                                start = start,
+                                                end = end,
+                                                profile = profile,
+                                                waypoints = detour.waypoints,
+                                                maxPaths =
+                                                        if (options.alternatives) 3 else 1
+                                        )
+                                )
+                            }
+                            .getOrElse { throwable ->
+                                offlineError =
+                                        throwable.message ?: throwable.javaClass.simpleName
+                                emptyList()
+                            }
 
-                val best = results.firstOrNull { it.success }
-                if (best != null) {
-                    return RoutePlan(
-                            result = adjustDuration(best),
-                            source = RouteSource.OFFLINE,
-                            waypoints = detour.waypoints,
-                            avoidedHazards = detour.avoidedHazards,
-                            alternatives =
-                                    results.drop(1).filter { it.success }.map(::adjustDuration)
-                    )
-                }
+            val best = results.firstOrNull { it.success }
+            if (best == null) {
                 offlineError = results.firstOrNull()?.errorMessage ?: offlineError
+                return null
             }
+            return RoutePlan(
+                    result = adjustDuration(best),
+                    source = RouteSource.OFFLINE,
+                    waypoints = detour.waypoints,
+                    avoidedHazards = detour.avoidedHazards,
+                    alternatives = results.drop(1).filter { it.success }.map(::adjustDuration)
+            )
         }
+        if (useOffline) tryOffline()?.let { return it }
 
         val onlineResults =
                 getRoutesVia(
@@ -124,6 +124,12 @@ object RouteRepository {
                                                 "Avoid options need an internet connection"
                                         else "Online routing failed"
                         )
+
+        // Online-first mode (when the phone has a connection): if ORS fails, still
+        // fall back to the on-device graph instead of leaving the user stuck.
+        if (!online.success && !useOffline && offlineCoverage && !options.needsOnline) {
+                tryOffline()?.let { return it }
+        }
 
         val message =
                 when {

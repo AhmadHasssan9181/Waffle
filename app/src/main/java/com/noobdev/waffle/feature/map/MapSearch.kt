@@ -193,17 +193,30 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                         OfflineGeocoder.search(query)
                                 }
                         Log.d("MapSearch", "query='$query' offline=${offline.size}")
-                        suggestions =
-                                if (offline.isEmpty() && NetworkState.isOnline(context)) {
-                                        onlineAttempted = true
-                                        searchLocations(query)
-                                } else {
-                                        offline
-                                }
+                        // Show offline matches immediately; online results are merged in
+                        // when they arrive so a slow OpenCage/Nominatim call does not hide
+                        // perfectly good local results.
+                        suggestions = offline
+                        val onlineAvailable = NetworkState.isOnline(context)
+                        isLoading = offline.isEmpty() && onlineAvailable
+                        if (onlineAvailable) {
+                                onlineAttempted = true
+                                val online =
+                                        withTimeoutOrNull(8_000) {
+                                                searchLocationsOnline(query)
+                                        } ?: emptyList()
+                                suggestions =
+                                        (offline + online).distinctBy { result ->
+                                                "${result.name.lowercase()}|" +
+                                                        "${"%.4f".format(result.lat)}|" +
+                                                        "%.4f".format(result.lng)
+                                        }
+                        }
                         Log.d("MapSearch", "suggestions=${suggestions.size}")
                         isLoading = false
                 } else {
                         suggestions = emptyList()
+                        isLoading = false
                 }
         }
 

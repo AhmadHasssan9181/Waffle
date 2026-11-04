@@ -64,6 +64,7 @@ import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.navigation.SimulationState
 import com.noobdev.waffle.core.navigation.TrafficState
+import com.noobdev.waffle.core.network.NetworkState
 import com.noobdev.waffle.core.navigation.VehicleLights
 import com.noobdev.waffle.core.navigation.isNightTime
 import com.noobdev.waffle.core.navigation.turnSignalFor
@@ -414,6 +415,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 },
                                         hazards = HazardRegistry.active(),
                                         stops = stops.map { GeoPoint(it.lat, it.lng) },
+                                        preferOffline = !NetworkState.isOnline(context),
                                         options = planOptions
                                 )
 
@@ -906,6 +908,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 },
                                         hazards = activeHazards,
                                         stops = viaStops.map { GeoPoint(it.lat, it.lng) },
+                                        preferOffline = !NetworkState.isOnline(context),
                                         options = planOptions
                                 )
 
@@ -2150,6 +2153,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 },
                                         hazards = hazards,
                                         stops = viaStops.map { GeoPoint(it.lat, it.lng) },
+                                        preferOffline = !NetworkState.isOnline(context),
                                         options = planOptions
                                 )
 
@@ -3196,6 +3200,7 @@ private suspend fun planRouteOffMain(
         profile: String,
         hazards: List<HazardZone>,
         stops: List<GeoPoint> = emptyList(),
+        preferOffline: Boolean = true,
         options: RouteOptions = RouteOptions()
 ): RoutePlan? =
         withContext(Dispatchers.Default) {
@@ -3206,6 +3211,7 @@ private suspend fun planRouteOffMain(
                                 stops = stops,
                                 profile = profile,
                                 hazards = hazards,
+                                preferOffline = preferOffline,
                                 options = options
                         )
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
