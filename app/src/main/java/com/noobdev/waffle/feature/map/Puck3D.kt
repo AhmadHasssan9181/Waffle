@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -194,13 +195,20 @@ internal fun Puck3D(
     }
 
     val isMoving = speedMps > 0.3
+    val currentSpeed = rememberUpdatedState(speedMps)
     LaunchedEffect(isWalkMode, isMoving, walkerFrames.size) {
         if (!isWalkMode || !isMoving || walkerFrames.isEmpty()) {
             frameIndex = 0
             return@LaunchedEffect
         }
         while (true) {
-            delay(85)
+            // Keep the cadence proportional to walking speed; a slow stroll does not
+            // sprint through the walk cycle.
+            val stepMs =
+                    (85.0 * (1.4 / currentSpeed.value.coerceAtLeast(0.5)))
+                            .toLong()
+                            .coerceIn(55L, 140L)
+            delay(stepMs)
             frameIndex = (frameIndex + 1) % walkerFrames.size
         }
     }
