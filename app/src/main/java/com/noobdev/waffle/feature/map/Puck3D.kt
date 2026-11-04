@@ -18,7 +18,10 @@ import androidx.compose.ui.unit.dp
 import com.noobdev.waffle.R
 import com.noobdev.waffle.core.navigation.GltfCarRenderer
 import com.noobdev.waffle.core.navigation.VehicleLights
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.maps.MapLibreMap
@@ -49,7 +52,8 @@ internal fun AnimatedPuck3D(
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
         isNavigating: Boolean = false,
-        lights: VehicleLights = VehicleLights()
+        lights: VehicleLights = VehicleLights(),
+        speedMps: Double = 0.0
 ) {
     val lat = remember { Animatable(targetLat.toFloat()) }
     val lng = remember { Animatable(targetLng.toFloat()) }
@@ -82,7 +86,8 @@ internal fun AnimatedPuck3D(
             travelMode = travelMode,
             vehicleIcon = vehicleIcon,
             isNavigating = isNavigating,
-            lights = lights
+            lights = lights,
+            speedMps = speedMps
     )
 }
 
@@ -103,7 +108,8 @@ internal fun Puck3D(
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
         isNavigating: Boolean = false,
-        lights: VehicleLights = VehicleLights()
+        lights: VehicleLights = VehicleLights(),
+        speedMps: Double = 0.0
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -143,33 +149,93 @@ internal fun Puck3D(
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
             }
+    // Walking uses a baked 12-frame walk cycle; cars and the bicycle use the
+    // software 3D renderer. The frames are only advanced while the walker is
+    // actually moving, so the pedestrian stands still when the user stops.
+    var walkerFrames by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var threeDBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var frameIndex by remember { mutableStateOf(0) }
     val renderLights = if (isCarMode) lights else VehicleLights()
-    LaunchedEffect(context, modelKey, renderLights, use3DModel) {
-        threeDBitmap =
-                if (use3DModel) {
-                    GltfCarRenderer.renderBitmap(
-                            context = context.applicationContext,
-                            modelKey = modelKey,
-                            sizePx = with(density) { 100.dp.toPx() },
-                            bearingDegrees = 0f,
-                            lights = renderLights
-                    )
-                } else null
+    LaunchedEffect(context, modelKey, renderLights, use3DModel, isWalkMode) {
+        if (use3DModel && isWalkMode) {
+            val frames =
+                    withContext(Dispatchers.IO) {
+                        buildList {
+                            for (index in 0 until 12) {
+                                runCatching {
+                                            context.assets
+                                                    .open(
+                                                            "walker/frame_${index.toString().padStart(2, '0')}.png"
+                                                    )
+                                                    .use { BitmapFactory.decodeStream(it) }
+                                        }
+                                        .getOrNull()
+                                        ?.let { add(it) }
+                            }
+                        }
+                    }
+            walkerFrames = frames
+            threeDBitmap = frames.firstOrNull()
+        } else {
+            walkerFrames = emptyList()
+            threeDBitmap =
+                    if (use3DModel) {
+                        withContext(Dispatchers.Default) {
+                            GltfCarRenderer.renderBitmap(
+                                    context = context.applicationContext,
+                                    modelKey = modelKey,
+                                    sizePx = with(density) { 100.dp.toPx() },
+                                    bearingDegrees = 0f,
+                                    lights = renderLights
+                            )
+                        }
+                    } else null
+        }
     }
-    val bitmap = if (use3DModel) threeDBitmap ?: fallbackBitmap else fallbackBitmap
+
+    val isMoving = speedMps > 0.3
+    LaunchedEffect(isWalkMode, isMoving, walkerFrames.size) {
+        if (!isWalkMode || !isMoving || walkerFrames.isEmpty()) {
+            frameIndex = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(85)
+            frameIndex = (frameIndex + 1) % walkerFrames.size
+        }
+    }
+
+    val currentIconName =
+            if (isWalkMode && walkerFrames.isNotEmpty()) "$iconName-$frameIndex"
+            else iconName
     var source by remember { mutableStateOf<GeoJsonSource?>(null) }
 
-    LaunchedEffect(map, styleIndex, iconName, bitmap) {
+    LaunchedEffect(
+            map,
+            styleIndex,
+            iconName,
+            walkerFrames,
+            threeDBitmap,
+            isWalkMode,
+            use3DModel
+    ) {
         val mapLibre = map ?: return@LaunchedEffect
-        val bitmapImage = bitmap ?: return@LaunchedEffect
         mapLibre.getStyle { style ->
             runCatching {
-                style.removeImage(iconName)
-                style.addImage(iconName, bitmapImage)
+                if (isWalkMode && walkerFrames.isNotEmpty()) {
+                    walkerFrames.forEachIndexed { index, frame ->
+                        val name = "$iconName-$index"
+                        style.removeImage(name)
+                        style.addImage(name, frame)
+                    }
+                } else {
+                    val bitmapImage = threeDBitmap ?: fallbackBitmap ?: return@runCatching
+                    style.removeImage(iconName)
+                    style.addImage(iconName, bitmapImage)
+                }
 
                 source = null
-                val geoJson = puckGeoJson(lat, lng, bearing, iconName, iconSize)
+                val geoJson = puckGeoJson(lat, lng, bearing, currentIconName, iconSize)
                 val existing = style.getSourceAs<GeoJsonSource>("puck-source")
                 val puckSource =
                         existing
@@ -206,8 +272,8 @@ internal fun Puck3D(
         }
     }
 
-    LaunchedEffect(source, lat, lng, bearing, iconName, iconSize) {
-        source?.setGeoJson(puckGeoJson(lat, lng, bearing, iconName, iconSize))
+    LaunchedEffect(source, lat, lng, bearing, currentIconName, iconSize) {
+        source?.setGeoJson(puckGeoJson(lat, lng, bearing, currentIconName, iconSize))
     }
 
     DisposableEffect(map) {

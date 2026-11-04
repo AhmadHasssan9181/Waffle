@@ -25,7 +25,7 @@ https://creativecommons.org/licenses/by/3.0/
 
 Hoodie pedestrian
 Original Waffle asset, made for this project.
-- walker.glb (texture embedded)
+- 12-frame walk cycle in assets/walker/ (baked from the animated GLB)
 
 Credit is not required for the CC0 models, but the sources are credited here.
 The bicycle is used under CC BY 3.0 and is credited above.

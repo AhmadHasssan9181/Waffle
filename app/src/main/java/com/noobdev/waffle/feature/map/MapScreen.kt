@@ -683,7 +683,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         travelMode = selectedProfile,
                         vehicleIcon = vehicleIcon,
                         isNavigating = screenState == MapScreenState.NAVIGATING,
-                        lights = vehicleLights
+                        lights = vehicleLights,
+                        speedMps = currentSpeedMps.toDouble()
                 )
         }
 
