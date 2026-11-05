@@ -39,6 +39,7 @@ class TtsAudioFocus(context: Context) {
             val request =
                     AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                             .setAudioAttributes(attributes)
+                            .setOnAudioFocusChangeListener { }
                             .build()
             focusRequest = request
             held = manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
