@@ -21,6 +21,7 @@ data class AlertsUiState(
         val alerts: List<DisasterAlert> = emptyList(),
         val filterType: String? = null, // null = all
         val sortOrder: AlertSortOrder = AlertSortOrder.DATE_DESC,
+        val visibleLimit: Int = PAGE_SIZE,
         val error: String? = null,
         val userLat: Double? = null,
         val userLng: Double? = null
@@ -32,6 +33,10 @@ data class AlertsUiState(
         val alertLat = alert.latitude ?: return null
         val alertLon = alert.longitude ?: return null
         return GeoGeometry.metersBetweenLatLng(lat, lon, alertLat, alertLon) / 1000.0
+    }
+
+    companion object {
+        const val PAGE_SIZE = 50
     }
 }
 
@@ -67,7 +72,7 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
                                 alerts = entities.map { it.toDomainModel() },
                                 isLoading = false,
                                 isPaginating = false,
-                                hasMore = false
+                                hasMore = entities.size > _uiState.value.visibleLimit
                         )
             }
         }
@@ -81,11 +86,34 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setFilter(type: String?) {
-        _uiState.value = _uiState.value.copy(filterType = type)
+        _uiState.value =
+                _uiState.value.copy(
+                        filterType = type,
+                        visibleLimit = AlertsUiState.PAGE_SIZE,
+                        hasMore = _uiState.value.alerts.size > AlertsUiState.PAGE_SIZE
+                )
     }
 
     fun setSortOrder(order: AlertSortOrder) {
-        _uiState.value = _uiState.value.copy(sortOrder = order)
+        _uiState.value =
+                _uiState.value.copy(
+                        sortOrder = order,
+                        visibleLimit = AlertsUiState.PAGE_SIZE,
+                        hasMore = _uiState.value.alerts.size > AlertsUiState.PAGE_SIZE
+                )
+    }
+
+    fun loadMore() {
+        val next = _uiState.value.visibleLimit + AlertsUiState.PAGE_SIZE
+        _uiState.value = _uiState.value.copy(visibleLimit = next, hasMore = false)
+    }
+
+    fun hasMoreFilteredAlerts(): Boolean {
+        val filter = _uiState.value.filterType
+        val total =
+                if (filter == null) _uiState.value.alerts.size
+                else _uiState.value.alerts.count { it.type == filter }
+        return total > _uiState.value.visibleLimit
     }
 
     fun getFilteredAlerts(): List<DisasterAlert> {
@@ -94,7 +122,7 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
                 if (filter == null) _uiState.value.alerts
                 else _uiState.value.alerts.filter { it.type == filter }
 
-        return when (_uiState.value.sortOrder) {
+        val sorted = when (_uiState.value.sortOrder) {
             AlertSortOrder.DATE_DESC -> filtered.sortedByDescending { it.timestamp ?: "" }
             AlertSortOrder.DATE_ASC -> filtered.sortedBy { it.timestamp ?: "" }
             AlertSortOrder.SEVERITY_DESC ->
@@ -112,6 +140,7 @@ class AlertsViewModel(application: Application) : AndroidViewModel(application) 
                         _uiState.value.distanceKm(alert) ?: Double.MAX_VALUE
                     }
         }
+        return sorted.take(_uiState.value.visibleLimit)
     }
 
     fun refresh() {

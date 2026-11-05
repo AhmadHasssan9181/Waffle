@@ -1,11 +1,9 @@
 package com.noobdev.waffle.feature.rescue
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -58,10 +56,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
-import com.google.android.gms.location.LocationServices
 import com.noobdev.waffle.Screen
+import com.noobdev.waffle.core.location.currentOrLastLocation
 import com.noobdev.waffle.design.components.EmergencyButton
 import com.noobdev.waffle.design.components.Eyebrow
 import com.noobdev.waffle.design.components.WaffleSecondaryButton
@@ -73,8 +70,6 @@ import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.feature.map.MapFocus
 import com.noobdev.waffle.feature.map.MapTarget
 import java.util.Locale
-import kotlin.coroutines.resume
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * SOS. Deliberately honest: Waffle has no dispatch backend, so this screen does not pretend to
@@ -89,7 +84,7 @@ fun RescueScreen(navController: NavController) {
     var note by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val fix = lastLocation(context)
+        val fix = currentOrLastLocation(context)
         if (fix != null) {
             lat = fix.first
             lon = fix.second
@@ -536,26 +531,6 @@ private fun sendSms(context: Context, message: String) {
                             Toast.makeText(context, "Copied SOS message", Toast.LENGTH_SHORT).show()
                         }
             }
-}
-
-private suspend fun lastLocation(context: Context): Pair<Double, Double>? {
-    val granted =
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    PackageManager.PERMISSION_GRANTED
-    if (!granted) return null
-
-    return suspendCancellableCoroutine { continuation ->
-        try {
-            LocationServices.getFusedLocationProviderClient(context)
-                    .lastLocation
-                    .addOnSuccessListener { location ->
-                        continuation.resume(location?.let { it.latitude to it.longitude })
-                    }
-                    .addOnFailureListener { continuation.resume(null) }
-        } catch (security: SecurityException) {
-            continuation.resume(null)
-        }
-    }
 }
 
 // Extension function for formatting doubles

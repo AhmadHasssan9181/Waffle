@@ -90,6 +90,11 @@ android {
     }
 }
 
+ksp {
+    // Check the generated Room schemas into app/schemas so future versions have real migrations.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
 
     implementation(libs.androidx.core.ktx)

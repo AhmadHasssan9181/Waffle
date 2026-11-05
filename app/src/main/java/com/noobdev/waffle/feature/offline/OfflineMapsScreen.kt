@@ -110,9 +110,13 @@ fun OfflineMapsScreen(navController: NavController) {
                             styleUrl = MapStyleResolver.styleUrlFor(target.layer)
                     )
             isPreparing = null
-            result.onFailure { failure ->
-                snackbarHostState.showSnackbar(failure.message ?: "Download could not start")
-            }
+            result
+                    .onSuccess { OfflineDownloadWorker.start(context) }
+                    .onFailure { failure ->
+                        snackbarHostState.showSnackbar(
+                                failure.message ?: "Download could not start"
+                        )
+                    }
         }
     }
 

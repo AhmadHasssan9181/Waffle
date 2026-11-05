@@ -450,8 +450,10 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                                     """
                                     Maps, routing and hazard data
                                     • OpenStreetMap contributors — ODbL
-                                    • MapLibre, GraphHopper, OpenRouteService
-                                    • USGS, GDACS, Wikimedia
+                                    • MapLibre, GraphHopper, MapTiler
+                                    • OpenRouteService, OpenCage, Nominatim
+                                    • TomTom Traffic, Open-Meteo weather
+                                    • USGS, GDACS, Wikimedia Commons
 
                                     3D vehicle and pedestrian models
                                     • Kenney Car Kit — CC0 1.0

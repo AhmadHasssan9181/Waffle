@@ -9,8 +9,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Persists the route, destination, stops and mute state so a process restart can resume the trip.
- * Live position/ETA are intentionally not saved; the controller gets a fresh GPS fix.
+ * Persists the route, destination, stops, mute state and a throttled snapshot of the live
+ * position/ETA so a process restart resumes with useful progress instead of only the route start.
+ * The controller still prefers a fresh GPS fix when one arrives.
  */
 object NavigationStore {
 
@@ -28,6 +29,15 @@ object NavigationStore {
                             .put("styleIndex", snapshot.styleIndex)
                             .put("vehicleIconKey", snapshot.vehicleIconKey)
                             .put("muted", snapshot.muted)
+                            .put("lat", snapshot.lat)
+                            .put("lng", snapshot.lng)
+                            .put("bearing", snapshot.bearing)
+                            .put("speedMps", snapshot.speedMps)
+                            .put("instructionIndex", snapshot.instructionIndex)
+                            .put("remainingDistance", snapshot.remainingDistance)
+                            .put("remainingDuration", snapshot.remainingDuration)
+                            .put("distanceToNextTurn", snapshot.distanceToNextTurn)
+                            .put("matchedIndex", snapshot.matchedIndex)
                             .put("destination", destination.toJson())
                             .put("stops", JSONArray(snapshot.stops.map { it.toJson() }))
                             .put("route", route.toJson())
@@ -67,9 +77,18 @@ object NavigationStore {
                         styleIndex = json.optInt("styleIndex", 1),
                         vehicleIconKey = json.optString("vehicleIconKey", "SEDAN"),
                         stops = stops,
-                        muted = json.optBoolean("muted", false),
-                        remainingDistance = route.distanceMeters,
-                        remainingDuration = route.durationSeconds
+                        lat = json.optDouble("lat", 0.0),
+                        lng = json.optDouble("lng", 0.0),
+                        bearing = json.optDouble("bearing", 0.0),
+                        speedMps = json.optDouble("speedMps", 0.0).toFloat(),
+                        instructionIndex = json.optInt("instructionIndex", 0),
+                        remainingDistance =
+                                json.optDouble("remainingDistance", route.distanceMeters),
+                        remainingDuration =
+                                json.optDouble("remainingDuration", route.durationSeconds),
+                        distanceToNextTurn = json.optDouble("distanceToNextTurn", 0.0),
+                        matchedIndex = json.optInt("matchedIndex", -1),
+                        muted = json.optBoolean("muted", false)
                 )
             }.getOrNull()
 

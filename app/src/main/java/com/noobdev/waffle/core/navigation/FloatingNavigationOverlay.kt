@@ -249,6 +249,14 @@ class FloatingNavigationOverlay(
                     text = ""
                 }
         textColumn.addView(detailView)
+        textColumn.addView(
+                TextView(context).apply {
+                    text = "© MapTiler © OpenStreetMap"
+                    textSize = 8f
+                    setTextColor(Color.parseColor("#99A3B3"))
+                    setSingleLine(true)
+                }
+        )
 
         val fullscreen =
                 TextView(context).apply {

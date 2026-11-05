@@ -41,6 +41,9 @@ internal object MapSessionState {
     val selectedSimSpeed = mutableStateOf(SimulationSpeed.VARIABLE)
 
     val routeSimulator = RouteSimulator()
+    val pendingSimulationRestart = mutableStateOf(false)
+    /** Increments on every new trip/exit so a stale reroute cannot land in the next trip. */
+    var navigationSessionId = 0
 
     /** Keeps route planning alive while the Map tab is off-screen. */
     val routeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

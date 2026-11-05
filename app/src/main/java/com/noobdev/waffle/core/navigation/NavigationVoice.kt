@@ -14,6 +14,7 @@ import java.util.Locale
  */
 class NavigationVoice(context: Context) {
 
+    private val audioFocus = TtsAudioFocus(context.applicationContext)
     private var tts: TextToSpeech? = null
     private var ready = false
     private var enabled = true
@@ -40,7 +41,10 @@ class NavigationVoice(context: Context) {
 
     fun setEnabled(enabled: Boolean) {
         this.enabled = enabled
-        if (!enabled) tts?.stop()
+        if (!enabled) {
+            audioFocus.abandon()
+            tts?.stop()
+        }
     }
 
     fun onSnapshot(snapshot: NavigationSnapshot) {
@@ -67,9 +71,11 @@ class NavigationVoice(context: Context) {
         lastArrived = false
         lastRoute = null
         tts?.stop()
+        audioFocus.abandon()
     }
 
     fun shutdown() {
+        audioFocus.abandon()
         runCatching { tts?.stop() }
         runCatching { tts?.shutdown() }
         tts = null
@@ -116,6 +122,7 @@ class NavigationVoice(context: Context) {
     }
 
     private fun speak(text: String) {
+        audioFocus.begin()
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "waffle-${System.nanoTime()}")
     }
 }

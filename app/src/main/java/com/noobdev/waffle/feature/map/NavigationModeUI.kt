@@ -59,9 +59,9 @@ import com.noobdev.waffle.core.navigation.HazardZone
 import com.noobdev.waffle.core.navigation.LaneGuidanceRepository
 import com.noobdev.waffle.core.navigation.LaneHint
 import com.noobdev.waffle.core.navigation.ManeuverType
-import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.RouteSimulator
+import com.noobdev.waffle.core.navigation.TtsAudioFocus
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.prefs.SpeedUnit
@@ -153,8 +153,10 @@ fun NavigationModeUI(
                                 ttsReady = status == TextToSpeech.SUCCESS
                         }
                 }
+        val audioFocus = remember { TtsAudioFocus(context.applicationContext) }
         DisposableEffect(tts) {
                 onDispose {
+                        audioFocus.abandon()
                         tts.stop()
                         tts.shutdown()
                 }
@@ -170,7 +172,10 @@ fun NavigationModeUI(
                 }
         }
         LaunchedEffect(voiceEnabled) {
-                if (!voiceEnabled) tts.stop()
+                if (!voiceEnabled) {
+                        audioFocus.abandon()
+                        tts.stop()
+                }
         }
         LaunchedEffect(currentInstruction, voiceEnabled, ttsReady) {
                 if (!voiceEnabled || !ttsReady) return@LaunchedEffect
@@ -183,6 +188,7 @@ fun NavigationModeUI(
                         if (text.contains("arrive", ignoreCase = true))
                                 "Continue to your destination"
                         else text
+                audioFocus.begin()
                 tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "instruction")
         }
         LaunchedEffect(remainingDistance, voiceEnabled, ttsReady) {
@@ -191,6 +197,7 @@ fun NavigationModeUI(
                 if (remainingDistance <= 25.0) {
                         if (!lastSpokenArrival) {
                                 lastSpokenArrival = true
+                                audioFocus.begin()
                                 tts.speak(
                                         "You have arrived at your destination",
                                         TextToSpeech.QUEUE_FLUSH,
@@ -222,6 +229,7 @@ fun NavigationModeUI(
                         }
                 if (phrase != null) {
                         lastSpokenNotice = notice
+                        audioFocus.begin()
                         tts.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, "notice")
                 }
         }
@@ -715,6 +723,16 @@ fun NavigationModeUI(
                                 }
                         }
                 }
+                if (isInPip) {
+                        Text(
+                                text = "© MapTiler © OpenStreetMap",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier =
+                                        Modifier.align(Alignment.BottomStart)
+                                                .padding(start = 6.dp, bottom = 2.dp)
+                        )
+                }
         }
 }
 
@@ -945,7 +963,7 @@ private fun LaneHintRow(hint: LaneHint) {
                 verticalAlignment = Alignment.CenterVertically
         ) {
                 Text(
-                        "Lanes",
+                        if (hint.estimated) "Lanes · est." else "Lanes",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -33,32 +33,32 @@ class MapShopsViewModel(application: Application) : AndroidViewModel(application
 
     private var lastLat = Double.NaN
     private var lastLon = Double.NaN
-    private var loading = false
+    /** Latest shop request; an older request may finish but must not replace its results. */
+    private var loadGeneration = 0
 
     /**
      * Loads shops around a fix. Re-fetches only when the camera/user has moved more than 800 m, so
      * panning around the neighbourhood does not hammer Overpass.
      */
     fun loadAround(lat: Double, lon: Double, radiusMeters: Int = DEFAULT_RADIUS_METERS) {
-        if (loading) return
         val moved =
                 lastLat.isNaN() ||
                         GeoGeometry.metersBetweenLatLng(lastLat, lastLon, lat, lon) > 800.0
         if (!moved && _shops.value.isNotEmpty()) return
 
-        loading = true
+        val generation = ++loadGeneration
         viewModelScope.launch {
             _isLoading.value = true
-            runCatching { repository.nearby(lat, lon, radiusMeters) }
-                    .onSuccess { result ->
-                        result.getOrNull()?.let { shops ->
-                            _shops.value = shops
-                            lastLat = lat
-                            lastLon = lon
-                        }
-                    }
+            val result = runCatching { repository.nearby(lat, lon, radiusMeters) }
+            if (generation != loadGeneration) return@launch
+            result.onSuccess { shops ->
+                shops.getOrNull()?.let {
+                    _shops.value = it
+                    lastLat = lat
+                    lastLon = lon
+                }
+            }
             _isLoading.value = false
-            loading = false
         }
     }
 
@@ -67,8 +67,8 @@ class MapShopsViewModel(application: Application) : AndroidViewModel(application
      * what makes "fuel on the way" work for a 30 km trip instead of only the current block.
      */
     fun loadAlongRoute(points: List<GeoPoint>) {
-        if (loading || points.isEmpty()) return
-        loading = true
+        if (points.isEmpty()) return
+        val generation = ++loadGeneration
         viewModelScope.launch {
             _isLoading.value = true
             val merged = linkedMapOf<String, Shop>()
@@ -78,6 +78,7 @@ class MapShopsViewModel(application: Application) : AndroidViewModel(application
                         ?.getOrNull()
                         ?.forEach { merged[it.id] = it }
             }
+            if (generation != loadGeneration) return@launch
             if (merged.isNotEmpty()) {
                 _shops.value = merged.values.toList()
                 // Let the next local load refresh even if the user is near the route start.
@@ -85,7 +86,6 @@ class MapShopsViewModel(application: Application) : AndroidViewModel(application
                 lastLon = Double.NaN
             }
             _isLoading.value = false
-            loading = false
         }
     }
 

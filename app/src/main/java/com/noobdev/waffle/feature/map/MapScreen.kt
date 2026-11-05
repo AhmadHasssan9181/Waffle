@@ -55,7 +55,6 @@ import com.noobdev.waffle.feature.flood.Sector
 import com.noobdev.waffle.feature.flood.loadSectorData
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.HazardZone
-import com.noobdev.waffle.core.navigation.NavigationManager
 import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.NavigationSnapshot
 import com.noobdev.waffle.core.navigation.OffRouteMonitor
@@ -161,6 +160,28 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var currentLat by MapSessionState.currentLat
         var currentLng by MapSessionState.currentLng
         var hasLocation by MapSessionState.hasLocation
+        var lastAlertLocationSavedAt by remember { mutableStateOf(0L) }
+        var lastAlertLocationLat by remember { mutableStateOf(0.0) }
+        var lastAlertLocationLng by remember { mutableStateOf(0.0) }
+
+        /** Feed the background alert worker without writing DataStore on every GPS tick. */
+        fun persistAlertLocation(lat: Double, lng: Double) {
+                val now = System.currentTimeMillis()
+                val moved =
+                        if (lastAlertLocationSavedAt == 0L) Double.MAX_VALUE
+                        else
+                                GeoGeometry.haversineMeters(
+                                        GeoPoint(lastAlertLocationLat, lastAlertLocationLng),
+                                        GeoPoint(lat, lng)
+                                )
+                if (now - lastAlertLocationSavedAt < 60_000L && moved < 500.0) return
+                lastAlertLocationSavedAt = now
+                lastAlertLocationLat = lat
+                lastAlertLocationLng = lng
+                MapSessionState.routeScope.launch {
+                        runCatching { preferencesManager.setUserLocation(lat, lng) }
+                }
+        }
 
         // Search & Routing
         var searchQuery by remember { mutableStateOf("") }
@@ -193,9 +214,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var isRerouting by remember { mutableStateOf(false) }
         var navigationNotice by remember { mutableStateOf<String?>(null) }
         var wrongWayDetected by remember { mutableStateOf(false) }
-        // Incremented on every start/exit so a slow reroute from a previous trip cannot land in a
-        // new navigation session.
-        var navigationSessionId by remember { mutableStateOf(0) }
+
 
         /** The route that belongs to the currently selected travel mode. */
         fun activeRouteFor(profile: String): RouteResult? =
@@ -313,7 +332,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var showSimControls by remember { mutableStateOf(false) }
         var showVehiclePicker by remember { mutableStateOf(false) }
         // A simulated deviation pauses the route-follower; the reroute restarts it on the new line.
-        var pendingSimulationRestart by remember { mutableStateOf(false) }
+        var pendingSimulationRestart by MapSessionState.pendingSimulationRestart
 
         // Collect simulation state
         val simPosition by routeSimulator.currentPosition.collectAsState()
@@ -609,6 +628,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         currentLng = navSession.lng
                                         currentBearing = navSession.bearing
                                         hasLocation = true
+                                        persistAlertLocation(navSession.lat, navSession.lng)
                                 }
                                 currentSpeedMps = navSession.speedMps
                         }
@@ -980,7 +1000,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val biking = isBikeProfile(selectedProfile)
                 val motorcycle = isMotorcycleProfile(selectedProfile)
                 val activeHazards = hazards
-                val session = navigationSessionId
+                val session = MapSessionState.navigationSessionId
                 val planOptions =
                         if (selectedProfile == "driving-car" || motorcycle) routeOptions
                         else RouteOptions()
@@ -991,7 +1011,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         if (wrongWay) "Wrong way · turn around…"
                         else "Off route · finding a new way…"
 
-                scope.launch {
+                MapSessionState.routeScope.launch {
                         val plan =
                                 planRouteOffMain(
                                         startLat = rawLat,
@@ -1012,7 +1032,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 )
 
                         // The driver may have exited or started a new trip while we were planning.
-                        if (session != navigationSessionId ||
+                        if (session != MapSessionState.navigationSessionId ||
                                         screenState != MapScreenState.NAVIGATING
                         ) {
                                 return@launch
@@ -1750,11 +1770,6 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        // Get current location
-        LaunchedEffect(Unit) {
-                NavigationManager.initializeFloodZones()
-        }
-
         // Keep the idle-map location fresh too. Route planning used to read currentLat/currentLng
         // from a single lastLocation snapshot taken when the Map tab opened. After moving a few
         // hundred metres the blue dot moved, but the next route still started at the old place and
@@ -1795,6 +1810,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         currentSpeedMps =
                                                                 location.speed.coerceAtLeast(0f)
                                                 }
+                                                persistAlertLocation(
+                                                        location.latitude,
+                                                        location.longitude
+                                                )
                                         }
                                 }
                         try {
@@ -2323,18 +2342,25 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // === LIVE TRAFFIC: TomTom flow at the current position, every 45 seconds ===
         LaunchedEffect(screenState) {
                 if (screenState == MapScreenState.NAVIGATING) {
-                        while (true) {
-                                val flow =
-                                        TomTomTrafficRepository.flowAt(
-                                                currentLat,
-                                                currentLng
-                                        )
-                                trafficFlow = flow
-                                TrafficState.paceMps =
-                                        flow?.currentSpeedKmh
-                                                ?.div(3.6)
-                                                ?.takeIf { it > 1.0 }
-                                delay(45_000)
+                        try {
+                                while (true) {
+                                        val flow =
+                                                TomTomTrafficRepository.flowAt(
+                                                        currentLat,
+                                                        currentLng
+                                                )
+                                        trafficFlow = flow
+                                        TrafficState.paceMps =
+                                                flow?.currentSpeedKmh
+                                                        ?.div(3.6)
+                                                        ?.takeIf { it > 1.0 }
+                                        delay(45_000)
+                                }
+                        } finally {
+                                // Leaving the Map tab must not leave the service using the last
+                                // road's flow speed for the rest of the trip.
+                                trafficFlow = null
+                                TrafficState.paceMps = null
                         }
                 } else {
                         trafficFlow = null
@@ -2880,7 +2906,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 showSimControls = false
                                                 currentSpeedMps = 0f
                                                 speedLimitKmh = null
-                                                navigationSessionId++
+                                                MapSessionState.navigationSessionId++
                                                 MapSessionState.routePlanGeneration++
                                                 val activeRoute =
                                                         activeRouteFor(selectedProfile)
@@ -3078,7 +3104,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 pendingSimulationRestart = false
                                 routeStops = emptyList()
                                 showSimControls = false
-                                navigationSessionId++
+                                MapSessionState.navigationSessionId++
                                 MapSessionState.routePlanGeneration++
                                 isLoadingRoute = false
                                 isLoadingWalk = false

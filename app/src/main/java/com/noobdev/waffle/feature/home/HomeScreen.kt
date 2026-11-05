@@ -1,9 +1,6 @@
 package com.noobdev.waffle.feature.home
 
-import android.Manifest
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -56,11 +53,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.google.android.gms.location.LocationServices
 import com.noobdev.waffle.Screen
+import com.noobdev.waffle.core.location.currentOrLastLocation
 import com.noobdev.waffle.data.model.DisasterAlert
 import com.noobdev.waffle.data.model.StatusLevel
 import com.noobdev.waffle.design.brand.WaffleWordmark
@@ -75,8 +71,6 @@ import com.noobdev.waffle.design.components.statusColor
 import com.noobdev.waffle.design.theme.DangerRed
 import com.noobdev.waffle.design.theme.SafeGreen
 import com.noobdev.waffle.design.theme.Sky
-import kotlin.coroutines.resume
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Home: the one screen you open in a hurry. It answers three questions in order — am I safe, what
@@ -88,7 +82,7 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = viewMode
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        lastKnownLocation(context)?.let { (lat, lon) -> viewModel.updateLocation(lat, lon) }
+        currentOrLastLocation(context)?.let { (lat, lon) -> viewModel.updateLocation(lat, lon) }
     }
 
     Column(
@@ -483,22 +477,4 @@ private fun previewAlerts(state: HomeUiState): List<DisasterAlert> =
                             .filter { it.status != StatusLevel.SAFE }
                 }
 
-private suspend fun lastKnownLocation(context: Context): Pair<Double, Double>? {
-    val granted =
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    PackageManager.PERMISSION_GRANTED
-    if (!granted) return null
 
-    return suspendCancellableCoroutine { continuation ->
-        try {
-            LocationServices.getFusedLocationProviderClient(context)
-                    .lastLocation
-                    .addOnSuccessListener { location ->
-                        continuation.resume(location?.let { it.latitude to it.longitude })
-                    }
-                    .addOnFailureListener { continuation.resume(null) }
-        } catch (security: SecurityException) {
-            continuation.resume(null)
-        }
-    }
-}

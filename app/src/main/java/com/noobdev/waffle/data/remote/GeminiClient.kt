@@ -9,9 +9,8 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Query
-import com.google.gson.Gson
-import com.noobdev.waffle.feature.flood.data.FloodUiData
 import com.noobdev.waffle.feature.flood.data.GeminiResponse
+import java.util.concurrent.atomic.AtomicLong
 
 /*
 * im experimenting with the geminis api im pretty sure that this would not work
@@ -29,70 +28,13 @@ interface GeminiService {
     ): Response<GeminiResponse>
 }
 
-suspend fun getFloodIntel(summaryReportText: String) {
-
-
-    val myApiKey = BuildConfig.GEMINI_API_KEY
-    // ----------------------------
-
-    val promptText = """
-        You are an AI Analyst for the WAFFLE Drone Fleet. 
-        Analyze the following raw flood report data and extract tactical intel.
-        
-        RAW DATA:
-        $summaryReportText
-        
-        OUTPUT REQUIREMENT:
-        Return ONLY valid JSON matching this structure:
-        {
-          "risk_level": "String (LOW, MEDIUM, HIGH, CRITICAL)",
-          "risk_score": Integer (0-100),
-          "area_impacted_km": Double,
-          "structures_count": Integer,
-          "brief_summary": ["Point 1", "Point 2", "Point 3"],
-          "tactical_recommendation": "String (Short command)"
-        }
-    """.trimIndent()
-
-    // Create the Request Object
-    val request = GeminiRequest(
-        contents = listOf(
-            Content(parts = listOf(Part(text = promptText)))
-        )
-    )
-
-    try {
-        // Make the call
-        val response = GeminiClient.api.analyzeFloodData(
-            apiKey = myApiKey,
-            request = request
-        )
-
-        if (response.isSuccessful) {
-            val jsonString = response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-
-            if (jsonString != null) {
-                // Clean up markdown code blocks if Gemini adds them (e.g., ```json ... ```)
-                val cleanJson = jsonString.replace("```json", "").replace("```", "").trim()
-
-                val uiData = Gson().fromJson(cleanJson, FloodUiData::class.java)
-
-                // Log it to see if it worked
-                android.util.Log.d("WAFFLE_AI", "Risk Level: ${uiData.riskLevel}")
-                android.util.Log.d("WAFFLE_AI", "Action: ${uiData.action}")
-
-                // TODO: Update UI State here
-            }
-        } else {
-            android.util.Log.e("WAFFLE_AI", "Error: ${response.code()} - ${response.errorBody()?.string()}")
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("WAFFLE_AI", "Exception: ${e.message}")
-        e.printStackTrace()
-    }
-}
+private val lastGeminiRequestAt = AtomicLong(0L)
 
 suspend fun chatWithGemini(promptText: String): String? {
+    val now = System.currentTimeMillis()
+    if (now - lastGeminiRequestAt.getAndSet(now) < 1_500L) {
+        return "Please wait a moment before asking again."
+    }
     val myApiKey = BuildConfig.GEMINI_API_KEY
     val request = GeminiRequest(
         contents = listOf(
@@ -107,11 +49,12 @@ suspend fun chatWithGemini(promptText: String): String? {
         if (response.isSuccessful) {
             return response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
         } else {
-            android.util.Log.e("WAFFLE_AI", "Error: ${response.code()} - ${response.errorBody()?.string()}")
+            if (BuildConfig.DEBUG) {
+                android.util.Log.e("WAFFLE_AI", "Gemini HTTP ${response.code()}")
+            }
         }
     } catch (e: Exception) {
-        android.util.Log.e("WAFFLE_AI", "Exception: ${e.message}")
-        e.printStackTrace()
+        if (BuildConfig.DEBUG) android.util.Log.e("WAFFLE_AI", "Gemini request failed: ${e.message}")
     }
     return "Failed to get AI response."
 }

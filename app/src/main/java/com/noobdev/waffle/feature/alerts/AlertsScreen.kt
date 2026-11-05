@@ -307,6 +307,16 @@ fun AlertsScreen(navController: NavController, viewModel: AlertsViewModel = view
                                     distanceKm = uiState.distanceKm(alert)
                             )
                         }
+                        if (viewModel.hasMoreFilteredAlerts()) {
+                            item {
+                                TextButton(
+                                        onClick = { viewModel.loadMore() },
+                                        modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Show more alerts")
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -2,11 +2,15 @@ package com.noobdev.waffle.data.local
 
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentChange
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.noobdev.waffle.data.model.DisasterAlert
+import com.noobdev.waffle.data.model.StatusLevel
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -47,20 +51,10 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
                 .get()
                 .await()
 
-            val entities = snapshot.documents.mapNotNull { doc ->
-                try {
-                    val alert = doc.toObject(DisasterAlert::class.java)
-                    if (alert?.title?.contains("[OSINT AI ERROR]") == true) {
-                        null
-                    } else {
-                        // Firestore documents commonly omit the id field; use the document id
-                        // so the local primary key is never null and removals can be matched.
-                        alert?.copy(id = alert.id ?: doc.id)?.toEntity()
+            val entities =
+                    snapshot.documents.mapNotNull { doc ->
+                        runCatching { fromDocument(doc)?.toEntity() }.getOrNull()
                     }
-                } catch (e: Exception) {
-                    null
-                }
-            }
             if (entities.isNotEmpty()) {
                 alertDao.insertAll(entities)
             }
@@ -89,17 +83,16 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
                     for (change in snapshots.documentChanges) {
                         val doc = change.document
                         try {
-                            val alert = doc.toObject(DisasterAlert::class.java)
-                            if (alert?.title?.contains("[OSINT AI ERROR]") == true) continue
-                            val normalized = alert?.copy(id = alert.id ?: doc.id) ?: continue
-                            val entity = normalized.toEntity()
+                            val alert = fromDocument(doc) ?: continue
+                            if (alert.title?.contains("[OSINT AI ERROR]") == true) continue
+                            val entity = alert.toEntity()
 
                             when (change.type) {
                                 DocumentChange.Type.ADDED -> {
                                     if (entity != null) entitiesToInsert.add(entity)
                                     // Trigger notification for ALL alerts if it's not the initial load of 50 items
                                     if (!isFirstLoad) {
-                                        notificationHelper.showDisasterAlertNotification(normalized)
+                                        notificationHelper.showDisasterAlertNotification(alert)
                                     }
                                 }
                                 DocumentChange.Type.MODIFIED -> {
@@ -107,6 +100,7 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
                                 }
                                 DocumentChange.Type.REMOVED -> {
                                     idsToDelete.add(doc.id)
+                                    fromDocument(doc)?.id?.let { idsToDelete.add(it) }
                                 }
                             }
                         } catch (e: Exception) {
@@ -130,4 +124,42 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
         realTimeListener?.remove()
         realTimeListener = null
     }
+
+    /**
+     * Firestore backends commonly store `timestamp` as a native Firestore Timestamp, while the
+     * public feeds and Room use ISO strings. Read fields manually so neither shape is dropped.
+     */
+    private fun fromDocument(doc: DocumentSnapshot): DisasterAlert? {
+        val data = doc.data ?: return null
+        val title = data["title"] as? String
+        if (title?.contains("[OSINT AI ERROR]") == true) return null
+        val status =
+                (data["status"] as? String)?.let { raw ->
+                    runCatching { StatusLevel.valueOf(raw.trim().uppercase()) }.getOrNull()
+                }
+        val details =
+                (data["details"] as? Map<*, *>)
+                        ?.entries
+                        ?.associate { it.key.toString() to (it.value ?: "") }
+        return DisasterAlert(
+                id = (data["id"] as? String)?.takeIf { it.isNotBlank() } ?: doc.id,
+                title = title,
+                location_name = data["location_name"] as? String,
+                type = data["type"] as? String,
+                status = status,
+                timestamp = normalizeTimestamp(data["timestamp"]),
+                latitude = (data["latitude"] as? Number)?.toDouble(),
+                longitude = (data["longitude"] as? Number)?.toDouble(),
+                details = details
+        )
+    }
+
+    private fun normalizeTimestamp(value: Any?): String? =
+            when (value) {
+                is String -> value
+                is Timestamp -> value.toDate().toInstant().toString()
+                is Number -> Instant.ofEpochMilli(value.toLong()).toString()
+                is java.util.Date -> value.toInstant().toString()
+                else -> null
+        }
 }

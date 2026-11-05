@@ -74,6 +74,9 @@ class NavigationController(
     private var previousLng = initial.lng
     private var arrivalAnnounced = false
     private var fixCount = 0
+    private var lastPersistedAt = 0L
+    private var lastPersistedLat = 0.0
+    private var lastPersistedLng = 0.0
     @Volatile private var stopped = false
 
     private companion object {
@@ -434,6 +437,23 @@ class NavigationController(
                     arrived = arrived
             )
         }
+        persistIfNeeded()
+    }
+
+    /** Periodically checkpoint progress without writing the multi-hundred-point route every fix. */
+    private fun persistIfNeeded() {
+        val now = SystemClock.elapsedRealtime()
+        val moved =
+                GeoGeometry.haversineMeters(
+                        GeoPoint(lastPersistedLat, lastPersistedLng),
+                        GeoPoint(lat, lng)
+                )
+        if (lastPersistedAt != 0L && now - lastPersistedAt < 15_000L && moved < 100.0) return
+        lastPersistedAt = now
+        lastPersistedLat = lat
+        lastPersistedLng = lng
+        val snapshot = NavigationSession.snapshot()
+        scope.launch(Dispatchers.IO) { NavigationStore.save(appContext, snapshot) }
     }
 
     private fun engineProfile(profile: String): String =

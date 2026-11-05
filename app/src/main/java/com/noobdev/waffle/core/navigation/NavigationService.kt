@@ -165,7 +165,9 @@ class NavigationService : Service() {
             return START_NOT_STICKY
         }
 
-        startForegroundCompat(buildNotification(snapshot))
+        if (!startForegroundCompat(buildNotification(snapshot))) {
+            return START_NOT_STICKY
+        }
         acquireWakeLock()
         // A new NavigationSession.start() publishes a different RouteResult. If the service was
         // already running for an old trip (for example the user planned a second destination
@@ -349,9 +351,9 @@ class NavigationService : Service() {
                 .build()
     }
 
-    private fun startForegroundCompat(notification: Notification) {
-        if (foregroundStarted) return
-        try {
+    private fun startForegroundCompat(notification: Notification): Boolean {
+        if (foregroundStarted) return true
+        return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                         NOTIFICATION_ID,
@@ -362,11 +364,16 @@ class NavigationService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
             foregroundStarted = true
+            true
         } catch (security: SecurityException) {
             // Location permission can be revoked while a trip is active, or the OS can reject a
-            // location FGS started from the background. Fail closed instead of crashing the app.
+            // location FGS started from the background. Fail closed instead of crashing the app
+            // and leaving the UI believing a trip is still live.
             Log.e("NavigationService", "Location foreground service rejected", security)
+            NavigationSession.update { NavigationSnapshot() }
+            NavigationStore.clear(this)
             stopSelf()
+            false
         }
     }
 

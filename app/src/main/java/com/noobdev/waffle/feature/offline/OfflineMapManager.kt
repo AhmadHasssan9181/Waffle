@@ -209,6 +209,25 @@ object OfflineMapManager {
         }
     }
 
+    /**
+     * Re-attach to incomplete regions after a process restart and set them active again. The
+     * foreground download worker calls this before monitoring progress.
+     */
+    suspend fun resumeIncomplete(context: Context): Int {
+        refresh(context)
+        var resumed = 0
+        for ((id, region) in openRegions.toMap()) {
+            val status = statusOf(region) ?: continue
+            if (!status.isComplete) {
+                val name = parseMetadata(region).optString("name").ifBlank { id }
+                region.setDownloadState(OfflineRegion.STATE_ACTIVE)
+                attachObserver(id, name, region, status)
+                resumed++
+            }
+        }
+        return resumed
+    }
+
     fun pause(packId: String) {
         val region = openRegions[packId] ?: return
         region.setDownloadState(OfflineRegion.STATE_INACTIVE)
