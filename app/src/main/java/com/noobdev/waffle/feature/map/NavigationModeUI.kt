@@ -728,12 +728,13 @@ fun NavigationModeUI(
                 }
                 if (isInPip) {
                         Text(
-                                text = "© MapTiler © OpenStreetMap",
+                                text = "© MapTiler © OSM",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
                                 modifier =
                                         Modifier.align(Alignment.TopStart)
-                                                .padding(start = 6.dp, top = 4.dp)
+                                                .padding(start = 4.dp, top = 4.dp, end = 44.dp)
                         )
                 }
         }
