@@ -212,16 +212,24 @@ object CameraTransitionManager {
             rawLat: Double,
             rawLng: Double,
             routeCoordinates: List<Pair<Double, Double>>,
-            maxSnapDistance: Double = 50.0
+            maxSnapDistance: Double = 50.0,
+            /**
+             * Last segment the navigation had reached. Searching again from the whole route lets a
+             * loop or a nearby parallel road snap the puck to the far end of the trip, which used
+             * to trigger an instant "Arrived" announcement. Search forward from there instead,
+             * with a tiny lookback for GPS drift.
+             */
+            fromIndex: Int = 0
     ): SnapResult {
         if (routeCoordinates.size < 2) return SnapResult(rawLat, rawLng, -1, 0.0)
 
         var closestPoint = Pair(rawLat, rawLng)
         var minDistance = Double.MAX_VALUE
         var matchedIndex = -1
+        val startIndex = (fromIndex - 8).coerceIn(0, routeCoordinates.size - 2)
 
         // Find closest point on route segments
-        for (i in 0 until routeCoordinates.size - 1) {
+        for (i in startIndex until routeCoordinates.size - 1) {
             val p1 = routeCoordinates[i]
             val p2 = routeCoordinates[i + 1]
 

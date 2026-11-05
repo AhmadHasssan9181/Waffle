@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.noobdev.waffle.MainActivity
 import com.noobdev.waffle.R
 import com.noobdev.waffle.core.prefs.PreferencesManager
+import com.noobdev.waffle.data.remote.RouteResult
 import com.noobdev.waffle.data.remote.formatDistance
 import com.noobdev.waffle.data.remote.formatDuration
 import kotlinx.coroutines.CoroutineScope
@@ -80,6 +81,7 @@ class NavigationService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var controller: NavigationController? = null
+    private var controllerRoute: RouteResult? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var foregroundStarted = false
     private var floatingOverlay: FloatingNavigationOverlay? = null
@@ -129,6 +131,7 @@ class NavigationService : Service() {
             ACTION_STOP -> {
                 controller?.stop()
                 controller = null
+                controllerRoute = null
                 hideFloatingInternal()
                 NavigationSession.update { NavigationSnapshot() }
                 NavigationStore.clear(this)
@@ -164,8 +167,14 @@ class NavigationService : Service() {
 
         startForegroundCompat(buildNotification(snapshot))
         acquireWakeLock()
-        if (controller == null) {
+        // A new NavigationSession.start() publishes a different RouteResult. If the service was
+        // already running for an old trip (for example the user planned a second destination
+        // without pressing Exit), reusing the old controller would keep tracking the old route
+        // and announce the old arrival. Restart the controller for the new trip.
+        if (controller == null || controllerRoute !== snapshot.route) {
+            controller?.stop()
             controller = NavigationController(this, snapshot).also { it.start() }
+            controllerRoute = snapshot.route
         }
         return START_STICKY
     }

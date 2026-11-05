@@ -179,9 +179,12 @@ fun NavigationModeUI(
                 if (text.isEmpty() || text == lastSpokenInstruction) return@LaunchedEffect
                 lastSpokenInstruction = text
                 val spoken =
-                        if (text.contains("arrive", ignoreCase = true))
-                                "You have arrived at your destination"
-                        else text
+                        when {
+                                !text.contains("arrive", ignoreCase = true) -> text
+                                remainingDistance <= 25.0 ->
+                                        "You have arrived at your destination"
+                                else -> "Continue to your destination"
+                        }
                 tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "instruction")
         }
         LaunchedEffect(navigationNotice, voiceEnabled, ttsReady) {

@@ -85,7 +85,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 @Composable
 fun RoutePreviewCard(
         destination: GeoSearchResult?,
-        routeResult: RouteResult,
+        routeResult: RouteResult?,
         selectedProfile: String,
         walkRouteResult: RouteResult?,
         bikeRouteResult: RouteResult? = null,
@@ -120,10 +120,10 @@ fun RoutePreviewCard(
         val isWalking = selectedProfile == "foot-walking"
         val currentRoute =
                 when {
-                        isDriving -> routeResult
-                        isBiking -> bikeRouteResult ?: routeResult
-                        else -> walkRouteResult ?: routeResult
-                }
+                        isDriving -> routeResult ?: walkRouteResult ?: bikeRouteResult
+                        isBiking -> bikeRouteResult ?: routeResult ?: walkRouteResult
+                        else -> walkRouteResult ?: routeResult ?: bikeRouteResult
+                } ?: return
 
         Card(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -717,9 +717,9 @@ fun RoutePreviewCard(
                                                 )
                                                 Spacer(Modifier.width(5.dp))
                                                 Text(
-                                                        formatDuration(
-                                                                routeResult.durationSeconds
-                                                        ),
+                                                        routeResult?.let {
+                                                                formatDuration(it.durationSeconds)
+                                                        } ?: "Drive",
                                                         style =
                                                                 MaterialTheme.typography.labelMedium,
                                                         color =
@@ -776,9 +776,9 @@ fun RoutePreviewCard(
                                                 )
                                                 Spacer(Modifier.width(4.dp))
                                                 Text(
-                                                        formatDuration(
-                                                                routeResult.durationSeconds
-                                                        ),
+                                                        routeResult?.let {
+                                                                formatDuration(it.durationSeconds)
+                                                        } ?: "Moto",
                                                         style =
                                                                 MaterialTheme.typography.labelMedium,
                                                         color =

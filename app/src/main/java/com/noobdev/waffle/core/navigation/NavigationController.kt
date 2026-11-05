@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -71,7 +72,12 @@ class NavigationController(
     private var previousLat = initial.lat
     private var previousLng = initial.lng
     private var arrivalAnnounced = false
+    private var fixCount = 0
     @Volatile private var stopped = false
+
+    private companion object {
+        private const val TAG = "NavigationController"
+    }
 
     private val locationCallback =
             object : LocationCallback() {
@@ -116,7 +122,8 @@ class NavigationController(
                 CameraTransitionManager.snapToRoute(
                         location.latitude,
                         location.longitude,
-                        coords
+                        coords,
+                        fromIndex = matchedIndex.takeIf { it >= 0 } ?: 0
                 )
 
         val moved =
@@ -246,6 +253,16 @@ class NavigationController(
             showNotice("Arrived at destination")
         } else if (!arrived) {
             arrivalAnnounced = false
+        }
+
+        fixCount++
+        if (fixCount <= 5) {
+            Log.d(
+                    TAG,
+                    "fix #$fixCount raw=${location.latitude},${location.longitude} " +
+                            "snapIndex=${snap.matchedIndex} routePoints=${coords.size} " +
+                            "remaining=${remainingDistance.toInt()}m arrived=$arrived"
+            )
         }
 
         val now = SystemClock.elapsedRealtime()

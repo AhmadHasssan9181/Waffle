@@ -68,11 +68,15 @@ class NavigationVoice(context: Context) {
         val instruction = snapshot.instruction.trim()
         if (instruction.isNotEmpty() && instruction != lastInstruction) {
             lastInstruction = instruction
-            speak(
-                    if (instruction.contains("arrive", ignoreCase = true))
-                            "You have arrived at your destination"
-                    else instruction
-            )
+            val phrase =
+                    when {
+                        !instruction.contains("arrive", ignoreCase = true) -> instruction
+                        // The final step is also selected while approaching the destination.
+                        // Never say "arrived" until the route is actually finished.
+                        snapshot.arrived -> "You have arrived at your destination"
+                        else -> "Continue to your destination"
+                    }
+            speak(phrase)
         }
 
         val notice = snapshot.notice?.trim().orEmpty()

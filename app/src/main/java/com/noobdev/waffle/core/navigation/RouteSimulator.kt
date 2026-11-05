@@ -150,6 +150,11 @@ class RouteSimulator {
         simulationJob?.cancel()
         simulationJob = null
         _isSimulationRunning.value = false
+        // Do not leave hasArrived=true behind: the next trip starts with a new route and would
+        // otherwise briefly show its arrival state before the first simulation tick.
+        _hasArrived.value = false
+        _progress.value = 0f
+        segmentProgress = 0.0
     }
 
     /**

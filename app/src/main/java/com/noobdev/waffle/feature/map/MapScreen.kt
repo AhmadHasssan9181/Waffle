@@ -564,6 +564,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 navigationNotice = null
                 isRerouting = false
                 offRouteMonitor.reset()
+                // Choosing a new destination must end a previous trip. Otherwise its live
+                // NavigationSession keeps publishing and can pull the screen back into
+                // navigation while the new route preview is opening.
+                if (NavigationSession.isActive()) NavigationSession.stop(context)
+                routeSimulator.stopSimulation()
                 planTrip("driving-car")
         }
 
@@ -1729,30 +1734,65 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // Get current location
         LaunchedEffect(Unit) {
                 NavigationManager.initializeFloodZones()
+        }
 
+        // Keep the idle-map location fresh too. Route planning used to read currentLat/currentLng
+        // from a single lastLocation snapshot taken when the Map tab opened. After moving a few
+        // hundred metres the blue dot moved, but the next route still started at the old place and
+        // could snap straight to the destination ("Arrived" on the first fix). Navigation owns its
+        // own high-accuracy callback, so this one only runs outside navigation and Test Mode.
+        DisposableEffect(screenState, isSimulationMode) {
+                val idle = screenState != MapScreenState.NAVIGATING && !isSimulationMode
                 val hasPermission =
                         ContextCompat.checkSelfPermission(
                                 context,
                                 Manifest.permission.ACCESS_FINE_LOCATION
                         ) == PackageManager.PERMISSION_GRANTED
-
-                if (hasPermission) {
-                        try {
-                                val fusedLocationClient =
-                                        LocationServices.getFusedLocationProviderClient(context)
-                                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                        // While the service owns the trip, its snapped position is
-                                        // authoritative. Overwriting it with the raw last fix is what
-                                        // made the 3D car drift off the route when zooming out.
-                                        if (!NavigationSession.isActive()) {
-                                                location?.let {
-                                                        currentLat = it.latitude
-                                                        currentLng = it.longitude
-                                                        hasLocation = true
+                if (!idle || !hasPermission) {
+                        onDispose {}
+                } else {
+                        val request =
+                                LocationRequest.Builder(
+                                                Priority.PRIORITY_HIGH_ACCURACY,
+                                                2_000L
+                                        )
+                                        .setMinUpdateDistanceMeters(2f)
+                                        .build()
+                        val callback =
+                                object : LocationCallback() {
+                                        override fun onLocationResult(result: LocationResult) {
+                                                val location = result.lastLocation ?: return
+                                                if (NavigationSession.isActive()) return
+                                                currentLat = location.latitude
+                                                currentLng = location.longitude
+                                                hasLocation = true
+                                                if (location.hasBearing() &&
+                                                                location.speed > 1f
+                                                ) {
+                                                        currentBearing =
+                                                                location.bearing.toDouble()
+                                                }
+                                                if (location.hasSpeed()) {
+                                                        currentSpeedMps =
+                                                                location.speed.coerceAtLeast(0f)
                                                 }
                                         }
                                 }
+                        try {
+                                fusedLocationClient.requestLocationUpdates(
+                                        request,
+                                        callback,
+                                        null
+                                )
+                                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                        if (!NavigationSession.isActive() && location != null) {
+                                                currentLat = location.latitude
+                                                currentLng = location.longitude
+                                                hasLocation = true
+                                        }
+                                }
                         } catch (e: SecurityException) {}
+                        onDispose { fusedLocationClient.removeLocationUpdates(callback) }
                 }
         }
 
@@ -2506,6 +2546,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         SearchPurpose.DESTINATION
                                                                 searchQuery = "Dropped pin"
                                                                 screenState = MapScreenState.IDLE
+                                                                if (NavigationSession.isActive()) {
+                                                                        NavigationSession.stop(context)
+                                                                }
+                                                                routeSimulator.stopSimulation()
                                                                 planTrip(selectedProfile)
                                                                 droppedPin = null
                                                         }
@@ -2731,7 +2775,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // === ROUTE PREVIEW CARD (Bottom - shows when route calculated) ===
-        routeResult?.let { currentRouteResult ->
+        // A route can live in routeResult (car/moto), walkRouteResult or bikeRouteResult.
+        // Do not require routeResult to be non-null: walking/biking used to hide the whole card,
+        // which also hid the travel-mode choices for the next trip.
+        val previewRoute =
+                activeRouteFor(selectedProfile) ?: routeResult ?: walkRouteResult ?: bikeRouteResult
+        previewRoute?.let { currentRoute ->
                 Box(modifier = Modifier.fillMaxSize()) {
                         AnimatedVisibility(
                                 visible = screenState == MapScreenState.ROUTE_PREVIEW,
@@ -2743,7 +2792,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         ) {
                                 RoutePreviewCard(
                                         destination = selectedDestination,
-                                        routeResult = currentRouteResult,
+                                        routeResult = routeResult,
                                         selectedProfile = selectedProfile,
                                         walkRouteResult = walkRouteResult,
                                         bikeRouteResult = bikeRouteResult,
@@ -2808,8 +2857,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 navigationSessionId++
                                                 val activeRoute =
                                                         activeRouteFor(selectedProfile)
-                                                                ?: currentRouteResult
+                                                                ?: currentRoute
+                                                lastNavigationRoute = activeRoute
                                                 navigationInstructions = activeRoute.instructions
+                                                // Do not show the previous trip's 0 m / arrival
+                                                // state while waiting for the service's first fix.
+                                                remainingDistance =
+                                                        activeRoute.distanceMeters
+                                                remainingDuration =
+                                                        activeRoute.durationSeconds
+                                                distanceToNextTurn = 0.0
 
                                                 if (!isSimulationMode) {
                                                         selectedDestination?.let { destination ->
