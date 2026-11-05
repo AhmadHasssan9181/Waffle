@@ -1,8 +1,13 @@
 # Third-party notices
 
-Waffle bundles or calls the following third-party data, engines and assets. This file is a
-practical notice list, not legal advice. Keep it in sync with `app/src/main/assets` before a public
-release.
+Waffle's original application code, branding, artwork, screenshots and documentation are
+**Copyright © 2026 Ahmad Hassan. All rights reserved.** They are provided for personal,
+non-commercial use only under the [Waffle Personal Use License](LICENSE). No commercial use,
+redistribution or publication is permitted without written permission.
+
+Waffle also bundles or calls the following third-party data, engines and assets, which remain under
+their own licenses. This file is a practical notice list, not legal advice. Keep it in sync with
+`app/src/main/assets` before a public release.
 
 ## Map and routing
 

@@ -1,21 +1,87 @@
-MIT License
+WAFFLE PERSONAL USE LICENSE
+Version 1.0 — 5 November 2026
 
-Copyright (c) 2026 Ahmad Hassan
+Copyright (c) 2026 Ahmad Hassan. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license applies to the Waffle application, its source code, documentation,
+branding, artwork, screenshots and other original project files (the "Project"),
+except for third-party components and assets that carry their own licenses.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. PERSONAL, NON-COMMERCIAL USE
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You are granted a limited, revocable, non-exclusive, non-transferable license to:
+
+  a. view and study the Project;
+  b. build and run the Project for your own personal, non-commercial use on
+     devices that you own or control; and
+  c. modify the source code for your own private, personal, non-commercial use.
+
+2. COMMERCIAL USE IS NOT PERMITTED
+
+You may not use the Project, in whole or in part, for any commercial purpose.
+This includes, without limitation, using it in a business, selling it, charging
+for access to it, bundling it with a paid product or service, using it to
+provide a commercial service, or using it in advertising or promotional work
+for a business.
+
+3. NO REDISTRIBUTION OR PUBLICATION
+
+You may not redistribute, publish, upload, sublicense, sell, rent, lease, lend
+or otherwise make the Project or any modified version available to any other
+person or organization without the prior written permission of the copyright
+holder.
+
+4. PRIVATE MODIFICATIONS ONLY
+
+You may modify the Project for your own private personal use. You may not share,
+publish, distribute or otherwise make those modifications available to others.
+You must keep this license and all copyright, attribution and proprietary
+notices intact.
+
+5. BRANDING AND IDENTITY
+
+No right is granted to use the Waffle name, logo, drone marks, visual identity or
+other brand elements except for truthful, descriptive references to this
+Project. You may not imply endorsement, sponsorship, affiliation or official
+status.
+
+6. THIRD-PARTY COMPONENTS
+
+Third-party libraries, data, fonts, models and other assets remain subject to
+their own licenses and terms. Those licenses govern those components and are
+listed in ATTRIBUTIONS.md. Nothing in this license overrides a third-party
+license. If this license conflicts with a third-party license for a particular
+component, the third-party license controls for that component.
+
+7. NO WARRANTY
+
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. YOU USE THE PROJECT AT YOUR
+OWN RISK.
+
+8. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE PROJECT OR THE USE
+OR OTHER DEALINGS IN THE PROJECT.
+
+9. TERMINATION
+
+This license terminates automatically if you breach any of its terms. On
+termination, you must stop using the Project and delete all copies and modified
+versions in your possession or control.
+
+10. RESERVATION OF RIGHTS
+
+All rights not expressly granted in this license are reserved by the copyright
+holder. No other rights are granted by implication, estoppel or otherwise.
+
+11. PERMISSIONS AND CONTACT
+
+For commercial licensing, redistribution permission, or any use not covered by
+this license, contact the project owner through:
+https://github.com/AhmadHasssan9181/Waffle/issues
+
+This is a custom source-available license, not an open-source license.
