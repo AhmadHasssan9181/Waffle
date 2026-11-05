@@ -304,6 +304,22 @@ fun LocationAwareMap(
                                 e.printStackTrace()}
                         }
                         onMapReady(map)
+                        if (!NetworkState.isOnline(ctx) &&
+                                        !MapSessionState.hasLocation.value
+                        ) {
+                            MapStyleResolver.cachedOfflineRegion(null, null)?.let { region ->
+                                map.cameraPosition =
+                                        org.maplibre.android.camera.CameraPosition.Builder()
+                                                .target(
+                                                        org.maplibre.android.geometry.LatLng(
+                                                                (region.south + region.north) / 2.0,
+                                                                (region.west + region.east) / 2.0
+                                                        )
+                                                )
+                                                .zoom(11.5)
+                                                .build()
+                            }
+                        }
                     }
                 }
                 mapView = mv
