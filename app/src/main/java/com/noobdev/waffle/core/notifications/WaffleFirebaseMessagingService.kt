@@ -1,6 +1,7 @@
 package com.noobdev.waffle.core.notifications
 
 import android.util.Log
+import com.noobdev.waffle.BuildConfig
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.noobdev.waffle.data.model.DisasterAlert
@@ -14,11 +15,11 @@ class WaffleFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        Log.d("FCM", "From: ${remoteMessage.from}")
+        if (BuildConfig.DEBUG) Log.d("FCM", "From: ${remoteMessage.from}")
 
         // Check if message contains a data payload (for background processing)
         if (remoteMessage.data.isNotEmpty()) {
-            Log.d("FCM", "Message data payload: ${remoteMessage.data}")
+            if (BuildConfig.DEBUG) Log.d("FCM", "Received data payload: ${remoteMessage.data.keys}")
 
             // Parse alert from data payload
             val data = remoteMessage.data
@@ -41,7 +42,7 @@ class WaffleFirebaseMessagingService : FirebaseMessagingService() {
 
         // Check if message contains a notification payload (Firebase does this natively, but we can override or log it)
         remoteMessage.notification?.let {
-            Log.d("FCM", "Message Notification Body: ${it.body}")
+            if (BuildConfig.DEBUG) Log.d("FCM", "Received notification payload")
             // We can also trigger from notification directly if we want
             val alert = DisasterAlert(
                 title = it.title,
@@ -53,8 +54,8 @@ class WaffleFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        Log.d("FCM", "Refreshed token: $token")
-        // If you want to send messages to this application instance,
-        // send the token to your Python app server.
+        // Never log the registration token. It is a bearer-like identifier for push delivery.
+        if (BuildConfig.DEBUG) Log.d("FCM", "Registration token refreshed")
+        // Send the token to the backend here if per-device targeting is added later.
     }
 }

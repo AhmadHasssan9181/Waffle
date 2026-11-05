@@ -13,8 +13,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.noobdev.waffle.MainActivity
+import com.noobdev.waffle.R
 import com.noobdev.waffle.data.model.DisasterAlert
-import android.R
 
 class NotificationHelper(private val context: Context) {
 
@@ -66,7 +66,7 @@ class NotificationHelper(private val context: Context) {
         val message = "A new ${alert.type ?: "alert"} has been reported near $location."
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_dialog_alert) // using android's default alert icon
+            .setSmallIcon(R.drawable.ic_stat_alert)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

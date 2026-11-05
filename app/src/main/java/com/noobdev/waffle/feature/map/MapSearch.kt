@@ -46,6 +46,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.feature.flood.loadSectorData
 import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.data.remote.*
@@ -192,7 +193,9 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                 withContext(kotlinx.coroutines.Dispatchers.Default) {
                                         OfflineGeocoder.search(query)
                                 }
-                        Log.d("MapSearch", "query='$query' offline=${offline.size}")
+                        if (BuildConfig.DEBUG) {
+                                Log.d("MapSearch", "query='$query' offline=${offline.size}")
+                        }
                         // Show offline matches immediately; online results are merged in
                         // when they arrive so a slow OpenCage/Nominatim call does not hide
                         // perfectly good local results.
@@ -202,7 +205,7 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                         if (onlineAvailable) {
                                 onlineAttempted = true
                                 val online =
-                                        withTimeoutOrNull(8_000) {
+                                        withTimeoutOrNull(12_000) {
                                                 searchLocationsOnline(query)
                                         } ?: emptyList()
                                 suggestions =
@@ -212,7 +215,9 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                                         "%.4f".format(result.lng)
                                         }
                         }
-                        Log.d("MapSearch", "suggestions=${suggestions.size}")
+                        if (BuildConfig.DEBUG) {
+                                Log.d("MapSearch", "suggestions=${suggestions.size}")
+                        }
                         isLoading = false
                 } else {
                         suggestions = emptyList()

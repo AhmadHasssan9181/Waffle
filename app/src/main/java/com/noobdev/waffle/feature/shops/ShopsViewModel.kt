@@ -61,6 +61,8 @@ class ShopsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(ShopsUiState())
     val uiState: StateFlow<ShopsUiState> = _uiState.asStateFlow()
+    /** Newer radius/location requests must not be replaced by an older Overpass response. */
+    private var fetchGeneration = 0
 
     /** Called by the screen once a fix is available. */
     fun load(lat: Double, lon: Double, label: String? = null) {
@@ -109,6 +111,7 @@ class ShopsViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         val lat = state.centerLat ?: return
         val lon = state.centerLon ?: return
+        val generation = ++fetchGeneration
 
         _uiState.update {
             it.copy(
@@ -127,12 +130,14 @@ class ShopsViewModel(application: Application) : AndroidViewModel(application) {
                             forceRefresh = forceRefresh
                     )
 
+            if (generation != fetchGeneration) return@launch
+
             result
                     .onSuccess { shops ->
                         _uiState.update {
                             it.copy(shops = shops, loading = false, refreshing = false)
                         }
-                        loadPhotos(lat, lon)
+                        loadPhotos(lat, lon, generation)
                     }
                     .onFailure { error ->
                         _uiState.update {
@@ -149,16 +154,17 @@ class ShopsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun loadPhotos(lat: Double, lon: Double) {
+    private fun loadPhotos(lat: Double, lon: Double, generation: Int) {
         viewModelScope.launch {
             _uiState.update { it.copy(photosLoading = true) }
             val current = _uiState.value.shops
             val withPhotos = photoRepository.attachPhotos(current, lat, lon)
-            // Ignore the result if the user moved on to another area meanwhile.
-            if (_uiState.value.centerLat == lat && _uiState.value.centerLon == lon) {
+            // Ignore the result if the user changed radius/area while Commons was queried.
+            if (generation == fetchGeneration &&
+                            _uiState.value.centerLat == lat &&
+                            _uiState.value.centerLon == lon
+            ) {
                 _uiState.update { it.copy(shops = withPhotos, photosLoading = false) }
-            } else {
-                _uiState.update { it.copy(photosLoading = false) }
             }
         }
     }

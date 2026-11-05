@@ -28,4 +28,22 @@ class CameraTransitionManagerSnapTest {
         assertEquals(33.0050, result.snappedLat, 0.000001)
         assertEquals(73.0020, result.snappedLng, 0.000001)
     }
+
+    @Test
+    fun `snapping starts from the current route segment`() {
+        val longRoute =
+                (0..12).map { index -> 33.0 + index * 0.001 to 73.0 }
+        // The first segment is close, but navigation is already at segment 10. The old
+        // whole-route search could jump backward and confuse arrival/off-route logic.
+        val result =
+                CameraTransitionManager.snapToRoute(
+                        33.0000,
+                        73.0,
+                        longRoute,
+                        maxSnapDistance = 5.0,
+                        fromIndex = 10
+                )
+
+        assertEquals(-1, result.matchedIndex)
+    }
 }

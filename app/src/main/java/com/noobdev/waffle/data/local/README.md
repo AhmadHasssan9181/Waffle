@@ -9,7 +9,7 @@ Room database `waffle_database` (version 2).
 | `AlertDao.kt` | Alert queries and the observable flow used by Home and Alerts. |
 | `AlertRepository.kt` | Higher-level alert reads/writes. |
 | `Converters.kt` | Room type converters (maps, enums). |
-| `WaffleApi.kt`, `WaffleClient.kt`, `WaffleModels.kt` | Legacy Retrofit endpoint, kept for reference. |
+| — | The old private-LAN HTTP Retrofit client was removed; all network clients are HTTPS. |
 
 **Do not add shop tables here.** Shops use their own database (`feature/shops/data/ShopDatabase`,
 `waffle_shops.db`) so the alert schema never needs a migration for shop changes.

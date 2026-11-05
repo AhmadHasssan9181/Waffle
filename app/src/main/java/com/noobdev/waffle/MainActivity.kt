@@ -17,7 +17,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,8 +52,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private val locationPermission = Manifest.permission.ACCESS_FINE_LOCATION
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private val backgroundLocationPermission = Manifest.permission.ACCESS_BACKGROUND_LOCATION
 
     private var pendingPip = false
     private var leavingForFloating = false
@@ -232,25 +229,15 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun LocationPermissionWrapper(content: @Composable () -> Unit) {
         var hasFineLocation by remember { mutableStateOf(false) }
-        var hasBackgroundLocation by remember { mutableStateOf(false) }
         var permissionChecked by remember { mutableStateOf(false) }
 
-        val locationPermissions =
-                mutableListOf(locationPermission)
-                        .apply {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                                    add(backgroundLocationPermission)
-                        }
-                        .toTypedArray()
+        val locationPermissions = arrayOf(locationPermission)
 
         val launcher =
                 rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
                     hasFineLocation = permissions[locationPermission] == true
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        hasBackgroundLocation = permissions[backgroundLocationPermission] == true
-                    }
                     permissionChecked = true
                 }
 
@@ -259,20 +246,12 @@ class MainActivity : ComponentActivity() {
             hasFineLocation =
                     ContextCompat.checkSelfPermission(this@MainActivity, locationPermission) ==
                             PackageManager.PERMISSION_GRANTED
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                hasBackgroundLocation =
-                        ContextCompat.checkSelfPermission(
-                                this@MainActivity,
-                                backgroundLocationPermission
-                        ) == PackageManager.PERMISSION_GRANTED
-            }
             permissionChecked = true
         }
 
-        // Background location is requested alongside the foreground permission, but the app is
-        // fully usable without it (alerts still sync while the app is open). Blocking the whole
-        // app on "Allow all the time" is hostile, so only the foreground grant is mandatory.
+        // Navigation uses a foreground location service, which only needs the while-in-use
+        // permission. Requesting "all the time" here was unnecessary and triggered Play policy
+        // warnings.
         val hasRequiredPermissions = hasFineLocation
 
         if (!permissionChecked) {

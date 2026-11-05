@@ -31,7 +31,14 @@ object NavigationStore {
                             .put("destination", destination.toJson())
                             .put("stops", JSONArray(snapshot.stops.map { it.toJson() }))
                             .put("route", route.toJson())
-            file(context).writeText(json.toString())
+            // Write through a temp file so a process death mid-save cannot corrupt the trip.
+            val target = file(context)
+            val temp = File(target.parentFile, "${target.name}.tmp")
+            temp.writeText(json.toString())
+            if (!temp.renameTo(target)) {
+                target.writeText(json.toString())
+                temp.delete()
+            }
         }
     }
 

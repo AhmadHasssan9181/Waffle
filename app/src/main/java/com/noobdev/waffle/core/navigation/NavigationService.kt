@@ -351,25 +351,28 @@ class NavigationService : Service() {
 
     private fun startForegroundCompat(notification: Notification) {
         if (foregroundStarted) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            foregroundStarted = true
+        } catch (security: SecurityException) {
+            // Location permission can be revoked while a trip is active, or the OS can reject a
+            // location FGS started from the background. Fail closed instead of crashing the app.
+            Log.e("NavigationService", "Location foreground service rejected", security)
+            stopSelf()
         }
-        foregroundStarted = true
     }
 
     private fun stopForegroundCompat() {
         if (!foregroundStarted) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION") stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
         foregroundStarted = false
     }
 
@@ -379,7 +382,9 @@ class NavigationService : Service() {
         wakeLock =
                 power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_TAG).apply {
                     setReferenceCounted(false)
-                    acquire()
+                    // Navigation can run for hours, but a forgotten wake lock must not survive
+                    // forever. The service releases it on stop/destroy; this is a safety net.
+                    acquire(12L * 60L * 60L * 1000L)
                 }
     }
 

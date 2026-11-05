@@ -72,6 +72,7 @@ import com.noobdev.waffle.design.theme.WaffleTextStyles
 import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.feature.map.MapFocus
 import com.noobdev.waffle.feature.map.MapTarget
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -100,7 +101,7 @@ fun RescueScreen(navController: NavController) {
 
     val coordinates =
             if (currentLat != null && currentLon != null)
-                    String.format("%.4f, %.4f", currentLat, currentLon)
+                    String.format(Locale.US, "%.4f, %.4f", currentLat, currentLon)
             else "Location unavailable"
 
     val message =
@@ -108,7 +109,7 @@ fun RescueScreen(navController: NavController) {
                 append("SOS — I need help. ")
                 if (currentLat != null && currentLon != null) {
                     append("My location: ")
-                    append(String.format("%.4f, %.4f", currentLat, currentLon))
+                    append(String.format(Locale.US, "%.4f, %.4f", currentLat, currentLon))
                     append(" · https://maps.google.com/?q=")
                     append(currentLat)
                     append(",")

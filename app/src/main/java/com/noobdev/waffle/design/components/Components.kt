@@ -694,6 +694,6 @@ fun InfoRow(
 fun formatDistanceKm(km: Double): String =
         when {
             km < 1.0 -> "${(km * 1000).roundToInt()} m"
-            km < 9.95 -> String.format("%.1f km", km)
+            km < 9.95 -> String.format(java.util.Locale.US, "%.1f km", km)
             else -> "${km.roundToInt()} km"
         }

@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.noobdev.waffle.BuildConfig
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -256,7 +257,7 @@ class NavigationController(
         }
 
         fixCount++
-        if (fixCount <= 5) {
+        if (BuildConfig.DEBUG && fixCount <= 5) {
             Log.d(
                     TAG,
                     "fix #$fixCount raw=${location.latitude},${location.longitude} " +

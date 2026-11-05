@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.1.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" /></a>
   <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Jetpack%20Compose-1.7%2B%20Material%203-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" /></a>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-API%2026%2B%20(Oreo%2B)-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" /></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-API%2024%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" /></a>
   <a href="https://maplibre.org"><img src="https://img.shields.io/badge/MapLibre-Native%20Vector%20GL-00D0FF?style=for-the-badge&logo=maplibre&logoColor=white" alt="MapLibre" /></a>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
@@ -50,7 +50,9 @@
 
 **W.A.F.F.L.E.** (*Wireless Autonomous Flying Fleet for Life Emergencies*) is a ruggedized, offline-first Android application designed to bridge heavy autonomous flight logic and field ground operators in high-consequence disaster zones.
 
-When natural catastrophes (floods, earthquakes, wildfires) strike, cellular towers and Wi-Fi networks are consistently the first municipal systems to fail. W.A.F.F.L.E. transforms a commodity Android device into an onboard companion computer and ground control station (GCS), coupling local vector map rendering, embedded graph routing, obstacle avoidance logic, and multimodal AI telemetry without requiring an active internet connection.
+When natural catastrophes (floods, earthquakes, wildfires) strike, cellular towers and Wi-Fi networks are consistently the first municipal systems to fail. W.A.F.F.L.E. transforms a commodity Android device into a field navigation and emergency-awareness console, coupling local vector map rendering, embedded graph routing, hazard avoidance, alerts, and optional online services without requiring an active internet connection.
+
+> **Preview status:** the map, offline/online routing, alerts, search, navigation, Test Mode, floating map and vehicle UI are implemented. The PX4/MAVLink/DJI autopilot bridge and autonomous-flight claims below are roadmap items, not part of the current APK. See [PRIVACY.md](PRIVACY.md) and [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 
 ```mermaid
 flowchart LR
@@ -158,7 +160,7 @@ Waffle/
 
 ### Prerequisites
 - **JDK:** OpenJDK 17 or 21
-- **Android SDK:** Compile SDK 35, Min SDK 26 (Android 8.0+)
+- **Android SDK:** Compile SDK 36, Min SDK 24 (Android 7.0+)
 - **Build Tool:** Gradle 8.13 wrapper (`./gradlew`)
 
 ```bash

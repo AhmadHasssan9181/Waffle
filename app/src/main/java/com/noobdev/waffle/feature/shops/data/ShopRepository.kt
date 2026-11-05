@@ -59,10 +59,21 @@ class ShopRepository(context: Context) {
                 fetched
                         .map { entities ->
                             val now = System.currentTimeMillis()
-                            val stamped = entities.map { it.copy(fetchedAt = now) }
+                            val cachedById = cached.associateBy { it.id }
+                            // Upsert replaces the whole row, so carry the downloaded photo fields
+                            // forward explicitly; re-reading after the upsert is too late.
+                            val stamped =
+                                    entities.map { entity ->
+                                        val previous = cachedById[entity.id]
+                                        entity.copy(
+                                                fetchedAt = now,
+                                                photoUrl = entity.photoUrl ?: previous?.photoUrl,
+                                                photoCredit =
+                                                        entity.photoCredit ?: previous?.photoCredit
+                                        )
+                                    }
                             runCatching { dao.upsertAll(stamped) }
                             runCatching { dao.deleteOlderThan(now - RETAIN_MS) }
-                            // Re-read so cached photo URLs survive the refresh.
                             val merged =
                                     runCatching {
                                                 dao.inBox(

@@ -6,6 +6,7 @@ import java.net.URL
 import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 
 /**
@@ -15,7 +16,9 @@ import org.json.JSONArray
  */
 suspend fun searchLocationsOnline(query: String): List<GeoSearchResult> {
     if (query.isBlank()) return emptyList()
-    val openCage = searchLocations(query)
+    // OpenCage can take its full 30 s timeout when the network is flaky. Give it a short
+    // chance, then let the keyless Nominatim fallback run inside the caller's search window.
+    val openCage = withTimeoutOrNull(3_000) { searchLocations(query) }.orEmpty()
     if (openCage.isNotEmpty()) return openCage
     return searchNominatim(query)
 }

@@ -14,7 +14,6 @@
 
 # Gson / Retrofit payloads
 -keep class com.noobdev.waffle.data.local.** { *; }
--keep class com.noobdev.waffle.data.local.MapTypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }
 -keepclassmembers class * extends com.google.gson.reflect.TypeToken { *; }
 -keep class com.noobdev.waffle.data.remote.** { *; }

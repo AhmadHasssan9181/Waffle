@@ -2,6 +2,7 @@ package com.noobdev.waffle.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.noobdev.waffle.BuildConfig
 import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -122,7 +123,9 @@ object OfflineGeocoder {
         val queryNormalized = normalize(trimmed)
         val tokens = queryNormalized.split(' ').filter { it.length >= 2 }
         if (tokens.isEmpty()) return emptyList()
-        Log.d(TAG, "search='$queryNormalized' tokens=$tokens entries=${entries.size}")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "search='$queryNormalized' tokens=$tokens entries=${entries.size}")
+        }
         val asksForRoad =
                 tokens.any {
                     it == "road" || it == "street" || it == "rd" || it == "st" || it == "avenue"
@@ -161,7 +164,9 @@ object OfflineGeocoder {
                         }
                         .take(limit)
                         .map { it.second }
-        Log.d(TAG, "search='$queryNormalized' scored=${scored.size} returned=${result.size}")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "search='$queryNormalized' scored=${scored.size} returned=${result.size}")
+        }
         return result
     }
 

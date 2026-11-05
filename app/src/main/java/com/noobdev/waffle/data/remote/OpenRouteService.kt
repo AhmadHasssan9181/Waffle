@@ -131,7 +131,12 @@ interface OpenRouteServiceApi {
 
 object ORSRetrofitInstance {
         private val loggingInterceptor =
-                HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
+                HttpLoggingInterceptor().apply {
+                    level =
+                            if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                            else HttpLoggingInterceptor.Level.NONE
+                    redactHeader("Authorization")
+                }
 
         private val client =
                 OkHttpClient.Builder()
@@ -170,16 +175,13 @@ suspend fun getRoute(
 ): RouteResult {
         return withContext(Dispatchers.IO) {
                 try {
-                        Log.d(
-                                "ORS",
-                                "Getting route from ($startLat,$startLng) to ($endLat,$endLng)"
-                        )
+                        if (BuildConfig.DEBUG) {
+                                Log.d("ORS", "Getting an online route")
+                        }
 
                         // Format: "lng,lat" for start and end
                         val start = "$startLng,$startLat"
                         val end = "$endLng,$endLat"
-
-                        Log.d("ORS", "Start: $start, End: $end")
 
                         val response =
                                 ORSRetrofitInstance.api.getDirections(

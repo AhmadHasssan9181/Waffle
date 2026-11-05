@@ -80,7 +80,12 @@ data class Shop(
         get() =
                 when {
                     distanceMeters < 1000 -> "$distanceMeters m"
-                    else -> String.format("%.1f km", distanceMeters / 1000f)
+                    else ->
+                            String.format(
+                                    java.util.Locale.US,
+                                    "%.1f km",
+                                    distanceMeters / 1000f
+                            )
                 }
 
     /** OSM's opening_hours is a full grammar; we only special-case the one unambiguous value. */

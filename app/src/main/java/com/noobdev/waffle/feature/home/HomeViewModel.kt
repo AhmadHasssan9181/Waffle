@@ -100,6 +100,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         _uiState.update { it.copy(greeting = greetingForHour()) }
         observeAlerts()
+        // Keep the last known place visible while offline instead of showing "Locating…"
+        // forever just because the screen was reopened without a fresh fix.
+        viewModelScope.launch {
+            preferencesManager.lastLocationName.collect { name ->
+                if (name.isNotBlank() && name != "Unknown Location") {
+                    _uiState.update { it.copy(locationName = name) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            preferencesManager.userLocation.collect { (lat, lng) ->
+                if (lat != null && lng != null && _uiState.value.latitude == null) {
+                    _uiState.update { it.copy(latitude = lat, longitude = lng) }
+                }
+            }
+        }
         EmergencySyncScheduler.syncNow(application)
     }
 
@@ -116,7 +132,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** Called once a fix is available. Safe to call repeatedly. */
     fun updateLocation(lat: Double, lng: Double) {
         val state = _uiState.value
-        if (state.latitude == lat && state.longitude == lng) return
+        // Cached coordinates may already be populated while the name/weather are still empty.
+        if (state.latitude == lat && state.longitude == lng && state.weatherLoaded) return
         _uiState.update { it.copy(latitude = lat, longitude = lng) }
 
         viewModelScope.launch {
@@ -136,8 +153,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { fetchWeather(lat, lng) }
                     .getOrNull()
                     ?.let { weather ->
-                        val temp = weather.hourly.temperature.firstOrNull() ?: 0f
-                        val rain = weather.hourly.precipitation.firstOrNull() ?: 0f
+                        // The hourly series starts at midnight; use the current block for the
+                        // temperature the user is actually standing in.
+                        val temp =
+                                weather.current?.temperature
+                                        ?: weather.hourly.temperature.firstOrNull()
+                                        ?: 0f
+                        val rain =
+                                weather.current?.precipitation
+                                        ?: weather.hourly.precipitation.firstOrNull()
+                                        ?: 0f
                         _uiState.update {
                             it.copy(
                                     temperature = "${temp.toInt()}°",

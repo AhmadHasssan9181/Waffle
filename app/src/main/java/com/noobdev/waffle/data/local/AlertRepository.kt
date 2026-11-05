@@ -50,7 +50,13 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
             val entities = snapshot.documents.mapNotNull { doc ->
                 try {
                     val alert = doc.toObject(DisasterAlert::class.java)
-                    if (alert?.title?.contains("[OSINT AI ERROR]") == true) null else alert?.toEntity()
+                    if (alert?.title?.contains("[OSINT AI ERROR]") == true) {
+                        null
+                    } else {
+                        // Firestore documents commonly omit the id field; use the document id
+                        // so the local primary key is never null and removals can be matched.
+                        alert?.copy(id = alert.id ?: doc.id)?.toEntity()
+                    }
                 } catch (e: Exception) {
                     null
                 }
@@ -85,14 +91,15 @@ class AlertRepository(private val alertDao: AlertDao, private val context: andro
                         try {
                             val alert = doc.toObject(DisasterAlert::class.java)
                             if (alert?.title?.contains("[OSINT AI ERROR]") == true) continue
-                            val entity = alert?.toEntity()
+                            val normalized = alert?.copy(id = alert.id ?: doc.id) ?: continue
+                            val entity = normalized.toEntity()
 
                             when (change.type) {
                                 DocumentChange.Type.ADDED -> {
                                     if (entity != null) entitiesToInsert.add(entity)
                                     // Trigger notification for ALL alerts if it's not the initial load of 50 items
                                     if (!isFirstLoad) {
-                                        notificationHelper.showDisasterAlertNotification(alert)
+                                        notificationHelper.showDisasterAlertNotification(normalized)
                                     }
                                 }
                                 DocumentChange.Type.MODIFIED -> {

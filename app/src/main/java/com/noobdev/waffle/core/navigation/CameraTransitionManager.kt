@@ -57,8 +57,6 @@ object CameraTransitionManager {
                     0.0 // Default north if no waypoint
                 }
 
-        Log.d(TAG, "Starting swoop transition: pos=$currentPosition, bearing=$bearing")
-
         val cameraPosition =
                 CameraPosition.Builder()
                         .target(currentPosition)

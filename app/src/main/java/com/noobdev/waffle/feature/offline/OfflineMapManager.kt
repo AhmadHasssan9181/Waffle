@@ -126,13 +126,30 @@ object OfflineMapManager {
     ): Result<Unit> {
         val manager = OfflineManager.getInstance(context.applicationContext)
 
-        if (openRegions.containsKey(target.id) || _installed.value.any { it.id == target.id }) {
+        val installed = _installed.value.firstOrNull { it.id == target.id }
+        if (installed?.complete == true) {
             _downloads.update {
                 it + (target.id to OfflineDownloadStatus(
                         packId = target.id,
                         name = target.displayName,
                         state = OfflineDownloadState.COMPLETE,
                         progress = 1f
+                ))
+            }
+            return Result.success(Unit)
+        }
+
+        // A paused/partial region is already on disk. Resume it instead of reporting it as
+        // complete just because it appears in the open-region map.
+        val open = openRegions[target.id]
+        if (open != null) {
+            open.setDownloadState(OfflineRegion.STATE_ACTIVE)
+            attachObserver(target.id, target.displayName, open, null)
+            _downloads.update {
+                it + (target.id to OfflineDownloadStatus(
+                        packId = target.id,
+                        name = target.displayName,
+                        state = OfflineDownloadState.DOWNLOADING
                 ))
             }
             return Result.success(Unit)

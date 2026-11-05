@@ -33,10 +33,17 @@ data class HourlyWeather(
 )
 
 @Serializable
+data class CurrentWeather(
+    @SerialName("temperature_2m") val temperature: Float? = null,
+    val precipitation: Float? = null
+)
+
+@Serializable
 data class WeatherResponse(
     val latitude: Double,
     val longitude: Double,
-    val hourly: HourlyWeather
+    val hourly: HourlyWeather,
+    val current: CurrentWeather? = null
 )
 
 
@@ -45,7 +52,9 @@ interface OpenMetroApiService {
     suspend fun getHourlyWeather(
         @Query("latitude") latitude: Double,
         @Query("longitude") longitude: Double,
-        @Query("hourly") hourly: String = "temperature_2m,precipitation"
+        @Query("hourly") hourly: String = "temperature_2m,precipitation",
+        @Query("current") current: String = "temperature_2m,precipitation",
+        @Query("timezone") timezone: String = "auto"
     ): WeatherResponse
 }
 
@@ -58,7 +67,10 @@ object OpenMetroRetrofitInstance {
 
     private val client: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor()
-        logging.setLevel(HttpLoggingInterceptor.Level.BODY)
+        logging.setLevel(
+            if (com.noobdev.waffle.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+            else HttpLoggingInterceptor.Level.NONE
+        )
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .build()
