@@ -142,7 +142,9 @@ class NavigationService : Service() {
             ACTION_SHOW_FLOATING -> {
                 val active = NavigationSession.snapshot().takeIf { it.active }
                 if (active != null) {
-                    startForegroundCompat(buildNotification(active))
+                    if (!startForegroundCompat(buildNotification(active))) {
+                        return START_NOT_STICKY
+                    }
                     showFloatingInternal()
                 } else {
                     stopSelf()

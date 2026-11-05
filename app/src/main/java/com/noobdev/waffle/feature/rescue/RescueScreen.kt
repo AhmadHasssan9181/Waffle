@@ -70,6 +70,7 @@ import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.feature.map.MapFocus
 import com.noobdev.waffle.feature.map.MapTarget
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * SOS. Deliberately honest: Waffle has no dispatch backend, so this screen does not pretend to
@@ -84,10 +85,15 @@ fun RescueScreen(navController: NavController) {
     var note by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val fix = currentOrLastLocation(context)
-        if (fix != null) {
-            lat = fix.first
-            lon = fix.second
+        // Keep the SOS coordinates fresh while this screen is open; the SMS body is built from
+        // the latest fix at send time, not a one-shot value from when the tab opened.
+        while (true) {
+            val fix = currentOrLastLocation(context)
+            if (fix != null) {
+                lat = fix.first
+                lon = fix.second
+            }
+            delay(30_000)
         }
     }
 

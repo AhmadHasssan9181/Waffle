@@ -279,8 +279,9 @@ class NavigationController(
         val passed = passedStops(activeRoute, snap.matchedIndex)
         if (passed.isNotEmpty()) {
             stops = stops - passed.toSet()
+            // Force the end-of-fix checkpoint to include the updated stop list.
+            lastPersistedAt = 0L
             showNotice("Stop reached · continuing")
-            NavigationStore.save(appContext, NavigationSession.snapshot())
         }
 
         maybeRerouteForHazard(activeRoute, snap, location.latitude, location.longitude)
@@ -325,11 +326,12 @@ class NavigationController(
                 arrivalAnnounced = false
                 remainingDistance = plan.result.distanceMeters
                 remainingDuration = plan.result.durationSeconds
+                // Force the next published snapshot (new route) to be checkpointed.
+                lastPersistedAt = 0L
                 showNotice(
                         if (wrongWay) "Wrong way · turn around"
                         else "New route · ${formatDistance(plan.result.distanceMeters)}"
                 )
-                NavigationStore.save(appContext, NavigationSession.snapshot())
             } else {
                 showNotice(
                         if (wrongWay) "Wrong way · no new route"

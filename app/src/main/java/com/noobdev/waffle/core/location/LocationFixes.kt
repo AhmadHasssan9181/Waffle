@@ -8,6 +8,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * One fresh-then-cached location helper for lightweight screens (Home, Rescue).
@@ -21,32 +22,34 @@ suspend fun currentOrLastLocation(context: Context): Pair<Double, Double>? {
                     PackageManager.PERMISSION_GRANTED
     if (!granted) return null
 
-    return suspendCancellableCoroutine { continuation ->
-        val client = LocationServices.getFusedLocationProviderClient(context)
-        var resolved = false
-        fun finish(location: android.location.Location?) {
-            if (resolved || !continuation.isActive) return
-            resolved = true
-            continuation.resume(location?.let { it.latitude to it.longitude })
-        }
-        try {
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { location ->
-                        if (location != null) {
-                            finish(location)
-                        } else {
+    return withTimeoutOrNull(8_000) {
+        suspendCancellableCoroutine { continuation ->
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            var resolved = false
+            fun finish(location: android.location.Location?) {
+                if (resolved || !continuation.isActive) return
+                resolved = true
+                continuation.resume(location?.let { it.latitude to it.longitude })
+            }
+            try {
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                        .addOnSuccessListener { location ->
+                            if (location != null) {
+                                finish(location)
+                            } else {
+                                client.lastLocation
+                                        .addOnSuccessListener { finish(it) }
+                                        .addOnFailureListener { finish(null) }
+                            }
+                        }
+                        .addOnFailureListener {
                             client.lastLocation
                                     .addOnSuccessListener { finish(it) }
                                     .addOnFailureListener { finish(null) }
                         }
-                    }
-                    .addOnFailureListener {
-                        client.lastLocation
-                                .addOnSuccessListener { finish(it) }
-                                .addOnFailureListener { finish(null) }
-                    }
-        } catch (security: SecurityException) {
-            finish(null)
+            } catch (security: SecurityException) {
+                finish(null)
+            }
         }
     }
 }

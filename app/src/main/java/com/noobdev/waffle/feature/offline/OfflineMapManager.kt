@@ -69,7 +69,7 @@ object OfflineMapManager {
     private val _installed = MutableStateFlow<List<InstalledOfflineRegion>>(emptyList())
     val installed: StateFlow<List<InstalledOfflineRegion>> = _installed.asStateFlow()
 
-    private val openRegions = mutableMapOf<String, OfflineRegion>()
+    private val openRegions = java.util.concurrent.ConcurrentHashMap<String, OfflineRegion>()
 
     fun installedRegionFor(latitude: Double, longitude: Double): InstalledOfflineRegion? =
             _installed.value.firstOrNull { it.complete && it.contains(latitude, longitude) }

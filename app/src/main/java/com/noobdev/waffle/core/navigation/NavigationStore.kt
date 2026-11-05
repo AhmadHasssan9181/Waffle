@@ -18,6 +18,7 @@ object NavigationStore {
     private const val FILE_NAME = "navigation_session.json"
     private const val MAX_AGE_MS = 24 * 60 * 60 * 1000L
 
+    @Synchronized
     fun save(context: Context, snapshot: NavigationSnapshot) {
         val route = snapshot.route ?: return
         val destination = snapshot.destination ?: return
@@ -52,6 +53,7 @@ object NavigationStore {
         }
     }
 
+    @Synchronized
     fun load(context: Context): NavigationSnapshot? =
             runCatching {
                 val file = file(context)
@@ -92,6 +94,7 @@ object NavigationStore {
                 )
             }.getOrNull()
 
+    @Synchronized
     fun clear(context: Context) {
         runCatching { file(context).delete() }
     }
