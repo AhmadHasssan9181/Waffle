@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="100%">
+  <defs>
+    <radialGradient id="tm-bg" cx="50%" cy="35%" r="85%">
+      <stop offset="0%" stop-color="#FFFDF9"/>
+      <stop offset="55%" stop-color="#FAF4E8"/>
+      <stop offset="100%" stop-color="#F2E6CE"/>
+    </radialGradient>
+    <pattern id="tm-dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.4" fill="#78350F" opacity="0.08"/>
+    </pattern>
+    <filter id="tm-shadow" x="-5%" y="-5%" width="112%" height="116%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .title { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 800; }
+      .sans { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="420" rx="16" fill="url(#tm-bg)"/>
+  <rect width="1200" height="420" rx="16" fill="url(#tm-dots)"/>
+
+  <!-- Header -->
+  <g transform="translate(44, 34)">
+    <rect x="0" y="0" width="166" height="26" rx="6" fill="#F59E0B" fill-opacity="0.18" stroke="#B45309" stroke-width="1.6"/>
+    <circle cx="14" cy="13" r="4" fill="#D97706"/>
+    <text x="26" y="17" class="mono" font-size="11" letter-spacing="1.2" fill="#92400E">FIG 02 // TELEMETRY</text>
+    <text x="184" y="18" class="title" font-size="19" fill="#0F172A">Multi-Modal 3D Vehicle Profiles &amp; Route Simulator</text>
+    <text x="1112" y="17" text-anchor="end" class="mono" font-size="11" fill="#78350F" opacity="0.8">4 PROFILES · SIM ENGINE</text>
+  </g>
+
+  <!-- 4 Vehicle Mode Cards (Left 2x2 Grid) -->
+  <!-- 1: CAR -->
+  <g transform="translate(44, 82)" filter="url(#tm-shadow)">
+    <rect width="330" height="142" rx="12" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.2"/>
+    <rect x="16" y="16" width="52" height="52" rx="12" fill="#FEF3C7" stroke="#0F172A" stroke-width="2"/>
+    <!-- Vector Car Icon -->
+    <g transform="translate(26, 28)" stroke="#0F172A" stroke-width="2.2" fill="none" stroke-linejoin="round">
+      <path d="M4 16 L8 6 L24 6 L28 16 Z" fill="#F59E0B"/>
+      <rect x="2" y="15" width="28" height="9" rx="3" fill="#EA580C"/>
+      <circle cx="8" cy="24" r="3.5" fill="#0F172A"/>
+      <circle cx="24" cy="24" r="3.5" fill="#0F172A"/>
+    </g>
+    <text x="82" y="36" class="title" font-size="16" fill="#0F172A">Car / Ground Vehicle</text>
+    <text x="82" y="56" class="mono" font-size="11" fill="#B45309">PROFILE: CAR · 3D CHASSIS + LIGHTS</text>
+    <text x="16" y="92" class="sans" font-size="12" fill="#334155">Highway &amp; arterial priority, brake lamps,</text>
+    <text x="16" y="110" class="sans" font-size="12" fill="#334155">turn indicators, and lane-level guidance.</text>
+    <rect x="16" y="118" width="94" height="14" rx="4" fill="#F1F5F9"/>
+    <text x="63" y="128" text-anchor="middle" class="mono" font-size="9" fill="#0F172A">TURN:LANES</text>
+  </g>
+
+  <!-- 2: MOTORCYCLE -->
+  <g transform="translate(392, 82)" filter="url(#tm-shadow)">
+    <rect width="330" height="142" rx="12" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.2"/>
+    <rect x="16" y="16" width="52" height="52" rx="12" fill="#E0F2FE" stroke="#0F172A" stroke-width="2"/>
+    <!-- Vector Moto Icon -->
+    <g transform="translate(25, 27)" stroke="#0F172A" stroke-width="2.2" fill="none" stroke-linecap="round">
+      <circle cx="7" cy="22" r="5" fill="#38BDF8"/>
+      <circle cx="27" cy="22" r="5" fill="#38BDF8"/>
+      <path d="M7 22 L15 11 L23 11 L27 22" stroke="#0F172A"/>
+      <path d="M12 15 L22 15 L19 21 L11 21 Z" fill="#F59E0B"/>
+      <path d="M21 7 L25 11"/>
+    </g>
+    <text x="82" y="36" class="title" font-size="16" fill="#0F172A">Motorcycle</text>
+    <text x="82" y="56" class="mono" font-size="11" fill="#0284C7">PROFILE: MOTO · AGILE ETA MODEL</text>
+    <text x="16" y="92" class="sans" font-size="12" fill="#334155">Tuned urban corridor speeds, 3D rider</text>
+    <text x="16" y="110" class="sans" font-size="12" fill="#334155">model, and dynamic camera tilt on turns.</text>
+    <rect x="16" y="118" width="110" height="14" rx="4" fill="#F1F5F9"/>
+    <text x="71" y="128" text-anchor="middle" class="mono" font-size="9" fill="#0F172A">3D LEAN + SIGNAL</text>
+  </g>
+
+  <!-- 3: BICYCLE -->
+  <g transform="translate(44, 242)" filter="url(#tm-shadow)">
+    <rect width="330" height="142" rx="12" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.2"/>
+    <rect x="16" y="16" width="52" height="52" rx="12" fill="#CCFBF1" stroke="#0F172A" stroke-width="2"/>
+    <!-- Vector Bike Icon -->
+    <g transform="translate(25, 27)" stroke="#0F172A" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="7" cy="21" r="5.5" fill="#2DD4BF"/>
+      <circle cx="27" cy="21" r="5.5" fill="#2DD4BF"/>
+      <path d="M7 21 L14 11 L24 11 L17 21 Z"/>
+      <path d="M24 11 L27 21 M12 8 L16 8"/>
+    </g>
+    <text x="82" y="36" class="title" font-size="16" fill="#0F172A">Bicycle</text>
+    <text x="82" y="56" class="mono" font-size="11" fill="#0D9488">PROFILE: BIKE · SECONDARY ROADS</text>
+    <text x="16" y="92" class="sans" font-size="12" fill="#334155">Avoids restricted expressways, favors</text>
+    <text x="16" y="110" class="sans" font-size="12" fill="#334155">cycle-safe streets with realistic cadence ETA.</text>
+    <rect x="16" y="118" width="104" height="14" rx="4" fill="#F1F5F9"/>
+    <text x="68" y="128" text-anchor="middle" class="mono" font-size="9" fill="#0F172A">HIGHWAY AVOID</text>
+  </g>
+
+  <!-- 4: WALKING -->
+  <g transform="translate(392, 242)" filter="url(#tm-shadow)">
+    <rect width="330" height="142" rx="12" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.2"/>
+    <rect x="16" y="16" width="52" height="52" rx="12" fill="#FEF3C7" stroke="#0F172A" stroke-width="2"/>
+    <!-- Vector Pedestrian Icon -->
+    <g transform="translate(30, 24)" stroke="#0F172A" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="5" r="3.5" fill="#F59E0B"/>
+      <path d="M12 10 L10 19 L6 27 M10 19 L16 27 M7 14 L12 11 L17 15"/>
+    </g>
+    <text x="82" y="36" class="title" font-size="16" fill="#0F172A">Walking / Foot Party</text>
+    <text x="82" y="56" class="mono" font-size="11" fill="#D97706">PROFILE: FOOT · 3D FIGURE</text>
+    <text x="16" y="92" class="sans" font-size="12" fill="#334155">Footpaths, alleys, and pedestrian shortcuts</text>
+    <text x="16" y="110" class="sans" font-size="12" fill="#334155">with animated 3D walker and compass lock.</text>
+    <rect x="16" y="118" width="104" height="14" rx="4" fill="#F1F5F9"/>
+    <text x="68" y="128" text-anchor="middle" class="mono" font-size="9" fill="#0F172A">PEDESTRIAN GRAPH</text>
+  </g>
+
+  <!-- RIGHT PANEL: TEST MODE TELEMETRY SIMULATOR -->
+  <g transform="translate(744, 82)" filter="url(#tm-shadow)">
+    <rect width="412" height="302" rx="14" fill="#0F172A" stroke="#0F172A" stroke-width="2.5"/>
+    <!-- Top bar -->
+    <rect x="18" y="18" width="92" height="24" rx="6" fill="#38BDF8" fill-opacity="0.18" stroke="#38BDF8" stroke-width="1.4"/>
+    <circle cx="31" cy="30" r="3.5" fill="#38BDF8"/>
+    <text x="42" y="34" class="mono" font-size="10.5" fill="#38BDF8">TEST MODE</text>
+    <text x="122" y="35" class="title" font-size="15" fill="#F8FAFC">Live Route Physics Simulator</text>
+
+    <!-- Speed Curve Graph Box -->
+    <rect x="18" y="54" width="376" height="146" rx="10" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+    <!-- Grid lines -->
+    <g stroke="#334155" stroke-width="1" stroke-dasharray="4 4">
+      <line x1="34" y1="84" x2="378" y2="84"/>
+      <line x1="34" y1="124" x2="378" y2="124"/>
+      <line x1="34" y1="164" x2="378" y2="164"/>
+    </g>
+    <!-- Area under velocity curve -->
+    <path d="M 38 176 L 75 152 L 128 86 L 195 86 L 232 168 L 265 168 L 315 104 L 372 120 L 372 182 L 38 182 Z" fill="#F59E0B" fill-opacity="0.18"/>
+    <!-- Velocity curve -->
+    <path d="M 38 176 L 75 152 L 128 86 L 195 86 L 232 168 L 265 168 L 315 104 L 372 120" fill="none" stroke="#F59E0B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Telemetry Nodes -->
+    <circle cx="75" cy="152" r="4.5" fill="#38BDF8" stroke="#0F172A" stroke-width="2"/>
+    <circle cx="128" cy="86" r="4.5" fill="#F59E0B" stroke="#0F172A" stroke-width="2"/>
+    <circle cx="232" cy="168" r="4.5" fill="#EF4444" stroke="#0F172A" stroke-width="2"/>
+    <circle cx="315" cy="104" r="4.5" fill="#10B981" stroke="#0F172A" stroke-width="2"/>
+
+    <!-- Graph Labels -->
+    <text x="50" y="142" class="mono" font-size="9.5" fill="#38BDF8">CRAWL</text>
+    <text x="136" y="77" class="mono" font-size="9.5" fill="#FBBF24">CRUISE 58 km/h</text>
+    <text x="218" y="186" class="mono" font-size="9.5" fill="#F87171">FULL STOP</text>
+    <text x="296" y="94" class="mono" font-size="9.5" fill="#34D399">REROUTE</text>
+
+    <!-- Bottom Telemetry Readout Pills -->
+    <g transform="translate(18, 214)">
+      <rect x="0" y="0" width="118" height="68" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1.4"/>
+      <text x="12" y="22" class="mono" font-size="10" fill="#94A3B8">SPEED PROFILES</text>
+      <text x="12" y="42" class="title" font-size="13" fill="#F8FAFC">Variable Accel</text>
+      <text x="12" y="58" class="mono" font-size="10" fill="#F59E0B">Brake + Turn Slow</text>
+
+      <rect x="129" y="0" width="118" height="68" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1.4"/>
+      <text x="141" y="22" class="mono" font-size="10" fill="#94A3B8">AUDIO + HUD</text>
+      <text x="141" y="42" class="title" font-size="13" fill="#F8FAFC">TTS + Lanes</text>
+      <text x="141" y="58" class="mono" font-size="10" fill="#38BDF8">Live Step Trim</text>
+
+      <rect x="258" y="0" width="118" height="68" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1.4"/>
+      <text x="270" y="22" class="mono" font-size="10" fill="#94A3B8">OVERLAY</text>
+      <text x="270" y="42" class="title" font-size="13" fill="#F8FAFC">Floating / PiP</text>
+      <text x="270" y="58" class="mono" font-size="10" fill="#34D399">Background Nav</text>
+    </g>
+  </g>
+
+  <rect x="3" y="3" width="1194" height="414" rx="14" fill="none" stroke="#0F172A" stroke-width="4"/>
+</svg>
+

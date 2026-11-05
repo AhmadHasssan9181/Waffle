@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 430" width="100%">
+  <defs>
+    <radialGradient id="cov-bg" cx="50%" cy="35%" r="85%">
+      <stop offset="0%" stop-color="#FFFDF9"/>
+      <stop offset="55%" stop-color="#FAF4E8"/>
+      <stop offset="100%" stop-color="#F2E6CE"/>
+    </radialGradient>
+    <pattern id="cov-dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.4" fill="#78350F" opacity="0.08"/>
+    </pattern>
+    <filter id="cov-shadow" x="-5%" y="-5%" width="112%" height="116%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .title { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 800; }
+      .sans { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 600; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="430" rx="16" fill="url(#cov-bg)"/>
+  <rect width="1200" height="430" rx="16" fill="url(#cov-dots)"/>
+
+  <!-- Header -->
+  <g transform="translate(44, 34)">
+    <rect x="0" y="0" width="166" height="26" rx="6" fill="#F59E0B" fill-opacity="0.18" stroke="#B45309" stroke-width="1.6"/>
+    <circle cx="14" cy="13" r="4" fill="#D97706"/>
+    <text x="26" y="17" class="mono" font-size="11" letter-spacing="1.2" fill="#92400E">FIG 03 // MAP PACKS</text>
+    <text x="184" y="18" class="title" font-size="19" fill="#0F172A">Regional Vector Tile Packs &amp; On-Device Routing Coverage</text>
+    <text x="1112" y="17" text-anchor="end" class="mono" font-size="11" fill="#78350F" opacity="0.8">RESUMABLE WORKMANAGER</text>
+  </g>
+
+  <!-- Main Table Card -->
+  <g transform="translate(44, 82)" filter="url(#cov-shadow)">
+    <rect width="750" height="310" rx="14" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.5"/>
+    <!-- Table Header -->
+    <rect x="0" y="0" width="750" height="42" rx="14" fill="#0F172A"/>
+    <rect x="0" y="22" width="750" height="20" fill="#0F172A"/>
+    <text x="24" y="26" class="mono" font-size="11.5" fill="#F8FAFC">REGION PACK</text>
+    <text x="275" y="26" class="mono" font-size="11.5" fill="#F8FAFC">ZOOM DEPTH</text>
+    <text x="485" y="26" class="mono" font-size="11.5" fill="#F8FAFC">OFFLINE VECTOR</text>
+    <text x="625" y="26" class="mono" font-size="11.5" fill="#F8FAFC"> ROUTING</text>
+
+    <!-- Row 1: Islamabad & Rawalpindi (Highlighted) -->
+    <g transform="translate(0, 42)">
+      <rect x="2" y="0" width="746" height="46" fill="#FFFBEB"/>
+      <line x1="0" y1="46" x2="750" y2="46" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="24" cy="23" r="5" fill="#F59E0B"/>
+      <text x="38" y="28" class="title" font-size="14" fill="#0F172A">Islamabad &amp; Rawalpindi</text>
+      <!-- Zoom Bar -->
+      <rect x="275" y="16" width="160" height="14" rx="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1.2"/>
+      <rect x="275" y="16" width="142" height="14" rx="7" fill="#F59E0B"/>
+      <text x="355" y="27" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z6 – z14 STREETS</text>
+      <!-- Vector Badge -->
+      <rect x="492" y="12" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="27" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <!-- Routing Badge -->
+      <rect x="610" y="12" width="122" height="22" rx="6" fill="#FEF3C7" stroke="#B45309" stroke-width="1.6"/>
+      <text x="671" y="27" text-anchor="middle" class="mono" font-size="10.5" fill="#92400E">GRAPHHOPPER</text>
+    </g>
+
+    <!-- Row 2: Lahore -->
+    <g transform="translate(0, 88)">
+      <line x1="0" y1="44" x2="750" y2="44" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="24" cy="22" r="4.5" fill="#38BDF8"/>
+      <text x="38" y="27" class="title" font-size="14" fill="#0F172A">Lahore Metro</text>
+      <rect x="275" y="15" width="160" height="14" rx="7" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.2"/>
+      <rect x="275" y="15" width="154" height="14" rx="7" fill="#38BDF8"/>
+      <text x="355" y="26" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z6 – z15 STREETS</text>
+      <rect x="492" y="11" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <rect x="610" y="11" width="122" height="22" rx="6" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.4"/>
+      <text x="671" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#475569">ONLINE ORS</text>
+    </g>
+
+    <!-- Row 3: Karachi -->
+    <g transform="translate(0, 132)">
+      <line x1="0" y1="44" x2="750" y2="44" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="24" cy="22" r="4.5" fill="#38BDF8"/>
+      <text x="38" y="27" class="title" font-size="14" fill="#0F172A">Karachi Metro</text>
+      <rect x="275" y="15" width="160" height="14" rx="7" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.2"/>
+      <rect x="275" y="15" width="142" height="14" rx="7" fill="#38BDF8"/>
+      <text x="355" y="26" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z6 – z14 STREETS</text>
+      <rect x="492" y="11" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <rect x="610" y="11" width="122" height="22" rx="6" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.4"/>
+      <text x="671" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#475569">ONLINE ORS</text>
+    </g>
+
+    <!-- Row 4: Peshawar -->
+    <g transform="translate(0, 176)">
+      <line x1="0" y1="44" x2="750" y2="44" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="24" cy="22" r="4.5" fill="#38BDF8"/>
+      <text x="38" y="27" class="title" font-size="14" fill="#0F172A">Peshawar</text>
+      <rect x="275" y="15" width="160" height="14" rx="7" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.2"/>
+      <rect x="275" y="15" width="154" height="14" rx="7" fill="#38BDF8"/>
+      <text x="355" y="26" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z6 – z15 STREETS</text>
+      <rect x="492" y="11" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <rect x="610" y="11" width="122" height="22" rx="6" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.4"/>
+      <text x="671" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#475569">ONLINE ORS</text>
+    </g>
+
+    <!-- Row 5: Multan -->
+    <g transform="translate(0, 220)">
+      <line x1="0" y1="44" x2="750" y2="44" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="24" cy="22" r="4.5" fill="#38BDF8"/>
+      <text x="38" y="27" class="title" font-size="14" fill="#0F172A">Multan</text>
+      <rect x="275" y="15" width="160" height="14" rx="7" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.2"/>
+      <rect x="275" y="15" width="142" height="14" rx="7" fill="#38BDF8"/>
+      <text x="355" y="26" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z6 – z14 STREETS</text>
+      <rect x="492" y="11" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <rect x="610" y="11" width="122" height="22" rx="6" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.4"/>
+      <text x="671" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#475569">ONLINE ORS</text>
+    </g>
+
+    <!-- Row 6: Pakistan Overview -->
+    <g transform="translate(0, 264)">
+      <circle cx="24" cy="22" r="4.5" fill="#0D9488"/>
+      <text x="38" y="27" class="title" font-size="14" fill="#0F172A">Pakistan National Overview</text>
+      <rect x="275" y="15" width="160" height="14" rx="7" fill="#CCFBF1" stroke="#0D9488" stroke-width="1.2"/>
+      <rect x="275" y="15" width="88" height="14" rx="7" fill="#2DD4BF"/>
+      <text x="355" y="26" text-anchor="middle" class="mono" font-size="9.5" fill="#0F172A">z5 – z9 BASEMAP</text>
+      <rect x="492" y="11" width="88" height="22" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.4"/>
+      <text x="536" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#15803D">CACHED GL</text>
+      <rect x="610" y="11" width="122" height="22" rx="6" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.4"/>
+      <text x="671" y="26" text-anchor="middle" class="mono" font-size="10.5" fill="#475569">ONLINE ORS</text>
+    </g>
+  </g>
+
+  <!-- Right Side: Offline Pack Architecture Card -->
+  <g transform="translate(816, 82)" filter="url(#cov-shadow)">
+    <rect width="340" height="310" rx="14" fill="#FFFBEB" stroke="#B45309" stroke-width="2.5"/>
+    <rect x="0" y="0" width="340" height="42" rx="14" fill="#B45309"/>
+    <rect x="0" y="22" width="340" height="20" fill="#B45309"/>
+    <text x="20" y="26" class="mono" font-size="11.5" fill="#FFFBEB">PACK ENGINE ARCHITECTURE</text>
+
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="300" height="68" rx="10" fill="#FFFFFF" stroke="#D97706" stroke-width="1.8"/>
+      <text x="16" y="24" class="title" font-size="14" fill="#0F172A">Throttled Download Worker</text>
+      <text x="16" y="43" class="sans" font-size="11.5" fill="#78350F">Paces tile requests to respect MapTiler</text>
+      <text x="16" y="58" class="mono" font-size="10.5" fill="#B45309">rate limits &amp; honors system proxy</text>
+
+      <rect x="0" y="82" width="300" height="68" rx="10" fill="#FFFFFF" stroke="#D97706" stroke-width="1.8"/>
+      <text x="16" y="106" class="title" font-size="14" fill="#0F172A">HTTP 429 Style Recovery</text>
+      <text x="16" y="125" class="sans" font-size="11.5" fill="#78350F">Automatically mounts completed local</text>
+      <text x="16" y="140" class="mono" font-size="10.5" fill="#B45309">basemap if online style is rejected</text>
+
+      <rect x="0" y="164" width="300" height="68" rx="10" fill="#FFFFFF" stroke="#0F172A" stroke-width="1.8"/>
+      <text x="16" y="188" class="title" font-size="14" fill="#0F172A">Zero-GPS Pack Centering</text>
+      <text x="16" y="207" class="sans" font-size="11.5" fill="#334155">Centers camera on downloaded region</text>
+      <text x="16" y="222" class="mono" font-size="10.5" fill="#0F766E">even before first GPS fix locks</text>
+    </g>
+  </g>
+
+  <rect x="3" y="3" width="1194" height="424" rx="14" fill="none" stroke="#0F172A" stroke-width="4"/>
+</svg>
+
