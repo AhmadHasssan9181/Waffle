@@ -96,6 +96,30 @@ object MapStyleResolver {
                         ?: com.noobdev.waffle.feature.offline.OfflineLayer.STREETS
         return mapTilerStyles[chosen.styleName] ?: offlineBasemap()
     }
+
+    /**
+     * A complete downloaded region can still be used when an online style request fails (for
+     * example MapTiler returns HTTP 429 for this network). Prefer the region containing the
+     * current fix, otherwise the first complete pack, so a blank basemap can recover.
+     */
+    fun cachedOfflineRegion(
+            latitude: Double?,
+            longitude: Double?
+    ): com.noobdev.waffle.feature.offline.InstalledOfflineRegion? {
+        val installed =
+                com.noobdev.waffle.feature.offline.OfflineMapManager.installed.value
+        val containing =
+                if (latitude != null && longitude != null) {
+                    com.noobdev.waffle.feature.offline.OfflineMapManager.installedRegionFor(
+                            latitude,
+                            longitude
+                    )
+                } else null
+        return containing
+                ?: installed.firstOrNull {
+                    it.complete && !it.styleUrl.isNullOrBlank()
+                }
+    }
 }
 
 /**
@@ -217,6 +241,44 @@ fun LocationAwareMap(
     AndroidView(
         factory = { ctx ->
             MapView(ctx).also { mv ->
+                var triedOfflineFallback = false
+                mv.addOnDidFailLoadingMapListener {
+                    if (triedOfflineFallback) return@addOnDidFailLoadingMapListener
+                    val latitude =
+                            if (MapSessionState.hasLocation.value)
+                                    MapSessionState.currentLat.value
+                            else null
+                    val longitude =
+                            if (MapSessionState.hasLocation.value)
+                                    MapSessionState.currentLng.value
+                            else null
+                    val region = MapStyleResolver.cachedOfflineRegion(latitude, longitude)
+                    val fallback = region?.styleUrl
+                    if (fallback.isNullOrBlank() || fallback == styleUrl) {
+                        return@addOnDidFailLoadingMapListener
+                    }
+                    triedOfflineFallback = true
+                    // A provider error such as HTTP 429 must not leave a beige screen. Cached
+                    // regions already contain the style and tiles, so force MapLibre onto disk.
+                    MapLibre.setConnected(false)
+                    mapboxMap?.setStyle(fallback) { _ ->
+                        mapboxMap?.let { map ->
+                            onMapReady(map)
+                            map.cameraPosition =
+                                    org.maplibre.android.camera.CameraPosition.Builder()
+                                            .target(
+                                                    org.maplibre.android.geometry.LatLng(
+                                                            latitude
+                                                                    ?: ((region.south + region.north) / 2.0),
+                                                            longitude
+                                                                    ?: ((region.west + region.east) / 2.0)
+                                                    )
+                                            )
+                                            .zoom(if (latitude != null) 15.0 else 11.5)
+                                            .build()
+                        }
+                    }
+                }
                 mv.onCreate(null)
                 mv.getMapAsync { map ->
                     mapboxMap = map
