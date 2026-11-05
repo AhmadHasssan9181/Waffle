@@ -42,6 +42,11 @@ internal object MapSessionState {
 
     val routeSimulator = RouteSimulator()
 
+    /** Keeps route planning alive while the Map tab is off-screen. */
+    val routeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /** Newest route request; older ORS responses must not replace it. */
+    var routePlanGeneration = 0
+
     /** Keeps a Test Mode walk/drive alive while the Map tab is off-screen. */
     val simulationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 }

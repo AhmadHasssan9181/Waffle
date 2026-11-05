@@ -90,6 +90,8 @@ fun RoutePreviewCard(
         walkRouteResult: RouteResult?,
         bikeRouteResult: RouteResult? = null,
         isLoadingWalk: Boolean,
+        isLoadingRoute: Boolean = false,
+        canStart: Boolean = true,
         onProfileChange: (String) -> Unit,
         onStartNavigation: () -> Unit,
         onClose: () -> Unit,
@@ -1027,6 +1029,7 @@ fun RoutePreviewCard(
                         // Start button
                         Button(
                                 onClick = onStartNavigation,
+                                enabled = canStart && !isLoadingRoute && !isLoadingWalk,
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
                                 shape = RoundedCornerShape(26.dp),
                                 colors =

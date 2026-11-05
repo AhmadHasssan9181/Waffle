@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +52,7 @@ import androidx.navigation.compose.rememberNavController
 import com.noobdev.waffle.core.prefs.PreferencesManager
 import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.PipState
+import com.noobdev.waffle.core.navigation.SimulationState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import com.noobdev.waffle.design.theme.AppTheme
@@ -147,11 +149,14 @@ fun WaffleApp(preferencesManager: PreferencesManager) {
     val appTheme by preferencesManager.appTheme.collectAsState(initial = AppTheme.SYSTEM)
     val inPip by PipState.active.collectAsState()
     // Only recompose the app shell when navigation starts or ends, not on every GPS fix.
+    val navigationActiveFlow =
+            remember {
+                    NavigationSession.state.map { it.active }.distinctUntilChanged()
+            }
+    val initialNavigationActive = remember { NavigationSession.isActive() }
     val navigationActive by
-            NavigationSession.state
-                    .map { it.active }
-                    .distinctUntilChanged()
-                    .collectAsState(initial = NavigationSession.state.value.active)
+            navigationActiveFlow.collectAsState(initial = initialNavigationActive)
+    val simulationActive by SimulationState.active.collectAsState()
     val openMap by NavigationSession.openMapRequested.collectAsState()
 
     LaunchedEffect(openMap) {
@@ -170,7 +175,11 @@ fun WaffleApp(preferencesManager: PreferencesManager) {
 
     Scaffold(
             bottomBar = {
-                if (!inPip && !navigationActive && bottomNavItems.any { it.route == currentRoute }) {
+                if (!inPip &&
+                                !navigationActive &&
+                                !simulationActive &&
+                                bottomNavItems.any { it.route == currentRoute }
+                ) {
                     WaffleBottomNavBar(navController = navController, currentRoute = currentRoute)
                 }
             },

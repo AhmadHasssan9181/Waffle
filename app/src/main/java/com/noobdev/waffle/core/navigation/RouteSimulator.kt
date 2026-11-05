@@ -65,6 +65,9 @@ class RouteSimulator {
     private var segmentProgress = 0.0 // 0.0 to 1.0 within segment
     private var targetSpeed = SPEED_CITY
     private var useVariableSpeed = false
+    /** Last non-zero pace, so a simulated red light does not make the ETA read 0 min. */
+    private var lastMovingSpeed = SPEED_CITY
+    private var expectedPaceMps = SPEED_CITY
     private var variablePhaseStartMs = 0L
     private var variablePhaseIndex = 0
     private var variableSpeedScale = 1f
@@ -98,12 +101,12 @@ class RouteSimulator {
             profile: String = "driving-car",
             scope: CoroutineScope
     ) {
+        // Always clear the previous loop first, even when the new route is invalid.
+        stopSimulation()
         if (coordinates.size < 2) {
             Log.e(TAG, "Route must have at least 2 points")
             return
         }
-
-        stopSimulation()
 
         routeCoordinates = coordinates
         _currentSegmentIndex.value = 0
@@ -115,6 +118,13 @@ class RouteSimulator {
                         "cycling-regular" -> 0.28f
                         else -> 1f
                 }
+        expectedPaceMps =
+                when (profile) {
+                        "foot-walking" -> 1.4f
+                        "cycling-regular" -> 5.0f
+                        else -> SPEED_CITY
+                }
+        lastMovingSpeed = if (useVariableSpeed) expectedPaceMps else speedMps
         targetSpeed = if (useVariableSpeed) 0f else speedMps
         _currentSpeed.value = if (useVariableSpeed) 0f else speedMps
         variablePhaseStartMs = 0L
@@ -214,6 +224,7 @@ class RouteSimulator {
                     _currentSpeed.value = targetSpeed
                     targetSpeed
                 }
+        if (speedNow > 0.5f) lastMovingSpeed = speedNow
 
         // Calculate how far we move this tick
         val distanceThisTick = speedNow * (UPDATE_INTERVAL_MS / 1000.0)
@@ -357,8 +368,12 @@ class RouteSimulator {
     /** Get estimated time remaining based on current speed. */
     fun getRemainingTime(): Double {
         val distance = getRemainingDistance()
-        val speed = _currentSpeed.value
-        return if (speed > 0) distance / speed else 0.0
+        // Hold the last moving pace at a simulated stop. Using 0 m/s made the ETA collapse
+        // to "0 min" at every red light and during the variable-speed stop phase.
+        val speed =
+                if (_currentSpeed.value > 0.5f) _currentSpeed.value
+                else lastMovingSpeed.coerceAtLeast(expectedPaceMps * 0.3f)
+        return if (speed > 0.1f) distance / speed else 0.0
     }
 }
 

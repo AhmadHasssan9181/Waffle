@@ -1,5 +1,6 @@
 package com.noobdev.waffle.feature.map
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import androidx.compose.foundation.Image
@@ -132,6 +133,7 @@ private fun locationOptions(
 }
 
 @OptIn(ExperimentalStdlibApi::class, ExperimentalPermissionsApi::class)
+@SuppressLint("MissingPermission")
 @Composable
 fun LocationAwareMap(
         currentStyleIndex: Int,

@@ -78,10 +78,14 @@ class MainActivity : ComponentActivity() {
         if (!live && !simulating) return
         if (live) {
             NavigationSession.requestOpenMap()
-            // Live navigation gets the large custom floating map back. The service
-            // itself checks overlay permission and posts a notification if it is missing.
-            leavingForFloating = true
-            NavigationService.showFloating(this)
+            // Live navigation gets the large custom floating map when overlay permission exists.
+            // Without it, do not leave the user with no map at all: use system PiP.
+            if (Settings.canDrawOverlays(this)) {
+                leavingForFloating = true
+                NavigationService.showFloating(this)
+            } else {
+                enterSystemPip()
+            }
             return
         }
         if (FloatingMapHost.show(this, SimulationState.snapshot)) {

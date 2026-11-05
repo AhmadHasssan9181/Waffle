@@ -384,8 +384,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
          * planned separately, but all include the same stops.
          */
         fun planTrip(profile: String) {
+                MapSessionState.routePlanGeneration++
+                val generation = MapSessionState.routePlanGeneration
                 val destination = selectedDestination ?: return
                 if (!hasLocation) {
+                        isLoadingRoute = false
+                        isLoadingWalk = false
                         offlineRouteDebugMessage =
                                 "Waiting for a GPS fix before routing. Move near a window and try again."
                         return
@@ -398,8 +402,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         if (profile == "driving-car" || motorcycle) routeOptions
                         else RouteOptions()
 
-                scope.launch {
-                        if (walking) isLoadingWalk = true else isLoadingRoute = true
+                MapSessionState.routeScope.launch {
+                        isLoadingWalk = walking
+                        isLoadingRoute = !walking
                         offlineRouteDebugMessage = null
 
                         val plan =
@@ -421,7 +426,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         options = planOptions
                                 )
 
-                        if (plan != null && plan.success) {
+                        // A newer destination or mode change has already been requested.
+                        if (generation != MapSessionState.routePlanGeneration) return@launch
+
+                        if (plan != null &&
+                                        plan.success &&
+                                        plan.result.coordinates.size >= 2
+                        ) {
                                 selectedProfile = profile
                                 if (walking) {
                                         walkRouteResult = plan.result
@@ -473,7 +484,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         }
                         } else {
                                 offlineRouteDebugMessage =
-                                        "Route failed: ${plan?.result?.errorMessage ?: "no route"}"
+                                        if (plan?.success == true)
+                                                "You are already at the destination."
+                                        else
+                                                "Route failed: ${plan?.result?.errorMessage ?: "no route"}"
                         }
 
                         if (walking) isLoadingWalk = false else isLoadingRoute = false
@@ -557,6 +571,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
         val planRouteTo: (GeoSearchResult) -> Unit = { result ->
                 selectedDestination = result
+                droppedPin = null
                 routeStops = emptyList()
                 searchPurpose = SearchPurpose.DESTINATION
                 searchQuery = result.name
@@ -736,7 +751,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         navSession.lat,
                                         navSession.lng,
                                         route.coordinates,
-                                        80.0
+                                        80.0,
+                                        fromIndex =
+                                                navSession.matchedIndex
+                                                        .takeIf { it >= 0 }
+                                                        ?: 0
                                 )
                         val start =
                                 if (snapped.matchedIndex >= 0) snapped.matchedIndex
@@ -2780,7 +2799,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         // which also hid the travel-mode choices for the next trip.
         val previewRoute =
                 activeRouteFor(selectedProfile) ?: routeResult ?: walkRouteResult ?: bikeRouteResult
-        previewRoute?.let { currentRoute ->
+        previewRoute?.let {
                 Box(modifier = Modifier.fillMaxSize()) {
                         AnimatedVisibility(
                                 visible = screenState == MapScreenState.ROUTE_PREVIEW,
@@ -2797,6 +2816,12 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         walkRouteResult = walkRouteResult,
                                         bikeRouteResult = bikeRouteResult,
                                         isLoadingWalk = isLoadingWalk,
+                                        isLoadingRoute = isLoadingRoute,
+                                        canStart =
+                                                activeRouteFor(selectedProfile)
+                                                        ?.coordinates
+                                                        ?.size
+                                                        ?.let { it >= 2 } == true,
                                         routeSource = activeRouteSource,
                                         avoidedHazardCount = avoidedHazardCount,
                                         hazardWarning = hazardWarning,
@@ -2844,6 +2869,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 planTrip(selectedProfile)
                                         },
                                         onStartNavigation = {
+                                                if (isLoadingRoute || isLoadingWalk) return@RoutePreviewCard
                                                 currentInstructionIndex = 0
                                                 navigationNotice = null
                                                 isRerouting = false
@@ -2855,9 +2881,15 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 currentSpeedMps = 0f
                                                 speedLimitKmh = null
                                                 navigationSessionId++
+                                                MapSessionState.routePlanGeneration++
                                                 val activeRoute =
                                                         activeRouteFor(selectedProfile)
-                                                                ?: currentRoute
+                                                                ?: return@RoutePreviewCard
+                                                if (activeRoute.coordinates.size < 2) {
+                                                        navigationNotice =
+                                                                "You are already at the destination."
+                                                        return@RoutePreviewCard
+                                                }
                                                 lastNavigationRoute = activeRoute
                                                 navigationInstructions = activeRoute.instructions
                                                 // Do not show the previous trip's 0 m / arrival
@@ -2915,6 +2947,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 screenState = MapScreenState.NAVIGATING
                                         },
                                         onClose = {
+                                                MapSessionState.routePlanGeneration++
+                                                isLoadingRoute = false
+                                                isLoadingWalk = false
                                                 mapInstance?.getStyle { style ->
                                                         try {
                                                                 style.removeLayer("route-casing")
@@ -3044,6 +3079,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                 routeStops = emptyList()
                                 showSimControls = false
                                 navigationSessionId++
+                                MapSessionState.routePlanGeneration++
+                                isLoadingRoute = false
+                                isLoadingWalk = false
 
                                 // Fetch actual user location to prevent routing from stale simulation position
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {

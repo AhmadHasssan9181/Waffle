@@ -2,6 +2,7 @@ package com.noobdev.waffle.core.navigation
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
+import com.noobdev.waffle.data.remote.RouteResult
 import java.util.Locale
 
 /**
@@ -19,6 +20,7 @@ class NavigationVoice(context: Context) {
     private var lastInstruction: String? = null
     private var lastNotice: String? = null
     private var lastArrived = false
+    private var lastRoute: RouteResult? = null
     private var pending: NavigationSnapshot? = null
 
     init {
@@ -47,6 +49,14 @@ class NavigationVoice(context: Context) {
             reset()
             return
         }
+        // A new trip can replace an active snapshot without an inactive frame. Start its
+        // voice state fresh so the first instruction and the eventual arrival are spoken.
+        if (snapshot.route !== lastRoute) {
+            lastRoute = snapshot.route
+            lastInstruction = null
+            lastNotice = null
+            lastArrived = false
+        }
         if (!enabled || !ready) return
         speakSnapshot(snapshot)
     }
@@ -55,6 +65,7 @@ class NavigationVoice(context: Context) {
         lastInstruction = null
         lastNotice = null
         lastArrived = false
+        lastRoute = null
         tts?.stop()
     }
 
