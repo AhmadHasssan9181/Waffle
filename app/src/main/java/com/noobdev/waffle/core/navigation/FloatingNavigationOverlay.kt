@@ -28,10 +28,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.MainActivity
 import com.noobdev.waffle.R
 import com.noobdev.waffle.data.remote.formatDistance
-import com.noobdev.waffle.feature.map.MapStyleResolver
 import com.noobdev.waffle.feature.map.VehicleIcon
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -557,6 +557,43 @@ class FloatingNavigationOverlay(
         )
     }
 
+    /**
+     * MapLibre's snapshotter can abort the process inside its native sprite-error callback if a
+     * provider answers a style sprite request with HTTP 429. The floating map does not need labels
+     * or icons, so use a small inline vector style with no sprite and no glyphs. It still uses the
+     * cached MapTiler tile URLs, but a failed tile is handled normally instead of taking the
+     * process down on the way to PiP.
+     */
+    private fun snapshotStyleJson(): String {
+        val key = BuildConfig.MAPTILER_API_KEY
+        val tiles = "https://api.maptiler.com/tiles/v3/{z}/{x}/{y}?key=$key"
+        return """
+        {
+          "version": 8,
+          "name": "Waffle floating map",
+          "sources": {
+            "base": {
+              "type": "vector",
+              "tiles": ["$tiles"],
+              "minzoom": 0,
+              "maxzoom": 14
+            }
+          },
+          "layers": [
+            {"id":"background","type":"background","paint":{"background-color":"#0B1220"}},
+            {"id":"landuse","type":"fill","source":"base","source-layer":"landuse","paint":{"fill-color":"#132033","fill-opacity":0.85}},
+            {"id":"park","type":"fill","source":"base","source-layer":"park","paint":{"fill-color":"#0F2E26","fill-opacity":0.85}},
+            {"id":"water","type":"fill","source":"base","source-layer":"water","paint":{"fill-color":"#0B2A3A"}},
+            {"id":"waterway","type":"line","source":"base","source-layer":"waterway","paint":{"line-color":"#0E7490","line-width":1.2}},
+            {"id":"building","type":"fill","source":"base","source-layer":"building","minzoom":13,"paint":{"fill-color":"#1E293B","fill-opacity":0.7}},
+            {"id":"road-casing","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#0A101C","line-width":["interpolate",["linear"],["zoom"],10,1.2,15,8]}},
+            {"id":"road","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#64748B","line-width":["interpolate",["linear"],["zoom"],10,0.5,15,5]}},
+            {"id":"boundary","type":"line","source":"base","source-layer":"boundary","paint":{"line-color":"#F59E0B","line-opacity":0.28,"line-width":1}}
+          ]
+        }
+        """.trimIndent()
+    }
+
     private fun requestSnapshot(force: Boolean) {
         val snapshot = current ?: return
         if (snapshot.route == null) return
@@ -604,13 +641,7 @@ class FloatingNavigationOverlay(
         val options =
                 MapSnapshotter.Options(width, height)
                         .withStyleBuilder(
-                                Style.Builder()
-                                        .fromUri(
-                                                MapStyleResolver.resolve(
-                                                        context,
-                                                        snapshot.styleIndex
-                                                )
-                                        )
+                                Style.Builder().fromJson(snapshotStyleJson())
                         )
                         .withCameraPosition(
                                 CameraPosition.Builder()
