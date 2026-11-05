@@ -18,6 +18,7 @@ class NavigationVoice(context: Context) {
     private var enabled = true
     private var lastInstruction: String? = null
     private var lastNotice: String? = null
+    private var lastArrived = false
     private var pending: NavigationSnapshot? = null
 
     init {
@@ -53,6 +54,7 @@ class NavigationVoice(context: Context) {
     fun reset() {
         lastInstruction = null
         lastNotice = null
+        lastArrived = false
         tts?.stop()
     }
 
@@ -65,18 +67,25 @@ class NavigationVoice(context: Context) {
     }
 
     private fun speakSnapshot(snapshot: NavigationSnapshot) {
+        // Treat arrival as an event, not as a text match. The final "Arrive" step is selected
+        // while approaching and its text does not change when the route actually ends.
+        if (snapshot.arrived && !lastArrived) {
+            lastArrived = true
+            speak("You have arrived at your destination")
+        } else if (!snapshot.arrived) {
+            lastArrived = false
+        }
+
         val instruction = snapshot.instruction.trim()
         if (instruction.isNotEmpty() && instruction != lastInstruction) {
             lastInstruction = instruction
-            val phrase =
-                    when {
-                        !instruction.contains("arrive", ignoreCase = true) -> instruction
-                        // The final step is also selected while approaching the destination.
-                        // Never say "arrived" until the route is actually finished.
-                        snapshot.arrived -> "You have arrived at your destination"
-                        else -> "Continue to your destination"
-                    }
-            speak(phrase)
+            if (!snapshot.arrived) {
+                speak(
+                        if (instruction.contains("arrive", ignoreCase = true))
+                                "Continue to your destination"
+                        else instruction
+                )
+            }
         }
 
         val notice = snapshot.notice?.trim().orEmpty()

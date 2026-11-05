@@ -146,6 +146,7 @@ fun NavigationModeUI(
         var ttsReady by remember { mutableStateOf(false) }
         var lastSpokenInstruction by remember { mutableStateOf("") }
         var lastSpokenNotice by remember { mutableStateOf<String?>(null) }
+        var lastSpokenArrival by remember { mutableStateOf(false) }
         val tts =
                 remember {
                         TextToSpeech(context) { status ->
@@ -179,13 +180,27 @@ fun NavigationModeUI(
                 if (text.isEmpty() || text == lastSpokenInstruction) return@LaunchedEffect
                 lastSpokenInstruction = text
                 val spoken =
-                        when {
-                                !text.contains("arrive", ignoreCase = true) -> text
-                                remainingDistance <= 25.0 ->
-                                        "You have arrived at your destination"
-                                else -> "Continue to your destination"
-                        }
+                        if (text.contains("arrive", ignoreCase = true))
+                                "Continue to your destination"
+                        else text
                 tts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "instruction")
+        }
+        LaunchedEffect(remainingDistance, voiceEnabled, ttsReady) {
+                if (!voiceEnabled || !ttsReady) return@LaunchedEffect
+                if (NavigationSession.isActive()) return@LaunchedEffect
+                if (remainingDistance <= 25.0) {
+                        if (!lastSpokenArrival) {
+                                lastSpokenArrival = true
+                                tts.speak(
+                                        "You have arrived at your destination",
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        null,
+                                        "arrival"
+                                )
+                        }
+                } else if (remainingDistance > 100.0) {
+                        lastSpokenArrival = false
+                }
         }
         LaunchedEffect(navigationNotice, voiceEnabled, ttsReady) {
                 if (!voiceEnabled || !ttsReady) return@LaunchedEffect
