@@ -163,6 +163,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var lastAlertLocationSavedAt by remember { mutableStateOf(0L) }
         var lastAlertLocationLat by remember { mutableStateOf(0.0) }
         var lastAlertLocationLng by remember { mutableStateOf(0.0) }
+        var centeredOnFirstFix by remember { mutableStateOf(false) }
 
         /** Feed the background alert worker without writing DataStore on every GPS tick. */
         fun persistAlertLocation(lat: Double, lng: Double) {
@@ -1648,7 +1649,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // Simulation state updates
-        LaunchedEffect(simPosition, simBearing, simSegmentIndex) {
+        LaunchedEffect(simPosition, simBearing, simSegmentIndex, simSpeed, simProgress) {
                 if (isSimulationMode &&
                                 simPosition != null &&
                                 screenState == MapScreenState.NAVIGATING
@@ -1750,6 +1751,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 if (simArrived && isSimulationMode) {
                         // Show arrival message (navigation continues but simulator stops)
                         currentInstructionIndex = navigationInstructions.size - 1
+                        remainingDistance = 0.0
+                        remainingDuration = 0.0
+                        distanceToNextTurn = 0.0
+                        currentSpeedMps = 0f
                 }
         }
 
@@ -1832,6 +1837,26 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         } catch (e: SecurityException) {}
                         onDispose { fusedLocationClient.removeLocationUpdates(callback) }
                 }
+        }
+
+        // The first GPS fix often arrives after onMapReady, which leaves the camera at the
+        // country-level fallback. Center once when an idle map gets its first real fix.
+        LaunchedEffect(mapInstance, hasLocation, currentLat, currentLng, screenState) {
+                val map = mapInstance ?: return@LaunchedEffect
+                if (!hasLocation || centeredOnFirstFix) return@LaunchedEffect
+                if (screenState != MapScreenState.IDLE &&
+                                screenState != MapScreenState.SEARCHING
+                ) {
+                        return@LaunchedEffect
+                }
+                centeredOnFirstFix = true
+                map.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                                LatLng(currentLat, currentLng),
+                                16.0
+                        ),
+                        800
+                )
         }
 
         // Draw route when available – stores direct source reference for fast updates

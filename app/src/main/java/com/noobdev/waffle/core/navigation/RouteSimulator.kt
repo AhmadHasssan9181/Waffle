@@ -148,6 +148,8 @@ class RouteSimulator {
                     }
 
                     // Arrived at destination
+                    _currentSpeed.value = 0f
+                    targetSpeed = 0f
                     _hasArrived.value = true
                     _isSimulationRunning.value = false
                     _progress.value = 1f

@@ -123,6 +123,11 @@ fun NavigationModeUI(
         LaunchedEffect(routeResult, currentIndex) {
                 laneHint = null
                 val step = routeResult.steps.getOrNull(currentIndex) ?: return@LaunchedEffect
+                if (step.maneuver == ManeuverType.ARRIVE ||
+                                step.maneuver == ManeuverType.WAYPOINT
+                ) {
+                        return@LaunchedEffect
+                }
                 val index = step.wayPointIndex.coerceIn(0, routeResult.coordinates.lastIndex)
                 val point = routeResult.coordinates.getOrNull(index) ?: return@LaunchedEffect
                 val previous =
@@ -557,17 +562,15 @@ fun NavigationModeUI(
                                 Column {
                                         Text(
                                                 formatDuration(
-                                                        if (remainingDuration > 0) remainingDuration
-                                                        else routeResult.durationSeconds
+                                                        remainingDuration.coerceAtLeast(0.0)
                                                 ),
                                                 style = MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                                "${formatDistance(
-                                                        if (remainingDistance > 0) remainingDistance
-                                                        else routeResult.distanceMeters
-                                                )} remaining",
+                                                if (remainingDistance <= 0.0) "Arrived"
+                                                else
+                                                        "${formatDistance(remainingDistance)} remaining",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -729,8 +732,8 @@ fun NavigationModeUI(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier =
-                                        Modifier.align(Alignment.BottomStart)
-                                                .padding(start = 6.dp, bottom = 2.dp)
+                                        Modifier.align(Alignment.TopStart)
+                                                .padding(start = 6.dp, top = 4.dp)
                         )
                 }
         }

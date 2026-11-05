@@ -166,7 +166,8 @@ object OfflineMapManager {
         val pack = target.pack
         val definition = OfflineTilePyramidRegionDefinition(
                 styleUrl,
-                LatLngBounds.from(pack.south, pack.west, pack.north, pack.east),
+                // MapLibre's factory signature is (north, east, south, west).
+                LatLngBounds.from(pack.north, pack.east, pack.south, pack.west),
                 target.minZoom,
                 target.maxZoom,
                 context.resources.displayMetrics.density
