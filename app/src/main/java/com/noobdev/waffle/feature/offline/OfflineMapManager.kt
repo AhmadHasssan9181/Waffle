@@ -2,6 +2,7 @@ package com.noobdev.waffle.feature.offline
 
 import android.content.Context
 import android.util.Log
+import com.noobdev.waffle.core.network.MapTileHttp
 import kotlin.coroutines.resume
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -143,18 +144,43 @@ object OfflineMapManager {
         // complete just because it appears in the open-region map.
         val open = openRegions[target.id]
         if (open != null) {
-            open.setDownloadState(OfflineRegion.STATE_ACTIVE)
-            attachObserver(target.id, target.displayName, open, null)
-            _downloads.update {
-                it + (target.id to OfflineDownloadStatus(
-                        packId = target.id,
-                        name = target.displayName,
-                        state = OfflineDownloadState.DOWNLOADING
-                ))
+            val openDefinition = open.definition as? OfflineTilePyramidRegionDefinition
+            val openStyle = openDefinition?.styleURL
+            if (openStyle == styleUrl && openDefinition?.maxZoom == target.maxZoom) {
+                MapTileHttp.throttleForOfflineDownload()
+                open.setDownloadState(OfflineRegion.STATE_ACTIVE)
+                attachObserver(target.id, target.displayName, open, null)
+                _downloads.update {
+                    it + (target.id to OfflineDownloadStatus(
+                            packId = target.id,
+                            name = target.displayName,
+                            state = OfflineDownloadState.DOWNLOADING
+                    ))
+                }
+                return Result.success(Unit)
             }
-            return Result.success(Unit)
+
+            // The style URL can change when an API key rotates. A partial native region still
+            // points at the old URL, so resuming it would keep retrying the old credentials.
+            // Delete that incomplete region and build a fresh one below with the current style.
+            val cleared = deleteRegion(open)
+            if (cleared.isFailure) {
+                val message = cleared.exceptionOrNull()?.message ?: "Could not reset region"
+                _downloads.update {
+                    it + (target.id to OfflineDownloadStatus(
+                            packId = target.id,
+                            name = target.displayName,
+                            state = OfflineDownloadState.FAILED,
+                            error = message
+                    ))
+                }
+                return Result.failure(IllegalStateException(message))
+            }
+            openRegions.remove(target.id)
+            _installed.update { regions -> regions.filterNot { it.id == target.id } }
         }
 
+        MapTileHttp.throttleForOfflineDownload()
         _downloads.update {
             it + (target.id to OfflineDownloadStatus(
                     packId = target.id,
@@ -221,16 +247,19 @@ object OfflineMapManager {
             val status = statusOf(region) ?: continue
             if (!status.isComplete) {
                 val name = parseMetadata(region).optString("name").ifBlank { id }
+                MapTileHttp.throttleForOfflineDownload()
                 region.setDownloadState(OfflineRegion.STATE_ACTIVE)
                 attachObserver(id, name, region, status)
                 resumed++
             }
         }
+        if (resumed == 0) MapTileHttp.allowNormalMapTraffic()
         return resumed
     }
 
     fun pause(packId: String) {
         val region = openRegions[packId] ?: return
+        MapTileHttp.allowNormalMapTraffic()
         region.setDownloadState(OfflineRegion.STATE_INACTIVE)
         _downloads.update { statuses ->
             val current = statuses[packId] ?: return@update statuses
@@ -240,6 +269,7 @@ object OfflineMapManager {
 
     fun resume(packId: String) {
         val region = openRegions[packId] ?: return
+        MapTileHttp.throttleForOfflineDownload()
         region.setDownloadState(OfflineRegion.STATE_ACTIVE)
         _downloads.update { statuses ->
             val current = statuses[packId] ?: return@update statuses
@@ -253,19 +283,7 @@ object OfflineMapManager {
                 ?: listRegions(manager).firstOrNull { parseMetadata(it).optString("id") == packId }
                 ?: return Result.failure(IllegalStateException("Region $packId is not installed"))
 
-        val result = suspendCancellableCoroutine { continuation ->
-            region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
-                override fun onDelete() {
-                    if (continuation.isActive) continuation.resume(Result.success(Unit))
-                }
-
-                override fun onError(error: String) {
-                    if (continuation.isActive) {
-                        continuation.resume(Result.failure(IllegalStateException(error)))
-                    }
-                }
-            })
-        }
+        val result = deleteRegion(region)
 
         if (result.isSuccess) {
             openRegions.remove(packId)
@@ -274,6 +292,21 @@ object OfflineMapManager {
         }
         return result
     }
+
+    private suspend fun deleteRegion(region: OfflineRegion): Result<Unit> =
+            suspendCancellableCoroutine { continuation ->
+                region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
+                    override fun onDelete() {
+                        if (continuation.isActive) continuation.resume(Result.success(Unit))
+                    }
+
+                    override fun onError(error: String) {
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(IllegalStateException(error)))
+                        }
+                    }
+                })
+            }
 
     private fun attachObserver(
             packId: String,
@@ -292,6 +325,7 @@ object OfflineMapManager {
 
             override fun onError(error: OfflineRegionError) {
                 Log.e(TAG, "Offline download error for $packId: ${error.reason} ${error.message}")
+                MapTileHttp.allowNormalMapTraffic()
                 _downloads.update { statuses ->
                     val current = statuses[packId]
                     statuses + (packId to OfflineDownloadStatus(
@@ -347,6 +381,7 @@ object OfflineMapManager {
         }
 
         if (status.isComplete) {
+            MapTileHttp.allowNormalMapTraffic()
             Log.d(TAG, "Offline region $packId complete (${status.completedResourceSize} bytes)")
         }
     }

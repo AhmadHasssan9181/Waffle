@@ -83,9 +83,10 @@ data class OfflineRegionPack(
     }
 
     fun estimatedMegabytes(layer: OfflineLayer): Int {
-        // Measured against MapTiler vector tiles (~25-35 KB) and satellite JPEG tiles
-        // (~90-140 KB). Round up so the UI never promises less than the download needs.
-        val kilobytesPerTile = if (layer.raster) 110.0 else 32.0
+        // Measured against the completed Islamabad pack: 953 vector tiles plus fonts/sprites
+        // used 55 MB (~58 KB per tile). Satellite JPEG tiles are ~110 KB. Round up so the UI
+        // never promises less than the download needs.
+        val kilobytesPerTile = if (layer.raster) 110.0 else 58.0
         val megabytes = estimatedTileCount(layer) * kilobytesPerTile / 1024.0
         return maxOf(1, ceil(megabytes).toInt())
     }
@@ -122,12 +123,12 @@ object OfflineRegionCatalog {
     val islamabad = OfflineRegionPack(
             id = "pk-islamabad",
             name = "Islamabad & Rawalpindi",
-            subtitle = "Capital region, full detail",
+            subtitle = "Capital region, compact streets",
             south = 33.45,
             west = 72.85,
             north = 33.95,
             east = 73.35,
-            maxZoom = 15.0
+            maxZoom = 14.0
     )
 
     val lahore = OfflineRegionPack(

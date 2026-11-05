@@ -8,12 +8,14 @@ import com.noobdev.waffle.data.local.AlertRepository
 import com.noobdev.waffle.data.local.AppDatabase
 import com.noobdev.waffle.core.navigation.HazardRegistry
 import com.noobdev.waffle.core.navigation.LaneGuidanceRepository
+import com.noobdev.waffle.core.network.MapTileHttp
 import com.noobdev.waffle.core.notifications.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import org.maplibre.android.WellKnownTileServer
+import org.maplibre.android.module.http.HttpRequestUtil
 
 class WaffleApplication : Application() {
 
@@ -32,6 +34,8 @@ class WaffleApplication : Application() {
         // The navigation foreground service can create the floating map after the activity is
         // gone, so MapLibre must be initialised at process start, not only in MainActivity.
         MapLibre.getInstance(this, BuildConfig.MAPTILER_API_KEY, WellKnownTileServer.MapLibre)
+        MapTileHttp.configure(this)
+        HttpRequestUtil.setOkHttpClient(MapTileHttp.client)
 
         database = AppDatabase.getDatabase(this)
         repository = AlertRepository(database.alertDao(), this)
