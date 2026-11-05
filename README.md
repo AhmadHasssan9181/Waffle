@@ -36,7 +36,7 @@
 </p>
 
 > [!IMPORTANT]
-> **Preview 25 (`v1.0.0-preview.25`) is a personal-use preview.** The APK is signed for direct installation. Waffle is free for personal, non-commercial use; commercial use, redistribution, and republication are reserved. See [License](#license--legal).
+> **Preview 25 (`v1.0.0-preview.25`) is a personal-use preview.** The APK is debug-signed for direct installation and is not a Play Store release. Waffle is free for personal, non-commercial use; commercial use, redistribution, and republication are not permitted. See [License](#-license--legal).
 
 ---
 
@@ -106,7 +106,7 @@ When cellular towers drop or map tile servers hit rate limits, Waffle switches s
     <td width="33%" valign="top">
       <b>Style &amp; Quota Resilience</b>
       <br />
-      <sub>Monitors MapTiler tile responses and mounts your completed local vector pack automatically if the network drops or returns <code>HTTP 429</code>.</sub>
+      <sub>Falls back to your completed local vector pack automatically when the online style fails, the network drops, or MapTiler returns <code>HTTP 429</code>.</sub>
     </td>
   </tr>
 </table>
