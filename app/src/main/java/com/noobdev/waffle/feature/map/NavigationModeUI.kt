@@ -728,7 +728,7 @@ fun NavigationModeUI(
                 }
                 if (isInPip) {
                         Text(
-                                text = "© MapTiler © OSM",
+                                text = "© MapTiler / OSM",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
