@@ -123,6 +123,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val speedUnit by preferencesManager.speedUnit.collectAsState(initial = SpeedUnit.KMH)
         val vehicleIconKey by
                 preferencesManager.vehicleIcon.collectAsState(initial = "SEDAN")
+        val savedLocation by
+                preferencesManager.userLocation.collectAsState(initial = null to null)
         val vehicleIcon = remember(vehicleIconKey) { VehicleIcon.fromKey(vehicleIconKey) }
         val navSession by NavigationSession.state.collectAsState()
         val inPip by PipState.active.collectAsState()
@@ -160,6 +162,21 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var currentLat by MapSessionState.currentLat
         var currentLng by MapSessionState.currentLng
         var hasLocation by MapSessionState.hasLocation
+        // Indoor/offline starts often have no fresh GPS fix. Keep the last persisted location
+        // visible so the map still has a location blip and a sensible route origin.
+        LaunchedEffect(savedLocation, screenState) {
+            val lat = savedLocation.first
+            val lng = savedLocation.second
+            if (!hasLocation &&
+                            screenState == MapScreenState.IDLE &&
+                            lat != null &&
+                            lng != null
+            ) {
+                currentLat = lat
+                currentLng = lng
+                hasLocation = true
+            }
+        }
         var lastAlertLocationSavedAt by remember { mutableStateOf(0L) }
         var lastAlertLocationLat by remember { mutableStateOf(0.0) }
         var lastAlertLocationLng by remember { mutableStateOf(0.0) }
