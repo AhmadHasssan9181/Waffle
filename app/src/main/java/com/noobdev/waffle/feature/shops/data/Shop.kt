@@ -111,6 +111,26 @@ enum class ShopCategory(
     OTHER("Other", Icons.Rounded.Storefront, StormColor, "Other");
 
     companion object {
+        /** Maps the bundled places DB's single `type` column onto the app's categories. */
+        fun fromOfflineType(type: String): ShopCategory {
+            val value = type.lowercase()
+            return when {
+                value in setOf("restaurant", "cafe", "fast_food", "food_court", "bakery") -> FOOD
+                value in setOf("hospital", "clinic", "pharmacy", "doctors", "dentist") -> HEALTH
+                value in setOf("fuel", "charging_station", "car_repair", "car_wash") -> FUEL
+                value in setOf("bank", "atm", "bureau_de_change") -> MONEY
+                value in setOf("hotel", "guest_house", "hostel") -> STAY
+                value in
+                        setOf(
+                                "marketplace", "supermarket", "convenience", "mall",
+                                "post_office", "police", "fire_station", "library"
+                        ) -> SHOPPING
+                value in setOf("hairdresser", "beauty", "laundry", "tailor") -> SERVICES
+                value == "shop" -> SHOPPING
+                else -> OTHER
+            }
+        }
+
         /** Maps OSM `shop` / `amenity` / `tourism` tags onto the app's nine categories. */
         fun fromTags(tags: Map<String, String>): ShopCategory {
             val shop = tags["shop"]?.lowercase()

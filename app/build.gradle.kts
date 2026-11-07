@@ -31,8 +31,8 @@ android {
         applicationId = "com.noobdev.waffle"
         minSdk = 24
         targetSdk = 36
-        versionCode = 26
-        versionName = "1.0.0-preview.26"
+        versionCode = 27
+        versionName = "1.0.0-preview.27"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

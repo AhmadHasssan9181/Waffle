@@ -3,6 +3,7 @@ package com.noobdev.waffle.feature.map
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import java.io.File
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -98,6 +99,54 @@ object MapStyleResolver {
     }
 
     /**
+     * The Pakistan-wide OpenMapTiles archive from the offline bundle. PMTiles is supported by
+     * MapLibre Native 11.7+ directly, so this avoids a local HTTP tile server and a 500 MB
+     * MapTiler download. It is intentionally label-free: fonts and sprites stay optional, while
+     * Waffle's own pins, route and labels remain on top.
+     */
+    fun localPmtilesStyle(context: Context): String? {
+        val file =
+                listOfNotNull(
+                                context.getExternalFilesDir(null),
+                                context.filesDir
+                        )
+                        .flatMap { dir ->
+                            listOf(
+                                    File(dir, "pakistan.pmtiles"),
+                                    File(dir, "rawalpindi.pmtiles")
+                            )
+                        }
+                        .firstOrNull { it.isFile }
+                        ?: return null
+        val url = "pmtiles://file://${file.absolutePath}"
+        return """
+        {
+          "version": 8,
+          "name": "Waffle Pakistan offline",
+          "sources": {
+            "base": {
+              "type": "vector",
+              "url": "$url",
+              "attribution": "© OpenMapTiles © OpenStreetMap contributors"
+            }
+          },
+          "layers": [
+            {"id":"background","type":"background","paint":{"background-color":"#0B1220"}},
+            {"id":"landcover","type":"fill","source":"base","source-layer":"landcover","paint":{"fill-color":"#10291F","fill-opacity":0.9}},
+            {"id":"landuse","type":"fill","source":"base","source-layer":"landuse","paint":{"fill-color":"#132033","fill-opacity":0.8}},
+            {"id":"park","type":"fill","source":"base","source-layer":"park","paint":{"fill-color":"#0F2E26","fill-opacity":0.9}},
+            {"id":"water","type":"fill","source":"base","source-layer":"water","paint":{"fill-color":"#0B2A3A"}},
+            {"id":"waterway","type":"line","source":"base","source-layer":"waterway","paint":{"line-color":"#0E7490","line-width":["interpolate",["linear"],["zoom"],8,0.6,14,2.2]}},
+            {"id":"building","type":"fill","source":"base","source-layer":"building","minzoom":13,"paint":{"fill-color":"#1E293B","fill-opacity":0.7}},
+            {"id":"road-casing","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#080D17","line-width":["interpolate",["linear"],["zoom"],8,1,14,9]}},
+            {"id":"road","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#64748B","line-width":["interpolate",["linear"],["zoom"],8,0.5,14,5]}},
+            {"id":"boundary","type":"line","source":"base","source-layer":"boundary","paint":{"line-color":"#F59E0B","line-opacity":0.28,"line-width":1}}
+          ]
+        }
+        """.trimIndent()
+    }
+
+    /**
      * A complete downloaded region can still be used when an online style request fails (for
      * example MapTiler returns HTTP 429 for this network). Prefer the region containing the
      * current fix, otherwise the first complete pack, so a blank basemap can recover.
@@ -179,16 +228,28 @@ fun LocationAwareMap(
     val permissionState = rememberMultiplePermissionsState(locationPermissions)
     val hasLocationPermission = permissionState.allPermissionsGranted
     val styleUrl = remember(currentStyleIndex) { MapStyleResolver.resolve(context, currentStyleIndex) }
+    val localPmtiles = remember(currentStyleIndex) { MapStyleResolver.localPmtilesStyle(context) }
+    val useLocalPmtiles = localPmtiles != null && !NetworkState.isOnline(context)
+    fun applyStyle(map: MapLibreMap, onLoaded: (org.maplibre.android.maps.Style) -> Unit) {
+        if (useLocalPmtiles) {
+            map.setStyle(
+                    org.maplibre.android.maps.Style.Builder().fromJson(localPmtiles!!),
+                    onLoaded
+            )
+        } else {
+            map.setStyle(styleUrl, onLoaded)
+        }
+    }
     LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
             permissionState.launchMultiplePermissionRequest()
         }
     }
 
-    LaunchedEffect(styleUrl) {
-        mapboxMap?.setStyle(styleUrl) { style ->
-
-            if (hasLocationPermission) {
+    LaunchedEffect(styleUrl, localPmtiles) {
+        mapboxMap?.let { map ->
+            applyStyle(map) { style ->
+                if (hasLocationPermission) {
                 try {
                     val options = LocationComponentActivationOptions
                         .builder(context, style)
@@ -205,6 +266,7 @@ fun LocationAwareMap(
 
                 } catch (e: SecurityException) {
                     e.printStackTrace()
+                }
                 }
             }
         }
@@ -252,6 +314,30 @@ fun LocationAwareMap(
                             if (MapSessionState.hasLocation.value)
                                     MapSessionState.currentLng.value
                             else null
+                    val pmtiles = localPmtiles ?: MapStyleResolver.localPmtilesStyle(ctx)
+                    if (pmtiles != null) {
+                        triedOfflineFallback = true
+                        MapLibre.setConnected(false)
+                        mapboxMap?.setStyle(
+                                org.maplibre.android.maps.Style.Builder().fromJson(pmtiles)
+                        ) { _ ->
+                            mapboxMap?.let { map ->
+                                onMapReady(map)
+                                map.cameraPosition =
+                                        org.maplibre.android.camera.CameraPosition.Builder()
+                                                .target(
+                                                        org.maplibre.android.geometry.LatLng(
+                                                                latitude ?: 30.3753,
+                                                                longitude ?: 69.3451
+                                                        )
+                                                )
+                                                .zoom(if (latitude != null) 14.0 else 5.5)
+                                                .build()
+                            }
+                        }
+                        return@addOnDidFailLoadingMapListener
+                    }
+
                     val region = MapStyleResolver.cachedOfflineRegion(latitude, longitude)
                     val fallback = region?.styleUrl
                     if (fallback.isNullOrBlank() || fallback == styleUrl) {
@@ -284,7 +370,7 @@ fun LocationAwareMap(
                     mapboxMap = map
                     // The map is gesture-first; hide MapLibre's native compass chrome.
                     map.uiSettings.isCompassEnabled = false
-                    map.setStyle(styleUrl) { style ->
+                    applyStyle(map) { style ->
                         if (hasLocationPermission) {
                             try {
                                 val options = LocationComponentActivationOptions

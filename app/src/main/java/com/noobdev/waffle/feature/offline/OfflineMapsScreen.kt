@@ -1,5 +1,7 @@
 package com.noobdev.waffle.feature.offline
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -71,7 +73,10 @@ import com.noobdev.waffle.feature.offline.OfflineRegionCatalog
 import com.noobdev.waffle.feature.offline.OfflineRegionPack
 import com.noobdev.waffle.core.network.NetworkState
 import com.noobdev.waffle.core.storage.StorageUtils
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Google-Maps-style offline area manager.
@@ -92,6 +97,46 @@ fun OfflineMapsScreen(navController: NavController) {
 
     var pendingTarget by remember { mutableStateOf<OfflineDownloadTarget?>(null) }
     var isPreparing by remember { mutableStateOf<String?>(null) }
+    var isImportingPmtiles by remember { mutableStateOf(false) }
+
+    val pmtilesPicker =
+            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri == null) return@rememberLauncherForActivityResult
+                scope.launch {
+                    isImportingPmtiles = true
+                    val imported =
+                            runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        val dir =
+                                                context.getExternalFilesDir(null)
+                                                        ?: context.filesDir
+                                        dir.mkdirs()
+                                        val destination = File(dir, "pakistan.pmtiles")
+                                        val input =
+                                                context.contentResolver.openInputStream(uri)
+                                                        ?: error("Could not open the selected file")
+                                        input.use { source ->
+                                            destination.outputStream().use { target ->
+                                                source.copyTo(target)
+                                            }
+                                        }
+                                        destination.length()
+                                    }
+                                }
+                    isImportingPmtiles = false
+                    imported
+                            .onSuccess { bytes ->
+                                snackbarHostState.showSnackbar(
+                                        "Imported ${StorageUtils.formatBytes(bytes)} of offline tiles. Open Map with data off."
+                                )
+                            }
+                            .onFailure {
+                                snackbarHostState.showSnackbar(
+                                        it.message ?: "Could not import the tile pack"
+                                )
+                            }
+                }
+            }
 
     LaunchedEffect(Unit) { OfflineMapManager.refresh(context) }
 
@@ -151,6 +196,13 @@ fun OfflineMapsScreen(navController: NavController) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { OfflineIntroCard(installed) }
+
+            item {
+                ImportPmtilesCard(
+                        isImporting = isImportingPmtiles,
+                        onPick = { pmtilesPicker.launch(arrayOf("*/*")) }
+                )
+            }
 
             items(OfflineRegionCatalog.all, key = { it.id }) { pack ->
                 OfflineAreaCard(
@@ -315,6 +367,66 @@ private fun StatChip(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
         )
+    }
+}
+
+@Composable
+private fun ImportPmtilesCard(isImporting: Boolean, onPick: () -> Unit) {
+    Card(
+            colors =
+                    CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ),
+            shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                        Icons.Default.CloudDownload,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                            "Pakistan offline pack",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                            "Import a .pmtiles file from Downloads. The map uses it automatically when there is no signal.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(
+                    onClick = onPick,
+                    enabled = !isImporting,
+                    modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isImporting) {
+                    CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Importing…")
+                } else {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Import PMTiles pack")
+                }
+            }
+            Text(
+                    "Pakistan: ~381 MB · Rawalpindi: ~6 MB",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 6.dp)
+            )
+        }
     }
 }
 

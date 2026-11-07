@@ -43,7 +43,7 @@ object OfflineGeocoder {
                 if (isLoaded) return@withContext
                 try {
                 Log.d(TAG, "Loading offline places and roads...")
-                val loaded = ArrayList<Entry>(90_000)
+                val loaded = ArrayList<Entry>(140_000)
 
                 runCatching {
                             context.assets.open(PLACES_ASSET).bufferedReader().useLines { lines ->
@@ -169,6 +169,62 @@ object OfflineGeocoder {
         }
         return result
     }
+
+    /**
+     * Offline nearby feed for the map and Nearby tab. The bundled places database contains
+     * hundreds of thousands of named OSM features; this exposes only useful service categories
+     * and filters them by great-circle distance.
+     */
+    fun nearbyAmenities(
+            latitude: Double,
+            longitude: Double,
+            radiusMeters: Int,
+            limit: Int = 160
+    ): List<GeoSearchResult> {
+        if (!isLoaded) return emptyList()
+        val radius = radiusMeters.toDouble()
+        return entries
+                .asSequence()
+                .filter { it.result.type.lowercase(Locale.ROOT) in AMENITY_TYPES }
+                .mapNotNull { entry ->
+                    val result = entry.result
+                    val distance =
+                            haversineMeters(latitude, longitude, result.lat, result.lng)
+                    if (distance <= radius) distance to result else null
+                }
+                .sortedBy { it.first }
+                .take(limit)
+                .map { it.second }
+                .toList()
+    }
+
+    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val earth = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a =
+                kotlin.math.sin(dLat / 2).let { it * it } +
+                        kotlin.math.cos(Math.toRadians(lat1)) *
+                                kotlin.math.cos(Math.toRadians(lat2)) *
+                                kotlin.math.sin(dLon / 2).let { it * it }
+        return earth * 2 * kotlin.math.asin(kotlin.math.sqrt(a).coerceIn(0.0, 1.0))
+    }
+
+    private val AMENITY_TYPES =
+            setOf(
+                    "hospital", "clinic", "pharmacy", "doctors", "dentist",
+                    "fuel", "charging_station", "car_repair", "car_wash",
+                    "bank", "atm", "bureau_de_change",
+                    "restaurant", "cafe", "fast_food", "food_court", "bakery",
+                    "police", "fire_station", "post_office", "library",
+                    "marketplace", "supermarket", "convenience", "mall",
+                    "bus_station", "parking",
+                    "school", "college", "university",
+                    "place_of_worship", "community_centre",
+                    "hotel", "guest_house", "hostel",
+                    "hairdresser", "beauty", "laundry", "tailor",
+                    "shop"
+            )
 
     private fun blob(result: GeoSearchResult): String =
             buildString {

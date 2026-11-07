@@ -3,6 +3,7 @@ package com.noobdev.waffle.feature.shops.data
 import android.content.Context
 import android.util.Log
 import com.google.gson.JsonParser
+import com.noobdev.waffle.data.remote.OfflineGeocoder
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.min
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit
  */
 class ShopRepository(context: Context) {
 
+    private val appContext = context.applicationContext
     private val dao = ShopDatabase.get(context).shopDao()
 
     private val client =
@@ -51,6 +53,13 @@ class ShopRepository(context: Context) {
                 if (!forceRefresh && cached.isNotEmpty() && isFresh(cached)) {
                     return@withContext Result.success(toSortedModels(cached, lat, lon, radiusMeters))
                 }
+
+                // The bundled places database is the offline safety net. Load it only when the
+                // Room cache is empty; online requests still use Overpass and its richer tags.
+                val offline =
+                        if (cached.isEmpty()) {
+                            runCatching { offlineShops(lat, lon, radiusMeters) }.getOrNull()
+                        } else null
 
                 val fetched =
                         runCatching { fetchFromOverpass(lat, lon, radiusMeters) }
@@ -87,8 +96,12 @@ class ShopRepository(context: Context) {
                             toSortedModels(merged, lat, lon, radiusMeters)
                         }
                         .recoverCatching { error ->
-                            if (cached.isNotEmpty()) toSortedModels(cached, lat, lon, radiusMeters)
-                            else throw error
+                            when {
+                                cached.isNotEmpty() ->
+                                        toSortedModels(cached, lat, lon, radiusMeters)
+                                offline != null -> offline
+                                else -> throw error
+                            }
                         }
             }
 
@@ -117,6 +130,29 @@ class ShopRepository(context: Context) {
                     }
                     .filter { it.distanceMeters <= radiusMeters * 1.2 }
                     .sortedBy { it.distanceMeters }
+
+    private suspend fun offlineShops(
+            lat: Double,
+            lon: Double,
+            radiusMeters: Int
+    ): List<Shop> {
+        OfflineGeocoder.load(appContext)
+        return OfflineGeocoder.nearbyAmenities(lat, lon, radiusMeters, limit = 200)
+                .map { result ->
+                    Shop(
+                            id = "offline:${result.type}:${result.lat}:${result.lng}",
+                            name = result.name,
+                            category = ShopCategory.fromOfflineType(result.type),
+                            lat = result.lat,
+                            lon = result.lng,
+                            address = result.address.ifBlank { null },
+                            distanceMeters =
+                                    haversineMeters(lat, lon, result.lat, result.lng).toInt()
+                    )
+                }
+                .filter { it.distanceMeters <= radiusMeters * 1.2 }
+                .sortedBy { it.distanceMeters }
+    }
 
     private fun fetchFromOverpass(
             lat: Double,
