@@ -46,6 +46,13 @@ class ShopRepository(context: Context) {
             forceRefresh: Boolean = false
     ): Result<List<Shop>> =
             withContext(Dispatchers.IO) {
+                // The Overture places index is the primary nearby source now. It has the
+                // address, phone and category detail the old Room/Overpass cache lacked.
+                val local = runCatching { offlineShops(lat, lon, radiusMeters) }.getOrNull()
+                if (!local.isNullOrEmpty()) {
+                    return@withContext Result.success(local)
+                }
+
                 val box = boundingBox(lat, lon, radiusMeters)
                 val cached = runCatching { dao.inBox(box.minLat, box.maxLat, box.minLon, box.maxLon) }
                         .getOrDefault(emptyList())
@@ -138,9 +145,11 @@ class ShopRepository(context: Context) {
     ): List<Shop> {
         OfflineGeocoder.load(appContext)
         return OfflineGeocoder.nearbyAmenities(lat, lon, radiusMeters, limit = 200)
-                .map { result ->
+                .mapIndexed { index, result ->
                     Shop(
-                            id = "offline:${result.type}:${result.lat}:${result.lng}",
+                            // Overture can contain two different named features at the same
+                            // coordinate/type. Include the index so LazyColumn keys stay unique.
+                            id = "offline:$index:${result.type}:${result.lat}:${result.lng}",
                             name = result.name,
                             category = ShopCategory.fromOfflineType(result.type),
                             lat = result.lat,

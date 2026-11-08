@@ -115,17 +115,71 @@ enum class ShopCategory(
         fun fromOfflineType(type: String): ShopCategory {
             val value = type.lowercase()
             return when {
-                value in setOf("restaurant", "cafe", "fast_food", "food_court", "bakery") -> FOOD
-                value in setOf("hospital", "clinic", "pharmacy", "doctors", "dentist") -> HEALTH
-                value in setOf("fuel", "charging_station", "car_repair", "car_wash") -> FUEL
-                value in setOf("bank", "atm", "bureau_de_change") -> MONEY
-                value in setOf("hotel", "guest_house", "hostel") -> STAY
-                value in
-                        setOf(
-                                "marketplace", "supermarket", "convenience", "mall",
-                                "post_office", "police", "fire_station", "library"
-                        ) -> SHOPPING
-                value in setOf("hairdresser", "beauty", "laundry", "tailor") -> SERVICES
+                value.contains("restaurant") ||
+                        value.contains("cafe") ||
+                        value.contains("eatery") ||
+                        value.contains("food_court") ||
+                        value.contains("bakery") ||
+                        value.contains("coffee_shop") ||
+                        value == "food" -> FOOD
+
+                value.contains("grocery") ||
+                        value.contains("supermarket") ||
+                        value.contains("convenience_store") ||
+                        value.contains("food_and_beverage_store") ||
+                        value.contains("produce_store") ||
+                        value.contains("specialty_food_store") ||
+                        value.contains("butcher") ||
+                        value.contains("fishmonger") ||
+                        value.contains("fruit_and_vegetable") -> GROCERY
+
+                value.contains("hospital") ||
+                        value.contains("clinic") ||
+                        value.contains("pharmacy") ||
+                        value.contains("health") ||
+                        value.contains("dental") ||
+                        value.contains("doctors") ||
+                        value.contains("diagnostic") ||
+                        value.contains("medical") -> HEALTH
+
+                value.contains("rental") -> SERVICES
+
+                value.contains("gas_station") ||
+                        value.contains("fuel") ||
+                        value.contains("automotive") ||
+                        value.startsWith("auto_") ||
+                        value.contains("car_repair") ||
+                        value.contains("car_wash") ||
+                        value.contains("car_parts") ||
+                        value.contains("car_dealer") -> FUEL
+
+                value.contains("bank") ||
+                        value.contains("financial") ||
+                        value.contains("atm") ||
+                        value.contains("money") -> MONEY
+
+                value.contains("hotel") ||
+                        value.contains("lodging") ||
+                        value.contains("hostel") -> STAY
+
+                value.contains("store") ||
+                        value.contains("shopping") ||
+                        value.contains("mall") ||
+                        value.contains("market") -> SHOPPING
+
+                value.contains("service") ||
+                        value.contains("office") ||
+                        value.contains("real_estate") ||
+                        value.contains("school") ||
+                        value.contains("college") ||
+                        value.contains("education") ||
+                        value.contains("place_of_worship") ||
+                        value.contains("government") ||
+                        value.contains("community") ||
+                        value.contains("beauty") ||
+                        value.contains("laundry") ||
+                        value.contains("tailor") -> SERVICES
+
                 value == "shop" -> SHOPPING
                 else -> OTHER
             }

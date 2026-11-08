@@ -1,0 +1,1674 @@
+{
+ "version": 8,
+ "sprite": "assets/sprite/sprite",
+ "glyphs": "assets/fonts/{fontstack}/{range}.pbf",
+ "sources": {
+  "v": {
+   "type": "vector",
+   "url": "pmtiles://pakistan_vector.pmtiles",
+   "minzoom": 0,
+   "maxzoom": 14
+  },
+  "places": {
+   "type": "vector",
+   "url": "pmtiles://pakistan_places.pmtiles",
+   "minzoom": 11,
+   "maxzoom": 14
+  }
+ },
+ "layers": [
+  {
+   "id": "bg",
+   "type": "background",
+   "paint": {
+    "background-color": "#f4f1ec"
+   }
+  },
+  {
+   "id": "lc-wood",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landcover",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "wood"
+   ],
+   "paint": {
+    "fill-color": "#cfe0c8",
+    "fill-opacity": 0.85
+   }
+  },
+  {
+   "id": "lc-grass",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landcover",
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "grass",
+    true,
+    "scrub",
+    true,
+    false
+   ],
+   "paint": {
+    "fill-color": "#dfe8d8",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "lc-farm",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landcover",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "farmland"
+   ],
+   "paint": {
+    "fill-color": "#eef0d5",
+    "fill-opacity": 0.6
+   }
+  },
+  {
+   "id": "lu-res",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "residential"
+   ],
+   "paint": {
+    "fill-color": "#e8e0d8",
+    "fill-opacity": 0.6
+   }
+  },
+  {
+   "id": "lu-com",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "commercial"
+   ],
+   "paint": {
+    "fill-color": "#f0e4e0",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "lu-ind",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "industrial"
+   ],
+   "paint": {
+    "fill-color": "#e6e2dc",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "lu-cem",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "cemetery"
+   ],
+   "paint": {
+    "fill-color": "#e4e9e2",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "lu-hosp",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "hospital"
+   ],
+   "paint": {
+    "fill-color": "#f5e6e6",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "lu-school",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "landuse",
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "school"
+   ],
+   "paint": {
+    "fill-color": "#f3efe0",
+    "fill-opacity": 0.7
+   }
+  },
+  {
+   "id": "park",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "park",
+   "paint": {
+    "fill-color": "#cfe3c8",
+    "fill-opacity": 0.85
+   }
+  },
+  {
+   "id": "water",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "water",
+   "paint": {
+    "fill-color": "#a5c8e1"
+   }
+  },
+  {
+   "id": "waterway",
+   "type": "line",
+   "source": "v",
+   "source-layer": "waterway",
+   "paint": {
+    "line-color": "#9dc0dc",
+    "line-width": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "river",
+     2.2,
+     "canal",
+     1.6,
+     "stream",
+     1,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "aeroway",
+   "type": "line",
+   "source": "v",
+   "source-layer": "aeroway",
+   "minzoom": 10,
+   "paint": {
+    "line-color": "#b8aca3",
+    "line-width": 2
+   }
+  },
+  {
+   "id": "building",
+   "type": "fill",
+   "source": "v",
+   "source-layer": "building",
+   "minzoom": 13,
+   "paint": {
+    "fill-color": "#d9d0c9",
+    "fill-outline-color": "#b8aca3"
+   }
+  },
+  {
+   "id": "building-3d",
+   "type": "fill-extrusion",
+   "source": "v",
+   "source-layer": "building",
+   "minzoom": 16,
+   "paint": {
+    "fill-extrusion-color": "#d9d0c9",
+    "fill-extrusion-opacity": 0.75,
+    "fill-extrusion-height": [
+     "coalesce",
+     [
+      "get",
+      "render_height"
+     ],
+     8
+    ],
+    "fill-extrusion-base": [
+     "coalesce",
+     [
+      "get",
+      "render_min_height"
+     ],
+     0
+    ]
+   }
+  },
+  {
+   "id": "boundary",
+   "type": "line",
+   "source": "v",
+   "source-layer": "boundary",
+   "paint": {
+    "line-color": "#b0a89e",
+    "line-width": 1
+   }
+  },
+  {
+   "id": "rd-mw-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 5,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "motorway",
+    true,
+    "motorway_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#d9821f",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     5,
+     3.6,
+     16,
+     12.2
+    ]
+   }
+  },
+  {
+   "id": "rd-mw",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 5,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "motorway",
+    true,
+    "motorway_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#f6a623",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     5,
+     2.2,
+     16,
+     9.0
+    ]
+   }
+  },
+  {
+   "id": "rd-tr-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 6,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "trunk",
+    true,
+    "trunk_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#d9a92f",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     6,
+     3.2,
+     16,
+     10.2
+    ]
+   }
+  },
+  {
+   "id": "rd-tr",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 6,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "trunk",
+    true,
+    "trunk_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#f7c948",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     6,
+     1.8,
+     16,
+     7.0
+    ]
+   }
+  },
+  {
+   "id": "rd-pr-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 7,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "primary",
+    true,
+    "primary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#d9b84a",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     7,
+     2.8,
+     16,
+     8.7
+    ]
+   }
+  },
+  {
+   "id": "rd-pr",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 7,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "primary",
+    true,
+    "primary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#fde68a",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     7,
+     1.4,
+     16,
+     5.5
+    ]
+   }
+  },
+  {
+   "id": "rd-sec-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 9,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "secondary",
+    true,
+    "secondary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#c9c2bb",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     2.4,
+     16,
+     7.2
+    ]
+   }
+  },
+  {
+   "id": "rd-sec",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 9,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "secondary",
+    true,
+    "secondary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     1.0,
+     16,
+     4.0
+    ]
+   }
+  },
+  {
+   "id": "rd-ter-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 11,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "tertiary",
+    true,
+    "tertiary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#d5cfc8",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     2.0999999999999996,
+     16,
+     6.0
+    ]
+   }
+  },
+  {
+   "id": "rd-ter",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 11,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "tertiary",
+    true,
+    "tertiary_link",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     0.7,
+     16,
+     2.8
+    ]
+   }
+  },
+  {
+   "id": "rd-mi-casing",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "minor",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#ddd6cf",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     1.9,
+     16,
+     5.0
+    ]
+   }
+  },
+  {
+   "id": "rd-mi",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "minor",
+    true,
+    false
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0.5,
+     16,
+     1.8
+    ]
+   }
+  },
+  {
+   "id": "rd-svc",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 14,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "service",
+    true,
+    "track",
+    true,
+    false
+   ],
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": 0.6
+   }
+  },
+  {
+   "id": "rd-path",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 14,
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "path"
+   ],
+   "paint": {
+    "line-color": "#e8dccb",
+    "line-width": 0.8,
+    "line-dasharray": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "rail",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "rail"
+   ],
+   "paint": {
+    "line-color": "#999999",
+    "line-width": 1,
+    "line-dasharray": [
+     4,
+     3
+    ]
+   }
+  },
+  {
+   "id": "road-bridge",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "==",
+    [
+     "get",
+     "brunnel"
+    ],
+    "bridge"
+   ],
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     1.4,
+     16,
+     4.5
+    ]
+   }
+  },
+  {
+   "id": "road-tunnel",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "==",
+    [
+     "get",
+     "brunnel"
+    ],
+    "tunnel"
+   ],
+   "paint": {
+    "line-color": "#ddd6cf",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     1,
+     16,
+     3.5
+    ],
+    "line-dasharray": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "transit-line",
+   "type": "line",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "transit"
+   ],
+   "paint": {
+    "line-color": "#8B5CF6",
+    "line-width": 1.5,
+    "line-dasharray": [
+     3,
+     2
+    ]
+   }
+  },
+  {
+   "id": "oneway",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "transportation",
+   "minzoom": 16,
+   "filter": [
+    "==",
+    [
+     "get",
+     "oneway"
+    ],
+    1
+   ],
+   "layout": {
+    "icon-image": "oneway",
+    "icon-size": 0.45,
+    "symbol-placement": "line",
+    "icon-rotate": 90,
+    "symbol-spacing": 70
+   },
+   "paint": {
+    "icon-opacity": 0.55
+   }
+  },
+  {
+   "id": "road-label",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "transportation_name",
+   "minzoom": 11,
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     9,
+     16,
+     12
+    ],
+    "symbol-placement": "line",
+    "text-padding": 2,
+    "text-letter-spacing": 0.02,
+    "symbol-sort-key": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     1,
+     "trunk",
+     2,
+     "primary",
+     3,
+     "secondary",
+     4,
+     "tertiary",
+     5,
+     6
+    ]
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.3
+   }
+  },
+  {
+   "id": "road-shield",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "transportation_name",
+   "minzoom": 11,
+   "filter": [
+    "has",
+    "ref"
+   ],
+   "layout": {
+    "icon-image": [
+     "match",
+     [
+      "length",
+      [
+       "get",
+       "ref"
+      ]
+     ],
+     1,
+     "road_1",
+     2,
+     "road_2",
+     3,
+     "road_3",
+     4,
+     "road_4",
+     5,
+     "road_5",
+     6,
+     "road_6",
+     "road_6"
+    ],
+    "text-field": [
+     "to-string",
+     [
+      "get",
+      "ref"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 9,
+    "icon-size": 0.9,
+    "symbol-placement": "line",
+    "icon-allow-overlap": false,
+    "icon-rotation-alignment": "viewport",
+    "text-rotation-alignment": "viewport"
+   },
+   "paint": {
+    "text-color": "#222222"
+   }
+  },
+  {
+   "id": "water-name",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "water_name",
+   "minzoom": 12,
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Italic"
+    ],
+    "text-size": 11,
+    "symbol-placement": "line"
+   },
+   "paint": {
+    "text-color": "#9dc0dc",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1
+   }
+  },
+  {
+   "id": "aerodrome",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "aerodrome_label",
+   "minzoom": 10,
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 11
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "peak",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "mountain_peak",
+   "minzoom": 11,
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Italic"
+    ],
+    "text-size": 10
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1
+   }
+  },
+  {
+   "id": "place-village",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "place",
+   "minzoom": 11,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "village",
+    true,
+    "hamlet",
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     10,
+     14,
+     13
+    ]
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.2
+   }
+  },
+  {
+   "id": "place-town",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "place",
+   "minzoom": 9,
+   "filter": [
+    "==",
+    [
+     "get",
+     "class"
+    ],
+    "town"
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     11,
+     13,
+     16
+    ]
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.4
+   }
+  },
+  {
+   "id": "place-suburb",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "place",
+   "minzoom": 12,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "suburb",
+    true,
+    "neighbourhood",
+    true,
+    "quarter",
+    true,
+    "borough",
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     10,
+     16,
+     12
+    ],
+    "text-letter-spacing": 0.08,
+    "text-transform": "uppercase",
+    "text-max-width": 8
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.1,
+    "text-opacity": 0.9
+   }
+  },
+  {
+   "id": "place-city",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "place",
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    "city",
+    true,
+    "capital",
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ur"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
+    "text-font": [
+     "Noto Sans Medium"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     5,
+     11,
+     12,
+     18
+    ]
+   },
+   "paint": {
+    "text-color": "#111111",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.6
+   }
+  },
+  {
+   "id": "housenumber",
+   "type": "symbol",
+   "source": "v",
+   "source-layer": "housenumber",
+   "minzoom": 16,
+   "layout": {
+    "text-field": [
+     "to-string",
+     [
+      "get",
+      "housenumber"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 9
+   },
+   "paint": {
+    "text-color": "#333333",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 0.7,
+    "text-opacity": 0.75
+   }
+  },
+  {
+   "id": "places",
+   "type": "symbol",
+   "source": "places",
+   "source-layer": "place",
+   "minzoom": 11,
+   "layout": {
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "bcat"
+     ],
+     "fashion_and_apparel_store",
+     "clothing_store_11",
+     "place_of_learning",
+     "school_11",
+     "restaurant",
+     "restaurant_11",
+     "bank_or_credit_union",
+     "bank_11",
+     "hotel",
+     "lodging_11",
+     "place",
+     "marker_11",
+     "financial_service",
+     "bank_11",
+     "electronics_store",
+     "shop_11",
+     "hospital",
+     "hospital_11",
+     "real_estate_service",
+     "marker_11",
+     "hardware_home_and_garden_store",
+     "shop_11",
+     "shopping",
+     "shop_11",
+     "education",
+     "school_11",
+     "hindu_place_of_worship",
+     "place_of_worship_11",
+     "professional_service",
+     "marker_11",
+     "college_university",
+     "college_11",
+     "personal_or_beauty_service",
+     "shop_11",
+     "travel_service",
+     "suitcase_11",
+     "historic_site",
+     "monument_11",
+     "event_or_party_service",
+     "marker_11",
+     "manufacturer",
+     "shop_11",
+     "automotive_service",
+     "car_11",
+     "gas_station",
+     "fuel_11",
+     "corporate_or_business_office",
+     "marker_11",
+     "food_and_beverage_store",
+     "grocery_11",
+     "diagnostics_imaging_or_lab_service",
+     "hospital_11",
+     "casual_eatery",
+     "restaurant_11",
+     "resort",
+     "lodging_11",
+     "auto_dealer",
+     "car_11",
+     "home_service",
+     "marker_11",
+     "gym",
+     "pitch_11",
+     "specialty_school",
+     "school_11",
+     "atm",
+     "bank_11",
+     "government_office",
+     "town_hall_11",
+     "lodging",
+     "lodging_11",
+     "technical_service",
+     "marker_11",
+     "dental_clinic",
+     "dentist_11",
+     "educational_service",
+     "school_11",
+     "fast_food_restaurant",
+     "fast_food_11",
+     "pharmacy_and_drug_store",
+     "pharmacy_11",
+     "cafe",
+     "cafe_11",
+     "high_school",
+     "school_11",
+     "b2b_service",
+     "marker_11",
+     "public_transit_facility_or_service",
+     "bus_11",
+     "health_care",
+     "hospital_11",
+     "religious_organization",
+     "place_of_worship_11",
+     "park",
+     "park_11",
+     "social_or_community_service",
+     "marker_11",
+     "building_or_construction_service",
+     "marker_11",
+     "vehicle_dealer",
+     "car_11",
+     "tutoring_service",
+     "school_11",
+     "shopping_mall",
+     "shop_11",
+     "wellness_service",
+     "star_11",
+     "shipping_or_delivery_service",
+     "suitcase_11",
+     "preschool",
+     "school_11",
+     "media_service",
+     "marker_11",
+     "attorney_or_law_firm",
+     "marker_11",
+     "specialized_health_care",
+     "hospital_11",
+     "supplier_or_distributor",
+     "marker_11",
+     "elementary_school",
+     "school_11",
+     "sport_or_fitness_facility",
+     "pitch_11",
+     "b2b_office_and_professional_service",
+     "marker_11",
+     "muslim_place_of_worship",
+     "place_of_worship_11",
+     "printing_service",
+     "marker_11",
+     "vehicle_parts_store",
+     "car_11",
+     "christian_place_of_worship",
+     "place_of_worship_11",
+     "geographic_entities",
+     "mountain_11",
+     "police_station",
+     "police_11",
+     "books_music_and_video_store",
+     "shop_11",
+     "community_and_government",
+     "town_hall_11",
+     "sporting_goods_store",
+     "shop_11",
+     "train_station",
+     "railway_11",
+     "agricultural_service",
+     "marker_11",
+     "farm",
+     "marker_11",
+     "coffee_shop",
+     "cafe_11",
+     "warehouse_club_store",
+     "shop_11",
+     "civic_organization",
+     "town_hall_11",
+     "flowers_and_gifts_store",
+     "shop_11",
+     "bakery",
+     "bakery_11",
+     "bar",
+     "bar_11",
+     "supermarket",
+     "grocery_11",
+     "grocery",
+     "grocery_11",
+     "convenience_store",
+     "grocery_11",
+     "museum",
+     "museum_11",
+     "library",
+     "library_11",
+     "cinema",
+     "cinema_11",
+     "theater",
+     "theatre_11",
+     "zoo",
+     "zoo_11",
+     "stadium",
+     "stadium_11",
+     "airport",
+     "airport_11",
+     "bus_station",
+     "bus_11",
+     "marina",
+     "harbor_11",
+     "campsite",
+     "campsite_11",
+     "toilet",
+     "toilet_11",
+     "laundry",
+     "laundry_11",
+     "veterinary",
+     "veterinary_11",
+     "dentist",
+     "dentist_11",
+     "doctor",
+     "doctor_11",
+     "clinic",
+     "hospital_11",
+     "pharmacy",
+     "pharmacy_11",
+     "parking",
+     "marker_11",
+     "car_repair",
+     "car_11",
+     "fire_station",
+     "fire_station_11",
+     "post_office",
+     "post_11",
+     "attraction",
+     "attraction_11",
+     "playground",
+     "playground_11",
+     "garden",
+     "garden_11",
+     "ice_cream",
+     "ice_cream_11",
+     "pub",
+     "beer_11",
+     "ferry_terminal",
+     "ferry_terminal_11",
+     "taxi",
+     "car_11",
+     "heliport",
+     "heliport_11",
+     "circle_11"
+    ],
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     0.45,
+     16,
+     1.0
+    ],
+    "text-field": [
+     "to-string",
+     [
+      "get",
+      "name"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 10,
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.1
+    ],
+    "text-padding": 2,
+    "text-optional": true,
+    "icon-allow-overlap": false
+   },
+   "paint": {
+    "text-color": "#333",
+    "text-halo-color": "#fff",
+    "text-halo-width": 1
+   }
+  }
+ ]
+}

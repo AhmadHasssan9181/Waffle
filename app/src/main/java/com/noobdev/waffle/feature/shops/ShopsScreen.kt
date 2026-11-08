@@ -88,8 +88,8 @@ import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
- * "What is open near me right now" — shops, pharmacies, fuel and banks from OpenStreetMap with
- * freely licensed photos from Wikimedia Commons.
+ * "What is open near me right now" - shops, pharmacies, fuel and banks from the local
+ * OpenStreetMap/Overture index, with freely licensed photos from Wikimedia Commons.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -224,7 +224,7 @@ fun ShopsScreen(
 
             item {
                 Text(
-                        text = "Places © OpenStreetMap contributors · photos from Wikimedia Commons",
+                        text = "Places © OpenStreetMap contributors · © Overture Maps Foundation · photos from Wikimedia Commons",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = WaffleSpace.md)
@@ -286,7 +286,7 @@ private fun ShopsHeader(locationLabel: String, count: Int, onSettings: () -> Uni
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                    text = if (count > 0) "$locationLabel · $count places cached" else locationLabel,
+                    text = if (count > 0) "$locationLabel · $count places nearby" else locationLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )

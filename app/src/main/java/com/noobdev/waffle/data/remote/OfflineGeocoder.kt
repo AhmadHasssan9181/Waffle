@@ -23,12 +23,12 @@ import org.json.JSONArray
  */
 object OfflineGeocoder {
     private const val TAG = "OfflineGeocoder"
-    private const val PLACES_ASSET = "offline_places.tsv"
     private const val ROADS_ASSET = "offline_roads.json"
 
     private data class Entry(val result: GeoSearchResult, val name: String, val blob: String)
 
     private val entries = mutableListOf<Entry>()
+    private var appContext: Context? = null
     private val loadMutex = Mutex()
     private val _loaded = MutableStateFlow(false)
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
@@ -36,45 +36,15 @@ object OfflineGeocoder {
         get() = _loaded.value
 
     suspend fun load(context: Context) {
+        appContext = context.applicationContext
         if (isLoaded) return
         loadMutex.withLock {
             if (isLoaded) return
             withContext(Dispatchers.IO) {
                 if (isLoaded) return@withContext
                 try {
-                Log.d(TAG, "Loading offline places and roads...")
-                val loaded = ArrayList<Entry>(140_000)
-
-                runCatching {
-                            context.assets.open(PLACES_ASSET).bufferedReader().useLines { lines ->
-                                lines.forEach { line ->
-                                    if (line.isBlank()) return@forEach
-                                    val parts = line.split('\t', limit = 5)
-                                    if (parts.size < 4) return@forEach
-                                    val name = parts[0].trim()
-                                    if (name.isEmpty()) return@forEach
-                                    val lat = parts[2].toDoubleOrNull() ?: return@forEach
-                                    val lng = parts[3].toDoubleOrNull() ?: return@forEach
-                                    val result =
-                                            GeoSearchResult(
-                                                    name = name,
-                                                    address = parts[1],
-                                                    lat = lat,
-                                                    lng = lng,
-                                                    type =
-                                                            parts.getOrNull(4)?.ifBlank { null }
-                                                                    ?: "offline"
-                                            )
-                                    loaded.add(
-                                            Entry(
-                                                    result,
-                                                    name.lowercase(Locale.ROOT),
-                                                    blob(result)
-                                            )
-                                    )
-                                }
-                            }
-                        }
+                Log.d(TAG, "Loading offline roads; places come from the Overture FTS index...")
+                val loaded = ArrayList<Entry>(4_000)
 
                 runCatching {
                             context.assets.open(ROADS_ASSET).bufferedReader().use {
@@ -116,7 +86,12 @@ object OfflineGeocoder {
         }
     }
 
-    fun search(query: String, limit: Int = 15): List<GeoSearchResult> {
+    fun search(
+            query: String,
+            limit: Int = 15,
+            latitude: Double? = null,
+            longitude: Double? = null
+    ): List<GeoSearchResult> {
         val trimmed = query.trim()
         if (trimmed.isBlank() || !isLoaded) return emptyList()
 
@@ -164,10 +139,23 @@ object OfflineGeocoder {
                         }
                         .take(limit)
                         .map { it.second }
+        val fts =
+                appContext?.let {
+                    PlacesSearchDb.search(it, trimmed, limit, latitude, longitude)
+                } ?: emptyList()
+        val merged =
+                (fts + result)
+                        .distinctBy {
+                            "${it.name.lowercase()}|${it.lat}|${it.lng}"
+                        }
+                        .take(limit)
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "search='$queryNormalized' scored=${scored.size} returned=${result.size}")
+            Log.d(
+                    TAG,
+                    "search='$queryNormalized' scored=${scored.size} fts=${fts.size} returned=${merged.size}"
+            )
         }
-        return result
+        return merged
     }
 
     /**
@@ -181,50 +169,9 @@ object OfflineGeocoder {
             radiusMeters: Int,
             limit: Int = 160
     ): List<GeoSearchResult> {
-        if (!isLoaded) return emptyList()
-        val radius = radiusMeters.toDouble()
-        return entries
-                .asSequence()
-                .filter { it.result.type.lowercase(Locale.ROOT) in AMENITY_TYPES }
-                .mapNotNull { entry ->
-                    val result = entry.result
-                    val distance =
-                            haversineMeters(latitude, longitude, result.lat, result.lng)
-                    if (distance <= radius) distance to result else null
-                }
-                .sortedBy { it.first }
-                .take(limit)
-                .map { it.second }
-                .toList()
+        val context = appContext ?: return emptyList()
+        return PlacesSearchDb.nearby(context, latitude, longitude, radiusMeters, limit)
     }
-
-    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val earth = 6_371_000.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a =
-                kotlin.math.sin(dLat / 2).let { it * it } +
-                        kotlin.math.cos(Math.toRadians(lat1)) *
-                                kotlin.math.cos(Math.toRadians(lat2)) *
-                                kotlin.math.sin(dLon / 2).let { it * it }
-        return earth * 2 * kotlin.math.asin(kotlin.math.sqrt(a).coerceIn(0.0, 1.0))
-    }
-
-    private val AMENITY_TYPES =
-            setOf(
-                    "hospital", "clinic", "pharmacy", "doctors", "dentist",
-                    "fuel", "charging_station", "car_repair", "car_wash",
-                    "bank", "atm", "bureau_de_change",
-                    "restaurant", "cafe", "fast_food", "food_court", "bakery",
-                    "police", "fire_station", "post_office", "library",
-                    "marketplace", "supermarket", "convenience", "mall",
-                    "bus_station", "parking",
-                    "school", "college", "university",
-                    "place_of_worship", "community_centre",
-                    "hotel", "guest_house", "hostel",
-                    "hairdresser", "beauty", "laundry", "tailor",
-                    "shop"
-            )
 
     private fun blob(result: GeoSearchResult): String =
             buildString {

@@ -132,6 +132,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         val shopsViewModel: MapShopsViewModel = viewModel()
         val mapShops by shopsViewModel.shops.collectAsState()
         val selectedShop by shopsViewModel.selected.collectAsState()
+        // Search results open a Google-Maps-style place sheet before routing.
+        var selectedPlace by remember { mutableStateOf<GeoSearchResult?>(null) }
         var shopFilter by remember { mutableStateOf<ShopCategory?>(null) }
         val visibleShops =
                 remember(mapShops, shopFilter) {
@@ -928,6 +930,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 map.animateCamera(
                         CameraUpdateFactory.newLatLngBounds(bounds.build(), 180),
                         900
+                )
+        }
+
+        // A marker tap takes over from an open search-place sheet.
+        LaunchedEffect(selectedShop) {
+                if (selectedShop != null) selectedPlace = null
+        }
+
+        selectedPlace?.let { place ->
+                PlaceDetailSheet(
+                        place = place,
+                        onDismiss = { selectedPlace = null },
+                        onDirections = {
+                                selectedPlace = null
+                                planRouteTo(place)
+                        }
                 )
         }
 
@@ -2477,10 +2495,44 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 }
                                         if (shop != null) {
                                                 shopsViewModel.select(shop)
-                                                true
-                                        } else {
-                                                false
+                                                return@addOnMapClickListener true
                                         }
+
+                                        // Overture places from the local vector style.
+                                        val place =
+                                                map.queryRenderedFeatures(point, "places")
+                                                        .firstOrNull()
+                                        val placeName =
+                                                place?.properties()?.get("name")?.asString
+                                        if (!placeName.isNullOrBlank()) {
+                                                val props = place.properties()
+                                                val latLng = map.projection.fromScreenLocation(point)
+                                                val type =
+                                                        props?.get("bcat")?.asString
+                                                                ?: props?.get("cat")?.asString
+                                                                        ?: "place"
+                                                shopsViewModel.select(
+                                                        Shop(
+                                                                id = "overture:$placeName:${latLng.latitude}:${latLng.longitude}",
+                                                                name = placeName,
+                                                                category =
+                                                                        ShopCategory.fromOfflineType(type),
+                                                                lat = latLng.latitude,
+                                                                lon = latLng.longitude,
+                                                                address =
+                                                                        props?.get("addr")?.asString
+                                                                                ?.ifBlank { null },
+                                                                phone =
+                                                                        props?.get("phone")?.asString
+                                                                                ?.ifBlank { null },
+                                                                website =
+                                                                        props?.get("website")?.asString
+                                                                                ?.ifBlank { null }
+                                                        )
+                                                )
+                                                return@addOnMapClickListener true
+                                        }
+                                        false
                                 }
                                 // Long-press drops a pin that can be used as a destination.
                                 map.addOnMapLongClickListener { latLng ->
@@ -2734,7 +2786,21 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 searchQuery = ""
                                                 screenState = MapScreenState.ROUTE_PREVIEW
                                         } else {
-                                                planRouteTo(result)
+                                                // Google Maps opens the place first. The user
+                                                // chooses Directions from the action sheet.
+                                                selectedPlace = result
+                                                selectedDestination = result
+                                                droppedPin = null
+                                                searchQuery = result.name
+                                                screenState = MapScreenState.IDLE
+                                                shopsViewModel.clearSelection()
+                                                mapInstance?.animateCamera(
+                                                        CameraUpdateFactory.newLatLngZoom(
+                                                                LatLng(result.lat, result.lng),
+                                                                16.5
+                                                        ),
+                                                        500
+                                                )
                                         }
                                 }
                         )

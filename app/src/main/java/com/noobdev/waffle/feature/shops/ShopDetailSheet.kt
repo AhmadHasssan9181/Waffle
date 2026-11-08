@@ -301,7 +301,7 @@ fun ShopDetailSheet(
 
                 Spacer(Modifier.height(WaffleSpace.md))
                 Text(
-                        text = "Data © OpenStreetMap contributors",
+                        text = "Data © OpenStreetMap contributors · © Overture Maps Foundation",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )

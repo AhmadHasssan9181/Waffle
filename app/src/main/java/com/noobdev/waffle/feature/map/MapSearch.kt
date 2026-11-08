@@ -50,6 +50,7 @@ import com.noobdev.waffle.BuildConfig
 import com.noobdev.waffle.feature.flood.loadSectorData
 import com.noobdev.waffle.feature.flood.sectors
 import com.noobdev.waffle.data.remote.*
+import com.noobdev.waffle.data.remote.ManualPlacesStore
 import com.noobdev.waffle.core.navigation.CameraTransitionManager
 import com.noobdev.waffle.core.navigation.GeoGeometry
 import com.noobdev.waffle.core.navigation.GeoPoint
@@ -174,6 +175,9 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
         var suggestions by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
         var isLoading by remember { mutableStateOf(false) }
         var onlineAttempted by remember { mutableStateOf(false) }
+        var showAddPlace by remember { mutableStateOf(false) }
+        var manualName by remember(query) { mutableStateOf(query) }
+        var manualAddress by remember(query) { mutableStateOf("") }
 
         LaunchedEffect(Unit) { OfflineGeocoder.load(context) }
 
@@ -190,29 +194,35 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                         }
                         val offline =
                                 withContext(kotlinx.coroutines.Dispatchers.Default) {
-                                        OfflineGeocoder.search(query)
+                                        OfflineGeocoder.search(
+                                                query,
+                                                latitude =
+                                                        if (MapSessionState.hasLocation.value)
+                                                                MapSessionState.currentLat.value
+                                                        else null,
+                                                longitude =
+                                                        if (MapSessionState.hasLocation.value)
+                                                                MapSessionState.currentLng.value
+                                                        else null
+                                        )
                                 }
                         if (BuildConfig.DEBUG) {
                                 Log.d("MapSearch", "query='$query' offline=${offline.size}")
                         }
-                        // Show offline matches immediately; online results are merged in
-                        // when they arrive so a slow OpenCage/Nominatim call does not hide
-                        // perfectly good local results.
+                        // The local Overture index is now good enough to answer normal
+                        // searches. Show it immediately and only fall back to the slow
+                        // online geocoder when the local index has no match at all.
                         suggestions = offline
+                        isLoading = false
                         val onlineAvailable = NetworkState.isOnline(context)
-                        isLoading = offline.isEmpty() && onlineAvailable
-                        if (onlineAvailable) {
+                        if (offline.isEmpty() && onlineAvailable) {
                                 onlineAttempted = true
+                                isLoading = true
                                 val online =
                                         withTimeoutOrNull(12_000) {
                                                 searchLocationsOnline(query)
                                         } ?: emptyList()
-                                suggestions =
-                                        (offline + online).distinctBy { result ->
-                                                "${result.name.lowercase()}|" +
-                                                        "${"%.4f".format(result.lat)}|" +
-                                                        "%.4f".format(result.lng)
-                                        }
+                                suggestions = online
                         }
                         if (BuildConfig.DEBUG) {
                                 Log.d("MapSearch", "suggestions=${suggestions.size}")
@@ -271,11 +281,11 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                         } else if (suggestions.isEmpty() && query.isNotBlank()) {
-                                Box(
+                                Column(
                                         modifier =
                                                 Modifier.fillMaxWidth().padding(
                                                         horizontal = 16.dp,
-                                                        vertical = 24.dp
+                                                        vertical = 20.dp
                                                 )
                                 ) {
                                         Text(
@@ -285,6 +295,15 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 style = MaterialTheme.typography.bodyMedium
                                         )
+                                        TextButton(onClick = { showAddPlace = true }) {
+                                                Icon(
+                                                        Icons.Default.AddLocationAlt,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Add this place")
+                                        }
                                 }
                         }
 
@@ -348,6 +367,75 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                 }
                         }
                 }
+        }
+
+        if (showAddPlace) {
+                AlertDialog(
+                        onDismissRequest = { showAddPlace = false },
+                        title = { Text("Add missing place") },
+                        text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedTextField(
+                                                value = manualName,
+                                                onValueChange = { manualName = it },
+                                                label = { Text("Name") },
+                                                singleLine = true
+                                        )
+                                        OutlinedTextField(
+                                                value = manualAddress,
+                                                onValueChange = { manualAddress = it },
+                                                label = { Text("Address / area") },
+                                                singleLine = true
+                                        )
+                                        Text(
+                                                "Saved at your current/last known location and kept locally.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                }
+                        },
+                        confirmButton = {
+                                TextButton(
+                                        enabled = manualName.isNotBlank(),
+                                        onClick = {
+                                                val lat = MapSessionState.currentLat.value
+                                                val lng = MapSessionState.currentLng.value
+                                                ManualPlacesStore.add(
+                                                        context,
+                                                        ManualPlacesStore.ManualPlace(
+                                                                name = manualName.trim(),
+                                                                address =
+                                                                        manualAddress.trim()
+                                                                                .ifBlank {
+                                                                                    "User added"
+                                                                                },
+                                                                lat = lat,
+                                                                lng = lng
+                                                        )
+                                                )
+                                                suggestions =
+                                                        listOf(
+                                                                GeoSearchResult(
+                                                                        name = manualName.trim(),
+                                                                        address =
+                                                                                manualAddress
+                                                                                        .trim()
+                                                                                        .ifBlank {
+                                                                                            "User added"
+                                                                                        },
+                                                                        lat = lat,
+                                                                        lng = lng,
+                                                                        type = "place"
+                                                                )
+                                                        ) + suggestions
+                                                showAddPlace = false
+                                        }
+                                ) { Text("Save") }
+                        },
+                        dismissButton = {
+                                TextButton(onClick = { showAddPlace = false }) { Text("Cancel") }
+                        }
+                )
         }
 }
 

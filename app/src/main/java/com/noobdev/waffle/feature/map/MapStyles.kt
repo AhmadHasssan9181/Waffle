@@ -3,6 +3,9 @@ package com.noobdev.waffle.feature.map
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.Network
+import android.util.Log
 import java.io.File
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,6 +60,19 @@ val mapTilerStyles = mapOf(
     "Topo" to "https://api.maptiler.com/maps/topo/style.json?key=$apikey"
 )
 
+/**
+ * Keyless global vector basemaps used while online. They carry full labels and do not hit the
+ * MapTiler quota that was producing HTTP 429s on this device. The downloaded Pakistan PMTiles
+ * pack remains the offline basemap.
+ */
+val openFreeMapStyles = mapOf(
+    "Basic" to "https://tiles.openfreemap.org/styles/positron",
+    "Streets" to "https://tiles.openfreemap.org/styles/liberty",
+    "Outdoor" to "https://tiles.openfreemap.org/styles/bright",
+    "Bright" to "https://tiles.openfreemap.org/styles/bright",
+    "Dark" to "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+)
+
 /** Index for a named style, or Streets when the name is unknown. */
 fun styleIndexFor(name: String): Int = mapTilerStyles.keys.indexOf(name).takeIf { it >= 0 } ?: 1
 
@@ -80,7 +96,8 @@ object MapStyleResolver {
         val requestedName =
                 mapTilerStyles.keys.elementAtOrNull(index) ?: OFFLINE_STYLE_NAME
         if (NetworkState.isOnline(context)) {
-            return mapTilerStyles.getValue(requestedName)
+            return openFreeMapStyles[requestedName]
+                    ?: mapTilerStyles.getValue(requestedName)
         }
 
         // Offline: use the requested style if that layer was downloaded, otherwise the first
@@ -104,25 +121,138 @@ object MapStyleResolver {
      * MapTiler download. It is intentionally label-free: fonts and sprites stay optional, while
      * Waffle's own pins, route and labels remain on top.
      */
+    /**
+     * The new Pakistan vector stack: OpenMapTiles basemap + Overture places, with all labels and
+     * POIs. It is kept in app external storage because the two PMTiles archives are ~500 MB.
+     */
+    fun localVectorStyle(context: Context, styleIndex: Int): String? {
+        val dirs = listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
+        fun first(name: String): File? = dirs.map { File(it, name) }.firstOrNull { it.isFile }
+
+        val vector = first("pakistan_vector.pmtiles") ?: return null
+        val places = first("pakistan_places.pmtiles") ?: return null
+        val fontRoot = dirs.map { File(it, "fonts") }.firstOrNull { it.isDirectory } ?: return null
+        val spriteRoot =
+                dirs.map { File(it, "style") }
+                        .firstOrNull { File(it, "sprite.json").isFile }
+                        ?: return null
+
+        val requestedName = mapTilerStyles.keys.elementAtOrNull(styleIndex) ?: OFFLINE_STYLE_NAME
+        val theme =
+                when (requestedName) {
+                    "Dark" -> "dark"
+                    "Outdoor" -> "field"
+                    else -> "light"
+                }
+        val styleAsset = "vector_styles/style_${theme}_both.json"
+        val template =
+                runCatching {
+                            context.assets.open(styleAsset).bufferedReader().use { it.readText() }
+                        }
+                        .getOrNull()
+                        ?: return null
+        return template
+                .replace(
+                        "pmtiles://pakistan_vector.pmtiles",
+                        "pmtiles://file://${vector.absolutePath}"
+                )
+                .replace(
+                        "pmtiles://pakistan_places.pmtiles",
+                        "pmtiles://file://${places.absolutePath}"
+                )
+                .replace(
+                        "assets/fonts/{fontstack}/{range}.pbf",
+                        "file://${fontRoot.absolutePath}/{fontstack}/{range}.pbf"
+                )
+                .replace(
+                        "assets/sprite/sprite",
+                        "file://${spriteRoot.absolutePath}/sprite"
+                )
+    }
+
     fun localPmtilesStyle(context: Context): String? {
+        val dirs = listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
+        val protomapsFile =
+                dirs.map { File(it, "pakistan_protomaps.pmtiles") }
+                        .firstOrNull { it.isFile }
         val file =
-                listOfNotNull(
-                                context.getExternalFilesDir(null),
-                                context.filesDir
-                        )
-                        .flatMap { dir ->
+                (if (protomapsFile != null) listOf(protomapsFile) else emptyList()) +
+                        dirs.flatMap { dir ->
                             listOf(
                                     File(dir, "pakistan.pmtiles"),
                                     File(dir, "rawalpindi.pmtiles")
                             )
-                        }
-                        .firstOrNull { it.isFile }
-                        ?: return null
-        val url = "pmtiles://file://${file.absolutePath}"
+                        }.filter { it.isFile }
+        val chosen = file.firstOrNull() ?: return null
+        val url = "pmtiles://file://${chosen.absolutePath}"
+        val fontRoot =
+                listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
+                        .map { File(it, "fonts") }
+                        .firstOrNull { it.isDirectory }
+        val spriteRoot =
+                listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
+                        .map { File(it, "style") }
+                        .firstOrNull { File(it, "sprite.json").isFile }
+        if (protomapsFile != null && fontRoot != null) {
+            runCatching {
+                        val template =
+                                context.assets
+                                        .open("protomaps_style.json")
+                                        .bufferedReader()
+                                        .use { it.readText() }
+                        return template
+                                .replace("__PMTILES__", url)
+                                .replace(
+                                        "__GLYPHS__",
+                                        "file://${fontRoot.absolutePath}/{fontstack}/{range}.pbf"
+                                )
+                    }
+                    .onFailure { Log.w("MapStyles", "Could not load Protomaps style", it) }
+        }
+        if (fontRoot != null && spriteRoot != null) {
+            runCatching {
+                        val template =
+                                context.assets
+                                        .open("pakistan_style.json")
+                                        .bufferedReader()
+                                        .use { it.readText() }
+                        return template
+                                .replace("__PMTILES__", url)
+                                .replace(
+                                        "__GLYPHS__",
+                                        "file://${fontRoot.absolutePath}/{fontstack}/{range}.pbf"
+                                )
+                                .replace(
+                                        "__SPRITE__",
+                                        "file://${spriteRoot.absolutePath}/sprite"
+                                )
+                    }
+                    .onFailure { Log.w("MapStyles", "Could not load full Pakistan style", it) }
+        }
+        val glyphs =
+                fontRoot?.let {
+                    "\"glyphs\": \"file://${it.absolutePath}/{fontstack}/{range}.pbf\","
+                } ?: ""
+        val labels =
+                if (fontRoot != null) {
+                    """
+                    ,
+                    {"id":"place-labels","type":"symbol","source":"base","source-layer":"place","minzoom":7,
+                     "layout":{"text-field":["coalesce",["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],"text-size":["interpolate",["linear"],["zoom"],7,10,14,16],"text-anchor":"center"},
+                     "paint":{"text-color":"#E2E8F0","text-halo-color":"#0B1220","text-halo-width":1.4}},
+                    {"id":"road-labels","type":"symbol","source":"base","source-layer":"transportation_name","minzoom":12,
+                     "layout":{"text-field":["coalesce",["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],"text-size":["interpolate",["linear"],["zoom"],12,9,15,12],"symbol-placement":"line","text-rotation-alignment":"map"},
+                     "paint":{"text-color":"#94A3B8","text-halo-color":"#0B1220","text-halo-width":1.2}},
+                    {"id":"water-labels","type":"symbol","source":"base","source-layer":"water_name","minzoom":10,
+                     "layout":{"text-field":["coalesce",["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],"text-size":11,"text-anchor":"center"},
+                     "paint":{"text-color":"#67E8F9","text-halo-color":"#0B1220","text-halo-width":1.2}}
+                    """.trimIndent()
+                } else ""
         return """
         {
           "version": 8,
           "name": "Waffle Pakistan offline",
+          $glyphs
           "sources": {
             "base": {
               "type": "vector",
@@ -141,6 +271,7 @@ object MapStyleResolver {
             {"id":"road-casing","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#080D17","line-width":["interpolate",["linear"],["zoom"],8,1,14,9]}},
             {"id":"road","type":"line","source":"base","source-layer":"transportation","paint":{"line-color":"#64748B","line-width":["interpolate",["linear"],["zoom"],8,0.5,14,5]}},
             {"id":"boundary","type":"line","source":"base","source-layer":"boundary","paint":{"line-color":"#F59E0B","line-opacity":0.28,"line-width":1}}
+            $labels
           ]
         }
         """.trimIndent()
@@ -151,6 +282,16 @@ object MapStyleResolver {
      * example MapTiler returns HTTP 429 for this network). Prefer the region containing the
      * current fix, otherwise the first complete pack, so a blank basemap can recover.
      */
+    fun offlineRegionContaining(
+            latitude: Double,
+            longitude: Double
+    ): com.noobdev.waffle.feature.offline.InstalledOfflineRegion? =
+            com.noobdev.waffle.feature.offline.OfflineMapManager.installedRegionFor(
+                            latitude,
+                            longitude
+                    )
+                    ?.takeIf { !it.styleUrl.isNullOrBlank() }
+
     fun cachedOfflineRegion(
             latitude: Double?,
             longitude: Double?
@@ -218,6 +359,30 @@ fun LocationAwareMap(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    var online by remember { mutableStateOf(NetworkState.isOnline(context)) }
+    DisposableEffect(context) {
+        val manager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val callback =
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        online = NetworkState.isOnline(context)
+                    }
+
+                    override fun onLost(network: Network) {
+                        online = NetworkState.isOnline(context)
+                    }
+
+                    override fun onCapabilitiesChanged(
+                            network: Network,
+                            networkCapabilities: android.net.NetworkCapabilities
+                    ) {
+                        online = NetworkState.isOnline(context)
+                    }
+                }
+        runCatching { manager?.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var mapboxMap by remember { mutableStateOf<org.maplibre.android.maps.MapLibreMap?>(null) }
     MapLibre.getInstance(context)
@@ -227,11 +392,46 @@ fun LocationAwareMap(
     )
     val permissionState = rememberMultiplePermissionsState(locationPermissions)
     val hasLocationPermission = permissionState.allPermissionsGranted
-    val styleUrl = remember(currentStyleIndex) { MapStyleResolver.resolve(context, currentStyleIndex) }
+    val styleUrl =
+            remember(currentStyleIndex, online) {
+                MapStyleResolver.resolve(context, currentStyleIndex)
+            }
+    val localVector =
+            remember(currentStyleIndex) {
+                MapStyleResolver.localVectorStyle(context, currentStyleIndex)
+            }
+    val inPakistan =
+            MapSessionState.currentLat.value in 23.3..37.2 &&
+                    MapSessionState.currentLng.value in 60.8..77.3
+    val useLocalVector = localVector != null && (!online || inPakistan)
     val localPmtiles = remember(currentStyleIndex) { MapStyleResolver.localPmtilesStyle(context) }
-    val useLocalPmtiles = localPmtiles != null && !NetworkState.isOnline(context)
+    val mapTilerOffline =
+            remember(online, MapSessionState.hasLocation.value, MapSessionState.currentLat.value,
+                    MapSessionState.currentLng.value) {
+                if (!online && MapSessionState.hasLocation.value) {
+                    MapStyleResolver.offlineRegionContaining(
+                            MapSessionState.currentLat.value,
+                            MapSessionState.currentLng.value
+                    )
+                } else null
+            }
+    val useLocalPmtiles =
+            localPmtiles != null && !online && !useLocalVector && mapTilerOffline == null
     fun applyStyle(map: MapLibreMap, onLoaded: (org.maplibre.android.maps.Style) -> Unit) {
-        if (useLocalPmtiles) {
+        if (useLocalVector) {
+            map.setStyle(
+                    org.maplibre.android.maps.Style.Builder().fromJson(localVector!!),
+                    onLoaded
+            )
+            return
+        }
+        val cachedStyle = mapTilerOffline?.styleUrl
+        if (!online && cachedStyle != null) {
+            // Prefer the MapTiler offline pack that the user already downloaded. It has the
+            // provider's labels, sprites and styling, and covers the local area better than the
+            // older Pakistan PMTiles archive.
+            map.setStyle(cachedStyle, onLoaded)
+        } else if (useLocalPmtiles) {
             map.setStyle(
                     org.maplibre.android.maps.Style.Builder().fromJson(localPmtiles!!),
                     onLoaded
@@ -246,7 +446,7 @@ fun LocationAwareMap(
         }
     }
 
-    LaunchedEffect(styleUrl, localPmtiles) {
+    LaunchedEffect(styleUrl, localVector, localPmtiles, online, mapTilerOffline, useLocalVector) {
         mapboxMap?.let { map ->
             applyStyle(map) { style ->
                 if (hasLocationPermission) {
