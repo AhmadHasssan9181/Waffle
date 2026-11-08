@@ -12,7 +12,7 @@ The map tab. This is the most stateful screen in the app.
 | `MapLayersSheet.kt` | Legacy layer/style sheet; map style now lives in Settings, kept for a future map menu. |
 | `MapGeometry.kt` | Route GeoJSON source updates, vanishing-trail trim, and distance-to-next-turn helpers. |
 | `MapStyles.kt` | MapTiler style URLs, `MapStyleResolver` (falls back to an installed offline layer), and `LocationAwareMap` (the AndroidView that owns the `MapView` lifecycle, travel-mode puck). |
-| `Puck3D.kt` | 3D navigation puck: top-down sedan/SUV/pickup, bike and walker sprites, plus the arrow choice, rotated as a SymbolLayer. |
+| `Puck3D.kt` | 3D navigation puck: sedan/SUV/pickup, cyclist and pedestrian models plus the arrow choice, rotated as a SymbolLayer. |
 | `VehicleIcon.kt` | Vehicle-icon choices and their drawable resources. |
 | `VehicleIconPicker.kt` | Shared "Choose vehicle icon" sheet content, used by Settings and the map's car button. |
 | `ParentMap.kt` | Simpler embedded map used by other screens. |
@@ -50,7 +50,7 @@ The map tab. This is the most stateful screen in the app.
   the full upcoming-steps sheet. The speed bubble can be tapped to switch km/h ↔ mph (persisted);
   the speed-limit sign reads OSM `maxspeed` from the bundled graph. Voice guidance speaks instruction
   changes, reroutes, wrong-way and stop-reached notices (mute button in the banner). The location
-  puck is a 3D low-poly car (sedan/SUV/pickup), arrow, or bike/walk badge (`Puck3D`), rotated by the
+  puck is a 3D car (sedan/SUV/pickup), arrow, or 3D cyclist/pedestrian (`Puck3D`), rotated by the
   live bearing. Settings → Appearance → **Vehicle icon** opens the same chooser sheet as Google Maps;
   the bottom-left car button opens it directly from the map. The map keeps only the car button, a
   north/reset compass, the recenter control and SOS; zoom is pinch-only and the native compass and

@@ -1,31 +1,32 @@
-Kenney Car Kit
-https://kenney.nl/assets/car-kit
+Waffle 3D navigation models
+==========================
 
-License: Creative Commons Zero (CC0 1.0)
-https://creativecommons.org/publicdomain/zero/1.0/
+Everything in this folder is an original Waffle asset. It is generated procedurally by
+`tools/cars/generate_models.py`, which builds the meshes, writes the shared palette atlas and
+exports self-contained glTF 2.0 binary files.
 
-Models used by Waffle:
-- sedan-sports.glb
-- suv-luxury.glb
-- truck-flat.glb
-- colormap.png
+Files
+-----
+- sedan-sports.glb   — sports sedan
+- suv-luxury.glb     — luxury SUV
+- truck-flat.glb     — crew-cab pickup
+- motorcycle.glb     — sportbike with a 3D rider
+- bicycle.glb        — bicycle with a 3D cyclist
+- walker.glb         — pedestrian in a static pose (frame 0 of the walk cycle)
+- colormap.png       — shared 512x512 material palette atlas used by every model
+- LICENSE.txt        — this notice
 
-Motorcycle
-https://www.get3dmodels.com/vehicles/motorcycle-2/
-Author: Quaternius
-License: Public domain / CC0 1.0
-- motorcycle.glb (texture embedded)
+Regenerate everything (models, walk frames and puck sprites) with:
 
-Bicycle
-https://poly.pizza/m/19VoUuA2pcN
-Author: Poly by Google
-License: Creative Commons Attribution 3.0 (CC BY 3.0)
-https://creativecommons.org/licenses/by/3.0/
-- bicycle.glb (texture embedded)
+    python tools/cars/generate_models.py
 
-Hoodie pedestrian
-Original Waffle asset, made for this project.
-- 12-frame walk cycle in assets/walker/ (baked from the animated GLB)
+Licence
+-------
+These models are original artwork made for this repository and are covered by the
+Waffle Personal Use License (see the repository LICENSE file). No third-party model
+licence applies.
 
-Credit is not required for the CC0 models, but the sources are credited here.
-The bicycle is used under CC BY 3.0 and is credited above.
+Earlier builds of Waffle bundled the Kenney Car Kit (CC0 1.0), a Quaternius motorcycle (CC0)
+and a Poly by Google bicycle (CC BY 3.0). Those files have been replaced by the generated
+models above, so their notices no longer apply to the current assets. The credit is kept in
+ATTRIBUTIONS.md for history.

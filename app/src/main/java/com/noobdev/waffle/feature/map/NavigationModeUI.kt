@@ -242,10 +242,13 @@ fun NavigationModeUI(
                 val stepsSheetState =
                         rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+                val isOverSpeedLimit =
+                        speedLimitKmh != null && speedMps * 3.6f > speedLimitKmh + 2f
                 if (!isInPip) {
                         NavigationSpeedBadge(
                                 speedMps = speedMps,
                                 unit = speedUnit,
+                                isOverLimit = isOverSpeedLimit,
                                 onClick = onToggleSpeedUnit,
                                 modifier =
                                         Modifier.align(Alignment.BottomStart)
@@ -264,12 +267,19 @@ fun NavigationModeUI(
 
                 // Top instruction bar (the full card is hidden in the tiny PiP window).
                 if (!isInPip) {
+                val nextStep = routeResult.steps.getOrNull(currentIndex + 1)
                 Card(
                         modifier =
                                 Modifier.fillMaxWidth()
                                         .statusBarsPadding()
-                                        .padding(start = 12.dp, end = 12.dp, top = 4.dp),
-                        shape = RoundedCornerShape(20.dp),
+                                        .padding(start = 12.dp, end = 12.dp, top = 6.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        border =
+                                BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
                         colors =
                                 CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surface
@@ -278,8 +288,8 @@ fun NavigationModeUI(
                         Column(
                                 modifier =
                                         Modifier.padding(
-                                                horizontal = if (isInPip) 8.dp else 12.dp,
-                                                vertical = if (isInPip) 6.dp else 8.dp
+                                                horizontal = 14.dp,
+                                                vertical = 12.dp
                                         )
                         ) {
                                 AnimatedVisibility(
@@ -322,15 +332,14 @@ fun NavigationModeUI(
                                         verticalAlignment = Alignment.CenterVertically
                                 ) {
                                         Box(
-                                                Modifier.size(
-                                                                if (isInPip) 32.dp
-                                                                else if (approaching) 52.dp
-                                                                else 44.dp
-                                                        )
-                                                        .clip(CircleShape)
+                                                Modifier.size(if (approaching) 54.dp else 48.dp)
+                                                        .clip(RoundedCornerShape(16.dp))
                                                         .background(
-                                                                MaterialTheme.colorScheme.primary
-                                                                        .copy(alpha = 0.14f)
+                                                                if (approaching)
+                                                                        MaterialTheme.colorScheme.primary
+                                                                else
+                                                                        MaterialTheme.colorScheme.primary
+                                                                                .copy(alpha = 0.14f)
                                                         ),
                                                 contentAlignment = Alignment.Center
                                         ) {
@@ -345,51 +354,38 @@ fun NavigationModeUI(
                                                                                 ?.maneuver
                                                                 ),
                                                         contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        tint =
+                                                                if (approaching)
+                                                                        MaterialTheme.colorScheme.onPrimary
+                                                                else
+                                                                        MaterialTheme.colorScheme.primary,
                                                         modifier =
                                                                 Modifier.size(
-                                                                        if (isInPip) 20.dp
-                                                                        else if (approaching) 32.dp
-                                                                        else 26.dp
+                                                                        if (approaching) 32.dp
+                                                                        else 28.dp
                                                                 )
                                                 )
                                         }
-                                        Spacer(Modifier.width(if (isInPip) 6.dp else 10.dp))
+                                        Spacer(Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
+                                                if (distanceToNextTurn > 0.0) {
+                                                        Text(
+                                                                formatDistance(distanceToNextTurn),
+                                                                style = MaterialTheme.typography.titleLarge,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                fontWeight = FontWeight.ExtraBold
+                                                        )
+                                                }
                                                 Text(
                                                         currentInstruction.ifEmpty {
                                                                 "Continue straight"
                                                         },
-                                                        style =
-                                                                if (isInPip)
-                                                                        MaterialTheme.typography
-                                                                                .bodyMedium
-                                                                else
-                                                                        MaterialTheme.typography
-                                                                                .titleMedium,
+                                                        style = MaterialTheme.typography.titleMedium,
                                                         color = MaterialTheme.colorScheme.onSurface,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis
                                                 )
-                                                if (distanceToNextTurn > 0.0) {
-                                                        Text(
-                                                                "In ${formatDistance(distanceToNextTurn)}",
-                                                                style =
-                                                                        if (isInPip)
-                                                                                MaterialTheme
-                                                                                        .typography
-                                                                                        .labelSmall
-                                                                        else
-                                                                                MaterialTheme
-                                                                                        .typography
-                                                                                        .labelSmall,
-                                                                color =
-                                                                        MaterialTheme.colorScheme
-                                                                                .primary,
-                                                                fontWeight = FontWeight.SemiBold
-                                                        )
-                                                }
                                                 laneHint?.let { hint ->
                                                         Spacer(Modifier.height(4.dp))
                                                         LaneHintRow(hint)
@@ -430,6 +426,50 @@ fun NavigationModeUI(
                                                                                 .onSurfaceVariant
                                                         )
                                                 }
+                                        }
+                                }
+
+                                if (nextStep != null && distanceToNextTurn in 1.0..350.0) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(
+                                                modifier =
+                                                        Modifier.clip(RoundedCornerShape(10.dp))
+                                                                .background(
+                                                                        MaterialTheme.colorScheme
+                                                                                .surfaceVariant
+                                                                                .copy(alpha = 0.6f)
+                                                                )
+                                                                .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 5.dp
+                                                                ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                                Text(
+                                                        "Then",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                                Icon(
+                                                        imageVector =
+                                                                getDirectionIcon(
+                                                                        nextStep.instruction,
+                                                                        nextStep.maneuver
+                                                                ),
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(Modifier.width(5.dp))
+                                                Text(
+                                                        nextStep.instruction,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
                                         }
                                 }
 
@@ -532,69 +572,149 @@ fun NavigationModeUI(
                 }
 
                 if (isInPip) {
+                        val totalDist = routeResult.distanceMeters.coerceAtLeast(1.0)
+                        val pipProgress =
+                                (1.0 - (remainingDistance.coerceIn(0.0, totalDist) / totalDist))
+                                        .toFloat()
+                                        .coerceIn(0.02f, 1f)
                         PipNavigationBar(
                                 instruction = currentInstruction,
                                 distanceToNextTurn = distanceToNextTurn,
+                                remainingDistance = remainingDistance,
                                 remainingDuration = remainingDuration,
+                                tripProgress = pipProgress,
                                 maneuver = routeResult.steps.getOrNull(currentIndex)?.maneuver,
+                                nextStep = routeResult.steps.getOrNull(currentIndex + 1),
                                 modifier = Modifier.align(Alignment.BottomCenter)
                         )
                 }
 
                 // Bottom bar
                 if (!isInPip) {
+                val totalDistance = routeResult.distanceMeters.coerceAtLeast(1.0)
+                val tripProgress =
+                        (1.0 - (remainingDistance.coerceIn(0.0, totalDistance) / totalDistance))
+                                .toFloat()
+                                .coerceIn(0.02f, 1f)
+                val etaText =
+                        remember(remainingDuration.roundToInt() / 30) {
+                                val etaMillis =
+                                        System.currentTimeMillis() +
+                                                (remainingDuration.coerceAtLeast(0.0) * 1000.0)
+                                                        .toLong()
+                                java.text.SimpleDateFormat("h:mm a", Locale.getDefault())
+                                        .format(java.util.Date(etaMillis))
+                        }
                 Card(
                         modifier =
                                 Modifier.fillMaxWidth()
                                         .align(Alignment.BottomCenter)
                                         .navigationBarsPadding(),
-                        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                        border =
+                                BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                         colors =
                                 CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surface
                                 )
                 ) {
-                        Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                        ) {
-                                Column {
-                                        Text(
-                                                formatDuration(
-                                                        remainingDuration.coerceAtLeast(0.0)
-                                                ),
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                                if (remainingDistance <= 0.0) "Arrived"
-                                                else
-                                                        "${formatDistance(remainingDistance)} remaining",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                }
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        // Next step button
-                                        FilledTonalButton(
-                                                onClick = onNext,
-                                                enabled = currentIndex < totalInstructions - 1
-                                        ) { Text("Next") }
-
-                                        // Exit navigation
-                                        FilledTonalButton(
-                                                onClick = onExit,
-                                                colors =
-                                                        ButtonDefaults.filledTonalButtonColors(
-                                                                containerColor =
-                                                                        DangerRed.copy(
-                                                                                alpha = 0.1f
-                                                                        ),
-                                                                contentColor = DangerRed
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                                LinearProgressIndicator(
+                                        progress = { tripProgress },
+                                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor =
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                )
+                                Row(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                        Column {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                                formatDuration(
+                                                                        remainingDuration
+                                                                                .coerceAtLeast(0.0)
+                                                                ),
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .titleLarge,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = SafeGreen
                                                         )
-                                        ) { Text("Exit") }
+                                                        Spacer(Modifier.width(8.dp))
+                                                        Surface(
+                                                                shape = RoundedCornerShape(50),
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .surfaceVariant
+                                                        ) {
+                                                                Text(
+                                                                        "ETA $etaText",
+                                                                        modifier =
+                                                                                Modifier.padding(
+                                                                                        horizontal =
+                                                                                                8.dp,
+                                                                                        vertical =
+                                                                                                3.dp
+                                                                                ),
+                                                                        style =
+                                                                                MaterialTheme
+                                                                                        .typography
+                                                                                        .labelSmall,
+                                                                        fontWeight =
+                                                                                FontWeight.SemiBold,
+                                                                        color =
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .onSurfaceVariant
+                                                                )
+                                                        }
+                                                }
+                                                Spacer(Modifier.height(2.dp))
+                                                Text(
+                                                        if (remainingDistance <= 0.0) "Arrived"
+                                                        else
+                                                                "${formatDistance(remainingDistance)} remaining",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color =
+                                                                MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant
+                                                )
+                                        }
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                // Next step button
+                                                FilledTonalButton(
+                                                        onClick = onNext,
+                                                        enabled =
+                                                                currentIndex <
+                                                                        totalInstructions - 1
+                                                ) { Text("Next") }
+
+                                                // Exit navigation
+                                                FilledTonalButton(
+                                                        onClick = onExit,
+                                                        colors =
+                                                                ButtonDefaults
+                                                                        .filledTonalButtonColors(
+                                                                                containerColor =
+                                                                                        DangerRed
+                                                                                                .copy(
+                                                                                                        alpha =
+                                                                                                                0.12f
+                                                                                                ),
+                                                                                contentColor =
+                                                                                        DangerRed
+                                                                        )
+                                                ) { Text("Exit") }
+                                        }
                                 }
                         }
                 }
@@ -727,15 +847,42 @@ fun NavigationModeUI(
                         }
                 }
                 if (isInPip) {
-                        Text(
-                                text = "© MapTiler / OSM",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
+                        val displaySpeed =
+                                if (speedUnit == SpeedUnit.KMH) speedMps.coerceAtLeast(0f) * 3.6f
+                                else speedMps.coerceAtLeast(0f) * 2.23694f
+                        val unitLabel = if (speedUnit == SpeedUnit.KMH) "km/h" else "mph"
+                        Surface(
                                 modifier =
                                         Modifier.align(Alignment.TopStart)
-                                                .padding(start = 4.dp, top = 4.dp, end = 44.dp)
-                        )
+                                                .padding(start = 6.dp, top = 6.dp),
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                border =
+                                        BorderStroke(
+                                                if (isOverSpeedLimit) 1.5.dp else 1.dp,
+                                                if (isOverSpeedLimit) DangerRed
+                                                else
+                                                        MaterialTheme.colorScheme.outline.copy(
+                                                                alpha = 0.35f
+                                                        )
+                                        ),
+                                shadowElevation = 3.dp
+                        ) {
+                                Text(
+                                        text = "${displaySpeed.roundToInt()} $unitLabel",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color =
+                                                if (isOverSpeedLimit) DangerRed
+                                                else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        modifier =
+                                                Modifier.padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 3.dp
+                                                )
+                                )
+                        }
                 }
         }
 }
@@ -745,6 +892,7 @@ fun NavigationModeUI(
 private fun NavigationSpeedBadge(
         speedMps: Float,
         unit: SpeedUnit,
+        isOverLimit: Boolean = false,
         onClick: () -> Unit,
         modifier: Modifier = Modifier
 ) {
@@ -752,15 +900,16 @@ private fun NavigationSpeedBadge(
                 if (unit == SpeedUnit.KMH) speedMps.coerceAtLeast(0f) * 3.6f
                 else speedMps.coerceAtLeast(0f) * 2.23694f
         Surface(
-                modifier = modifier.size(58.dp).clickable { onClick() },
+                modifier = modifier.size(60.dp).clickable { onClick() },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                 border =
                         BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                                if (isOverLimit) 2.5.dp else 1.dp,
+                                if (isOverLimit) DangerRed
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
                         ),
-                shadowElevation = 4.dp
+                shadowElevation = 5.dp
         ) {
                 Column(
                         modifier = Modifier.fillMaxSize(),
@@ -771,12 +920,16 @@ private fun NavigationSpeedBadge(
                                 "${displaySpeed.roundToInt()}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color =
+                                        if (isOverLimit) DangerRed
+                                        else MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                                 if (unit == SpeedUnit.KMH) "km/h" else "mph",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color =
+                                        if (isOverLimit) DangerRed.copy(alpha = 0.85f)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                 }
         }
@@ -814,79 +967,147 @@ private fun SpeedLimitBadge(
 private fun PipNavigationBar(
         instruction: String,
         distanceToNextTurn: Double,
+        remainingDistance: Double,
         remainingDuration: Double,
+        tripProgress: Float,
         maneuver: ManeuverType?,
+        nextStep: NavigationStep? = null,
         modifier: Modifier = Modifier
 ) {
+        val approaching = distanceToNextTurn in 1.0..180.0
+        val etaText =
+                remember(remainingDuration.roundToInt() / 30) {
+                        val etaMillis =
+                                System.currentTimeMillis() +
+                                        (remainingDuration.coerceAtLeast(0.0) * 1000.0).toLong()
+                        java.text.SimpleDateFormat("h:mm a", Locale.getDefault())
+                                .format(java.util.Date(etaMillis))
+                }
         Surface(
                 modifier = modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                 shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                border =
+                        BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        ),
                 tonalElevation = 6.dp
         ) {
-                Row(
-                        modifier =
-                                Modifier.fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                ) {
-                        Box(
-                                Modifier.size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                                MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.16f
-                                                )
-                                        ),
-                                contentAlignment = Alignment.Center
+                Column(modifier = Modifier.fillMaxWidth()) {
+                        LinearProgressIndicator(
+                                progress = { tripProgress },
+                                modifier = Modifier.fillMaxWidth().height(2.5.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor =
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        )
+                        Row(
+                                modifier =
+                                        Modifier.fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
                         ) {
-                                Icon(
-                                        imageVector =
-                                                getDirectionIcon(instruction, maneuver),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(22.dp)
-                                )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                        instruction.ifEmpty { "Continue straight" },
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                )
-                                val minutes =
-                                        (remainingDuration / 60.0)
-                                                .roundToInt()
-                                                .coerceAtLeast(1)
-                                val eta =
-                                        if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m"
-                                        else "${minutes}m"
-                                val detail =
-                                        buildString {
+                                Box(
+                                        Modifier.size(38.dp)
+                                                .clip(RoundedCornerShape(11.dp))
+                                                .background(
+                                                        if (approaching)
+                                                                MaterialTheme.colorScheme.primary
+                                                        else
+                                                                MaterialTheme.colorScheme.primary
+                                                                        .copy(alpha = 0.16f)
+                                                ),
+                                        contentAlignment = Alignment.Center
+                                ) {
+                                        Icon(
+                                                imageVector =
+                                                        getDirectionIcon(instruction, maneuver),
+                                                contentDescription = null,
+                                                tint =
+                                                        if (approaching)
+                                                                MaterialTheme.colorScheme.onPrimary
+                                                        else MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(22.dp)
+                                        )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                                 if (distanceToNextTurn > 0.0) {
-                                                        append(
-                                                                formatDistance(
-                                                                        distanceToNextTurn
-                                                                )
+                                                        Text(
+                                                                formatDistance(distanceToNextTurn),
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelLarge,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .primary,
+                                                                maxLines = 1
+                                                        )
+                                                        Spacer(Modifier.width(6.dp))
+                                                }
+                                                if (nextStep != null &&
+                                                                distanceToNextTurn in 1.0..250.0
+                                                ) {
+                                                        Text(
+                                                                "Then ${nextStep.instruction}",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .labelSmall,
+                                                                color =
+                                                                        MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
                                                         )
                                                 }
-                                                if (remainingDuration > 0.0) {
-                                                        if (isNotEmpty()) append(" · ")
-                                                        append(eta)
-                                                }
                                         }
-                                if (detail.isNotEmpty()) {
                                         Text(
-                                                detail,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1
+                                                instruction.ifEmpty { "Continue straight" },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                         )
+                                        val minutes =
+                                                (remainingDuration / 60.0)
+                                                        .roundToInt()
+                                                        .coerceAtLeast(1)
+                                        val durText =
+                                                if (minutes >= 60)
+                                                        "${minutes / 60}h ${minutes % 60}m"
+                                                else "${minutes}m"
+                                        val meta =
+                                                buildString {
+                                                        if (remainingDuration > 0.0) {
+                                                                append(durText)
+                                                        }
+                                                        if (remainingDistance > 0.0) {
+                                                                if (isNotEmpty()) append(" · ")
+                                                                append(
+                                                                        formatDistance(
+                                                                                remainingDistance
+                                                                        )
+                                                                )
+                                                        }
+                                                        if (remainingDuration > 0.0) {
+                                                                if (isNotEmpty()) append(" · ")
+                                                                append("ETA $etaText")
+                                                        }
+                                                }
+                                        if (meta.isNotEmpty()) {
+                                                Text(
+                                                        meta,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = SafeGreen,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                        }
                                 }
                         }
                 }

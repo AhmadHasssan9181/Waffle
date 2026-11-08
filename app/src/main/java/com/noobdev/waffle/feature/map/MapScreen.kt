@@ -8,10 +8,12 @@ import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -59,6 +61,7 @@ import com.noobdev.waffle.core.navigation.NavigationSession
 import com.noobdev.waffle.core.navigation.NavigationSnapshot
 import com.noobdev.waffle.core.navigation.OffRouteMonitor
 import com.noobdev.waffle.core.navigation.PipState
+import com.noobdev.waffle.core.navigation.RouteEtaCalculator
 import com.noobdev.waffle.core.navigation.RouteSimulator
 import com.noobdev.waffle.core.navigation.SimulationSpeed
 import com.noobdev.waffle.core.navigation.SimulationState
@@ -78,7 +81,11 @@ import com.noobdev.waffle.design.theme.*
 import com.noobdev.waffle.feature.shops.ShopDetailSheet
 import com.noobdev.waffle.feature.shops.data.Shop
 import com.noobdev.waffle.feature.shops.data.ShopCategory
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -151,12 +158,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         var screenState by MapSessionState.screenState
         var navigationCameraReady by remember { mutableStateOf(false) }
 
-        // Map style - this will be passed up to change the map
+        // Map style - this will be passed up to change the map. Automatically switch to Dark basemap
+        // during nighttime turn-by-turn navigation unless the user explicitly selected a style.
         val darkUi = MaterialTheme.colorScheme.background.luminance() < 0.5f
-        var selectedStyleIndex by remember(currentStyleIndex, darkUi) {
+        val nightNav = screenState == MapScreenState.NAVIGATING && isNightTime()
+        var selectedStyleIndex by remember(currentStyleIndex, darkUi, nightNav) {
                 mutableStateOf(
                         if (currentStyleIndex >= 0) currentStyleIndex
-                        else autoStyleIndex(darkUi)
+                        else autoStyleIndex(darkUi || nightNav)
                 )
         }
 
@@ -439,7 +448,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 val motorcycle = isMotorcycleProfile(profile)
                 val planOptions =
                         if (profile == "driving-car" || motorcycle) routeOptions
-                        else RouteOptions()
+                        else RouteOptions(alternatives = routeOptions.alternatives)
 
                 MapSessionState.routeScope.launch {
                         isLoadingWalk = walking
@@ -473,15 +482,13 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         plan.result.coordinates.size >= 2
                         ) {
                                 selectedProfile = profile
+                                routeAlternatives = listOf(plan.result) + plan.alternatives
                                 if (walking) {
                                         walkRouteResult = plan.result
-                                        routeAlternatives = emptyList()
                                 } else if (biking) {
                                         bikeRouteResult = plan.result
-                                        routeAlternatives = emptyList()
                                 } else {
                                         routeResult = plan.result
-                                        routeAlternatives = listOf(plan.result) + plan.alternatives
                                 }
                                 selectedAlternativeIndex = 0
                                 if (!walking) walkRouteResult = null
@@ -727,24 +734,14 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         if (!isUserPanMode) {
                                 mapInstance?.let { map ->
                                         if (inPip) {
-                                                // PiP is a tiny window: use a flat, course-up
-                                                // view so the route ahead stays visible above the
-                                                // compact instruction bar.
-                                                map.animateCamera(
-                                                        CameraUpdateFactory.newCameraPosition(
-                                                                CameraPosition.Builder()
-                                                                        .target(
-                                                                                LatLng(
-                                                                                        navSession.lat,
-                                                                                        navSession.lng
-                                                                                )
-                                                                        )
-                                                                        .zoom(15.2)
-                                                                        .tilt(0.0)
-                                                                        .bearing(navSession.bearing)
-                                                                        .build()
-                                                        ),
-                                                        450
+                                                CameraTransitionManager.updatePipCamera(
+                                                        map = map,
+                                                        currentPosition =
+                                                                LatLng(
+                                                                        navSession.lat,
+                                                                        navSession.lng
+                                                                ),
+                                                        bearing = navSession.bearing
                                                 )
                                         } else {
                                                 CameraTransitionManager
@@ -763,11 +760,62 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         }
 
         // The full-screen map keeps MapLibre's logo/attribution; the tiny PiP window shows a
-        // compact attribution in its instruction bar instead.
-        LaunchedEffect(mapInstance, inPip) {
+        // compact attribution in its instruction bar instead. Also adjust map padding immediately
+        // when entering or leaving system PiP so the 400px top padding from full-screen navigation
+        // does not push the 3D vehicle off the bottom of the tiny PiP window.
+        LaunchedEffect(mapInstance, inPip, screenState) {
+                val map = mapInstance ?: return@LaunchedEffect
                 runCatching {
-                        mapInstance?.uiSettings?.isLogoEnabled = !inPip
-                        mapInstance?.uiSettings?.isAttributionEnabled = !inPip
+                        map.uiSettings.isLogoEnabled = !inPip
+                        map.uiSettings.isAttributionEnabled = !inPip
+                        if (screenState == MapScreenState.NAVIGATING) {
+                                val targetLat =
+                                        if (!isSimulationMode &&
+                                                        navSession.active &&
+                                                        (navSession.lat != 0.0 ||
+                                                                navSession.lng != 0.0)
+                                        )
+                                                navSession.lat
+                                        else currentLat
+                                val targetLng =
+                                        if (!isSimulationMode &&
+                                                        navSession.active &&
+                                                        (navSession.lat != 0.0 ||
+                                                                navSession.lng != 0.0)
+                                        )
+                                                navSession.lng
+                                        else currentLng
+                                val targetBearing =
+                                        if (!isSimulationMode && navSession.active)
+                                                navSession.bearing
+                                        else currentBearing
+                                if (inPip) {
+                                        CameraTransitionManager.updatePipCamera(
+                                                map = map,
+                                                currentPosition = LatLng(targetLat, targetLng),
+                                                bearing = targetBearing,
+                                                animate = false
+                                        )
+                                } else {
+                                        map.setPadding(0, 400, 0, 0)
+                                        map.animateCamera(
+                                                CameraUpdateFactory.newCameraPosition(
+                                                        CameraPosition.Builder()
+                                                                .target(
+                                                                        LatLng(
+                                                                                targetLat,
+                                                                                targetLng
+                                                                        )
+                                                                )
+                                                                .zoom(17.0)
+                                                                .tilt(55.0)
+                                                                .bearing(targetBearing)
+                                                                .build()
+                                                ),
+                                                500
+                                        )
+                                }
+                        }
                 }
         }
 
@@ -840,6 +888,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         travelMode = selectedProfile,
                         vehicleIcon = vehicleIcon,
                         isNavigating = screenState == MapScreenState.NAVIGATING,
+                        inPip = inPip,
                         lights = vehicleLights,
                         speedMps = currentSpeedMps.toDouble()
                 )
@@ -1106,7 +1155,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 coordinates = plan.result.coordinates,
                                                 speedMps = selectedSimSpeed.speedMps,
                                                 profile = selectedProfile,
-                                                scope = MapSessionState.simulationScope
+                                                scope = MapSessionState.simulationScope,
+                                                expectedDurationSeconds = plan.result.durationSeconds
                                         )
                                 }
                         } else {
@@ -1594,20 +1644,32 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                         ) {
                                                                                 remainingDistance =
                                                                                         routeRemaining
-                                                                                val newDuration =
-                                                                                        routeRemaining /
-                                                                                                liveSpeedMps(
-                                                                                                        route
-                                                                                                )
                                                                                 remainingDuration =
-                                                                                        if (remainingDuration >
-                                                                                                        0.0
-                                                                                        )
-                                                                                                remainingDuration *
-                                                                                                        0.6 +
-                                                                                                        newDuration *
-                                                                                                                0.4
-                                                                                        else newDuration
+                                                                                        RouteEtaCalculator
+                                                                                                .estimateRemainingSeconds(
+                                                                                                        route =
+                                                                                                                route,
+                                                                                                        remainingDistanceMeters =
+                                                                                                                routeRemaining,
+                                                                                                        rollingSpeedMps =
+                                                                                                                liveSpeedMps(
+                                                                                                                        route
+                                                                                                                ),
+                                                                                                        currentStepIndex =
+                                                                                                                currentInstructionIndex,
+                                                                                                        distanceToNextTurnMeters =
+                                                                                                                distanceToNextTurn,
+                                                                                                        trafficPaceMps =
+                                                                                                                trafficFlow
+                                                                                                                        ?.currentSpeedKmh
+                                                                                                                        ?.div(
+                                                                                                                                3.6
+                                                                                                                        ),
+                                                                                                        profile =
+                                                                                                                selectedProfile,
+                                                                                                        previousRemainingSeconds =
+                                                                                                                remainingDuration
+                                                                                                )
                                                                         } else {
                                                                                 val toDestination =
                                                                                         calculateDistance(
@@ -1620,20 +1682,22 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                         )
                                                                                 remainingDistance =
                                                                                         toDestination
-                                                                                val newDuration =
-                                                                                        toDestination /
-                                                                                                liveSpeedMps(
-                                                                                                        route
-                                                                                                )
                                                                                 remainingDuration =
-                                                                                        if (remainingDuration >
-                                                                                                        0.0
-                                                                                        )
-                                                                                                remainingDuration *
-                                                                                                        0.6 +
-                                                                                                        newDuration *
-                                                                                                                0.4
-                                                                                        else newDuration
+                                                                                        RouteEtaCalculator
+                                                                                                .estimateRemainingSeconds(
+                                                                                                        route =
+                                                                                                                route,
+                                                                                                        remainingDistanceMeters =
+                                                                                                                toDestination,
+                                                                                                        rollingSpeedMps =
+                                                                                                                liveSpeedMps(
+                                                                                                                        route
+                                                                                                                ),
+                                                                                                        profile =
+                                                                                                                selectedProfile,
+                                                                                                        previousRemainingSeconds =
+                                                                                                                remainingDuration
+                                                                                                )
                                                                         }
                                                                 }
 
@@ -1641,17 +1705,28 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 // if not panning)
                                                                 if (!isUserPanMode) {
                                                                         mapInstance?.let { map ->
-                                                                                CameraTransitionManager
-                                                                                        .updateNavigationCamera(
-                                                                                                map,
-                                                                                                LatLng(
-                                                                                                        snapResult
-                                                                                                                .snappedLat,
-                                                                                                        snapResult
-                                                                                                                .snappedLng
-                                                                                                ),
-                                                                                                travelBearing
+                                                                                val pos =
+                                                                                        LatLng(
+                                                                                                snapResult
+                                                                                                        .snappedLat,
+                                                                                                snapResult
+                                                                                                        .snappedLng
                                                                                         )
+                                                                                if (inPip) {
+                                                                                        CameraTransitionManager
+                                                                                                .updatePipCamera(
+                                                                                                        map,
+                                                                                                        pos,
+                                                                                                        travelBearing
+                                                                                                )
+                                                                                } else {
+                                                                                        CameraTransitionManager
+                                                                                                .updateNavigationCamera(
+                                                                                                        map,
+                                                                                                        pos,
+                                                                                                        travelBearing
+                                                                                                )
+                                                                                }
                                                                         }
                                                                 }
                                                         }
@@ -1761,21 +1836,44 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                         // Update remaining distance/time from simulator
                         remainingDistance = routeSimulator.getRemainingDistance()
-                        remainingDuration = routeSimulator.getRemainingTime()
+                        remainingDuration =
+                                if (selectedSimSpeed == SimulationSpeed.VARIABLE &&
+                                                activeRoute != null
+                                ) {
+                                        RouteEtaCalculator.estimateRemainingSeconds(
+                                                route = activeRoute,
+                                                remainingDistanceMeters = remainingDistance,
+                                                rollingSpeedMps = liveSpeedMps(activeRoute),
+                                                currentStepIndex = currentInstructionIndex,
+                                                distanceToNextTurnMeters = distanceToNextTurn,
+                                                profile = selectedProfile,
+                                                previousRemainingSeconds = remainingDuration
+                                        )
+                                } else {
+                                        routeSimulator.getRemainingTime()
+                                }
 
                         // Update camera if not in user pan mode
                         if (!isUserPanMode) {
                                 mapInstance?.let { map ->
-                                        // Use speed-dependent camera but ensure we don't fight the
-                                        // location component
-                                        // actually we disabled location engine so we are free to
-                                        // animate
-                                        CameraTransitionManager.updateCameraForSpeed(
-                                                map,
-                                                simPosition!!,
-                                                simBearing,
-                                                simSpeed
-                                        )
+                                        if (inPip) {
+                                                CameraTransitionManager.updatePipCamera(
+                                                        map = map,
+                                                        currentPosition = simPosition!!,
+                                                        bearing = simBearing
+                                                )
+                                        } else {
+                                                // Use speed-dependent camera but ensure we don't fight the
+                                                // location component
+                                                // actually we disabled location engine so we are free to
+                                                // animate
+                                                CameraTransitionManager.updateCameraForSpeed(
+                                                        map,
+                                                        simPosition!!,
+                                                        simBearing,
+                                                        simSpeed
+                                                )
+                                        }
                                 }
                         }
                 }
@@ -1899,6 +1997,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 routeResult,
                 walkRouteResult,
                 bikeRouteResult,
+                routeAlternatives,
+                selectedAlternativeIndex,
+                screenState,
                 selectedProfile,
                 selectedStyleIndex,
                 mapInstance,
@@ -1908,13 +2009,143 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 drawnRoute?.let { result ->
                         if (result.success && result.coordinates.isNotEmpty()) {
                                 mapInstance?.getStyle { style ->
-                                        // Remove existing route layer/source if any
+                                        // Remove existing route & alternative layers/sources if any
                                         try {
                                                 style.removeLayer("route-casing")
                                                 style.removeLayer("route-layer")
                                                 style.removeSource("route-source")
                                         } catch (e: Exception) {}
+                                        try {
+                                                style.removeLayer("alt-routes-casing")
+                                                style.removeLayer("alt-routes-layer")
+                                                style.removeSource("alt-routes-source")
+                                        } catch (e: Exception) {}
                                         routeSource = null
+
+                                        // Draw unselected alternative routes underneath the active route
+                                        // during ROUTE_PREVIEW so the user can visually compare and tap them.
+                                        if (screenState == MapScreenState.ROUTE_PREVIEW &&
+                                                        routeAlternatives.size > 1
+                                        ) {
+                                                val altFeatures = JSONArray()
+                                                routeAlternatives.forEachIndexed { idx, alt ->
+                                                        if (idx != selectedAlternativeIndex &&
+                                                                        alt.coordinates.size >= 2
+                                                        ) {
+                                                                val coordsArr = JSONArray()
+                                                                alt.coordinates.forEach { pt ->
+                                                                        coordsArr.put(
+                                                                                JSONArray()
+                                                                                        .put(pt.second)
+                                                                                        .put(pt.first)
+                                                                        )
+                                                                }
+                                                                altFeatures.put(
+                                                                        JSONObject()
+                                                                                .put(
+                                                                                        "type",
+                                                                                        "Feature"
+                                                                                )
+                                                                                .put(
+                                                                                        "geometry",
+                                                                                        JSONObject()
+                                                                                                .put(
+                                                                                                        "type",
+                                                                                                        "LineString"
+                                                                                                )
+                                                                                                .put(
+                                                                                                        "coordinates",
+                                                                                                        coordsArr
+                                                                                                )
+                                                                                )
+                                                                                .put(
+                                                                                        "properties",
+                                                                                        JSONObject()
+                                                                                                .put(
+                                                                                                        "altIndex",
+                                                                                                        idx
+                                                                                                )
+                                                                                )
+                                                                )
+                                                        }
+                                                }
+                                                if (altFeatures.length() > 0) {
+                                                        val altGeoJson =
+                                                                JSONObject()
+                                                                        .put(
+                                                                                "type",
+                                                                                "FeatureCollection"
+                                                                        )
+                                                                        .put(
+                                                                                "features",
+                                                                                altFeatures
+                                                                        )
+                                                                        .toString()
+                                                        style.addSource(
+                                                                GeoJsonSource(
+                                                                        "alt-routes-source",
+                                                                        altGeoJson
+                                                                )
+                                                        )
+                                                        val altCasing =
+                                                                LineLayer(
+                                                                        "alt-routes-casing",
+                                                                        "alt-routes-source"
+                                                                )
+                                                                        .withProperties(
+                                                                                lineColor(
+                                                                                        AndroidColor
+                                                                                                .WHITE
+                                                                                ),
+                                                                                lineWidth(9.5f),
+                                                                                lineOpacity(0.85f),
+                                                                                lineCap(
+                                                                                        Property
+                                                                                                .LINE_CAP_ROUND
+                                                                                ),
+                                                                                lineJoin(
+                                                                                        Property
+                                                                                                .LINE_JOIN_ROUND
+                                                                                )
+                                                                        )
+                                                        val altLayer =
+                                                                LineLayer(
+                                                                        "alt-routes-layer",
+                                                                        "alt-routes-source"
+                                                                )
+                                                                        .withProperties(
+                                                                                lineColor(
+                                                                                        AndroidColor
+                                                                                                .parseColor(
+                                                                                                        "#7C8EA6"
+                                                                                                )
+                                                                                ),
+                                                                                lineWidth(6f),
+                                                                                lineOpacity(0.88f),
+                                                                                lineCap(
+                                                                                        Property
+                                                                                                .LINE_CAP_ROUND
+                                                                                ),
+                                                                                lineJoin(
+                                                                                        Property
+                                                                                                .LINE_JOIN_ROUND
+                                                                                )
+                                                                        )
+                                                        if (style.getLayer("puck-layer") != null) {
+                                                                style.addLayerBelow(
+                                                                        altCasing,
+                                                                        "puck-layer"
+                                                                )
+                                                                style.addLayerBelow(
+                                                                        altLayer,
+                                                                        "puck-layer"
+                                                                )
+                                                        } else {
+                                                                style.addLayer(altCasing)
+                                                                style.addLayer(altLayer)
+                                                        }
+                                                }
+                                        }
 
                                         // Build GeoJSON for the full route
                                         val coordsStr =
@@ -1991,9 +2222,9 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         // Store reference for direct future updates
                                         routeSource = newSource
 
-                                        // Animate camera to show full route bounds. During
-                                        // navigation the camera belongs to the driver: a
-                                        // reroute must not yank it out to the whole route.
+                                        // Animate camera to show full route bounds (including
+                                        // alternatives). During navigation the camera belongs to
+                                        // the driver: a reroute must not yank it out to the whole route.
                                         if (result.coordinates.size >= 2 &&
                                                         screenState != MapScreenState.NAVIGATING
                                         ) {
@@ -2005,6 +2236,16 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 LatLng(pair.first, pair.second)
                                                         )
                                                 }
+                                                routeAlternatives.forEach { alt ->
+                                                        alt.coordinates.forEach { pair ->
+                                                                bounds.include(
+                                                                        LatLng(
+                                                                                pair.first,
+                                                                                pair.second
+                                                                        )
+                                                                )
+                                                        }
+                                                }
                                                 mapInstance?.animateCamera(
                                                         CameraUpdateFactory.newLatLngBounds(
                                                                 bounds.build(),
@@ -2012,6 +2253,127 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                         ),
                                                         1500
                                                 )
+                                        }
+                                }
+                        }
+                }
+        }
+
+        // === UPCOMING TURN CHEVRON ARROW ON ROUTE LINE (Main Map & System PiP) ===
+        LaunchedEffect(
+                screenState,
+                currentInstructionIndex,
+                routeResult,
+                walkRouteResult,
+                bikeRouteResult,
+                selectedProfile,
+                selectedStyleIndex,
+                mapInstance
+        ) {
+                val map = mapInstance ?: return@LaunchedEffect
+                val activeRoute = activeRouteFor(selectedProfile)
+                val step =
+                        if (screenState == MapScreenState.NAVIGATING)
+                                activeRoute?.steps?.getOrNull(currentInstructionIndex)
+                        else null
+                map.getStyle { style ->
+                        runCatching {
+                                if (step == null ||
+                                                activeRoute == null ||
+                                                step.maneuver ==
+                                                        com.noobdev.waffle.core.navigation
+                                                                .ManeuverType.ARRIVE ||
+                                                step.wayPointIndex !in
+                                                        1 until activeRoute.coordinates.lastIndex
+                                ) {
+                                        style.getLayer("turn-arrow-casing")
+                                                ?.setProperties(visibility(Property.NONE))
+                                        style.getLayer("turn-arrow-layer")
+                                                ?.setProperties(visibility(Property.NONE))
+                                        return@runCatching
+                                }
+                                val coords = activeRoute.coordinates
+                                val idx = step.wayPointIndex
+                                val turnLat = coords[idx].first
+                                val turnLng = coords[idx].second
+                                val prevPair = coords[(idx - 2).coerceAtLeast(0)]
+                                val nextPair = coords[(idx + 2).coerceAtMost(coords.lastIndex)]
+                                val cosLat =
+                                        cos(Math.toRadians(turnLat)).coerceAtLeast(0.2)
+                                val mPerDegLat = 111_132.0
+                                val mPerDegLng = 111_320.0 * cosLat
+                                val inDxM = (prevPair.second - turnLng) * mPerDegLng
+                                val inDyM = (prevPair.first - turnLat) * mPerDegLat
+                                val outDxM = (nextPair.second - turnLng) * mPerDegLng
+                                val outDyM = (nextPair.first - turnLat) * mPerDegLat
+                                val inLenM = hypot(inDxM, inDyM)
+                                val outLenM = hypot(outDxM, outDyM)
+                                if (inLenM < 2.0 || outLenM < 2.0) {
+                                        style.getLayer("turn-arrow-casing")
+                                                ?.setProperties(visibility(Property.NONE))
+                                        style.getLayer("turn-arrow-layer")
+                                                ?.setProperties(visibility(Property.NONE))
+                                        return@runCatching
+                                }
+                                val stemBackM = 16.0.coerceAtMost(inLenM * 0.85)
+                                val stemFwdM = 20.0.coerceAtMost(outLenM * 0.85)
+                                val startLat = turnLat + (inDyM / inLenM) * stemBackM / mPerDegLat
+                                val startLng = turnLng + (inDxM / inLenM) * stemBackM / mPerDegLng
+                                val endLat = turnLat + (outDyM / outLenM) * stemFwdM / mPerDegLat
+                                val endLng = turnLng + (outDxM / outLenM) * stemFwdM / mPerDegLng
+
+                                val outAngle = atan2(outDyM, outDxM)
+                                val wingLenM = 8.5
+                                val wingSpread = Math.toRadians(36.0)
+                                val leftAngle = outAngle + Math.PI - wingSpread
+                                val rightAngle = outAngle + Math.PI + wingSpread
+                                val wingLeftLat = endLat + sin(leftAngle) * wingLenM / mPerDegLat
+                                val wingLeftLng = endLng + cos(leftAngle) * wingLenM / mPerDegLng
+                                val wingRightLat = endLat + sin(rightAngle) * wingLenM / mPerDegLat
+                                val wingRightLng = endLng + cos(rightAngle) * wingLenM / mPerDegLng
+
+                                val geoJson =
+                                        """{"type":"Feature","geometry":{"type":"MultiLineString","coordinates":[[[$startLng,$startLat],[$turnLng,$turnLat],[$endLng,$endLat]],[[$wingLeftLng,$wingLeftLat],[$endLng,$endLat],[$wingRightLng,$wingRightLat]]]}}"""
+                                val existing =
+                                        style.getSourceAs<GeoJsonSource>("turn-arrow-source")
+                                if (existing != null) {
+                                        existing.setGeoJson(geoJson)
+                                        style.getLayer("turn-arrow-casing")
+                                                ?.setProperties(visibility(Property.VISIBLE))
+                                        style.getLayer("turn-arrow-layer")
+                                                ?.setProperties(visibility(Property.VISIBLE))
+                                } else {
+                                        style.addSource(GeoJsonSource("turn-arrow-source", geoJson))
+                                        val casing =
+                                                LineLayer("turn-arrow-casing", "turn-arrow-source")
+                                                        .withProperties(
+                                                                lineColor(
+                                                                        AndroidColor.parseColor(
+                                                                                "#162038"
+                                                                        )
+                                                                ),
+                                                                lineWidth(9.5f),
+                                                                lineCap(Property.LINE_CAP_ROUND),
+                                                                lineJoin(Property.LINE_JOIN_ROUND)
+                                                        )
+                                        val arrow =
+                                                LineLayer("turn-arrow-layer", "turn-arrow-source")
+                                                        .withProperties(
+                                                                lineColor(
+                                                                        AndroidColor.parseColor(
+                                                                                "#FFCA28"
+                                                                        )
+                                                                ),
+                                                                lineWidth(5.5f),
+                                                                lineCap(Property.LINE_CAP_ROUND),
+                                                                lineJoin(Property.LINE_JOIN_ROUND)
+                                                        )
+                                        if (style.getLayer("puck-layer") != null) {
+                                                style.addLayerBelow(casing, "puck-layer")
+                                                style.addLayerBelow(arrow, "puck-layer")
+                                        } else {
+                                                style.addLayer(casing)
+                                                style.addLayer(arrow)
                                         }
                                 }
                         }
@@ -2462,9 +2824,107 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         onMapReady = { map ->
                                 mapInstance = map
 
-                                // Tap a shop dot → open its detail sheet.
+                                // Tap a shop dot or an alternative route line on the map.
                                 map.addOnMapClickListener { latLng ->
                                         val point = map.projection.toScreenLocation(latLng)
+                                        if (screenState == MapScreenState.ROUTE_PREVIEW &&
+                                                        routeAlternatives.size > 1
+                                        ) {
+                                                val altFeature =
+                                                        map.queryRenderedFeatures(
+                                                                        point,
+                                                                        "alt-routes-layer",
+                                                                        "alt-routes-casing"
+                                                                )
+                                                                .firstOrNull()
+                                                val tappedAltIdx =
+                                                        altFeature
+                                                                ?.properties()
+                                                                ?.get("altIndex")
+                                                                ?.asInt
+                                                                ?: routeAlternatives.indices
+                                                                        .filter {
+                                                                                it !=
+                                                                                        selectedAlternativeIndex
+                                                                        }
+                                                                        .minByOrNull { idx ->
+                                                                                CameraTransitionManager
+                                                                                        .snapToRoute(
+                                                                                                latLng.latitude,
+                                                                                                latLng.longitude,
+                                                                                                routeAlternatives[
+                                                                                                        idx]
+                                                                                                        .coordinates
+                                                                                        )
+                                                                                        .distanceMeters
+                                                                        }
+                                                                        ?.takeIf { idx ->
+                                                                                val altDist =
+                                                                                        CameraTransitionManager
+                                                                                                .snapToRoute(
+                                                                                                        latLng.latitude,
+                                                                                                        latLng.longitude,
+                                                                                                        routeAlternatives[
+                                                                                                                idx]
+                                                                                                                .coordinates
+                                                                                                )
+                                                                                                .distanceMeters
+                                                                                val activeDist =
+                                                                                        activeRouteFor(
+                                                                                                        selectedProfile
+                                                                                                )
+                                                                                                ?.let {
+                                                                                                        CameraTransitionManager
+                                                                                                                .snapToRoute(
+                                                                                                                        latLng.latitude,
+                                                                                                                        latLng.longitude,
+                                                                                                                        it.coordinates
+                                                                                                                )
+                                                                                                                .distanceMeters
+                                                                                                }
+                                                                                                ?: Double
+                                                                                                        .MAX_VALUE
+                                                                                altDist < 140.0 &&
+                                                                                        altDist <
+                                                                                                activeDist
+                                                                        }
+                                                if (tappedAltIdx != null) {
+                                                        routeAlternatives.getOrNull(tappedAltIdx)
+                                                                ?.let { alternative ->
+                                                                        if (isWalkingProfile(
+                                                                                        selectedProfile
+                                                                                )
+                                                                        ) {
+                                                                                walkRouteResult =
+                                                                                        alternative
+                                                                        } else if (isBikeProfile(
+                                                                                        selectedProfile
+                                                                                )
+                                                                        ) {
+                                                                                bikeRouteResult =
+                                                                                        alternative
+                                                                        } else {
+                                                                                routeResult =
+                                                                                        alternative
+                                                                        }
+                                                                        selectedAlternativeIndex =
+                                                                                tappedAltIdx
+                                                                        navigationInstructions =
+                                                                                alternative
+                                                                                        .instructions
+                                                                        currentInstructionIndex = 0
+                                                                        lastNavigationRoute =
+                                                                                alternative
+                                                                        remainingDistance =
+                                                                                alternative
+                                                                                        .distanceMeters
+                                                                        remainingDuration =
+                                                                                alternative
+                                                                                        .durationSeconds
+                                                                        return@addOnMapClickListener true
+                                                                }
+                                                }
+                                        }
                                         val cluster =
                                                 map.queryRenderedFeatures(
                                                         point,
@@ -2750,21 +3210,115 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                         )
                 }
 
-                // === SHOP CATEGORY CHIPS ===
+                // === SHOP CATEGORY CHIPS OR QUICK OFFLINE POI PILLS ===
                 AnimatedVisibility(
-                        visible = screenState == MapScreenState.IDLE && mapShops.isNotEmpty() && !inPip,
+                        visible = screenState == MapScreenState.IDLE && !inPip,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier =
                                 Modifier.align(Alignment.TopCenter)
                                         .statusBarsPadding()
-                                        .padding(top = 74.dp)
+                                        .padding(top = 68.dp)
                 ) {
-                        ShopFilterRow(
-                                shops = mapShops,
-                                selected = shopFilter,
-                                onSelect = { shopFilter = it }
-                        )
+                        if (mapShops.isNotEmpty()) {
+                                ShopFilterRow(
+                                        shops = mapShops,
+                                        selected = shopFilter,
+                                        onSelect = { shopFilter = it }
+                                )
+                        } else {
+                                LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                        val quickPois =
+                                                listOf(
+                                                        Triple(
+                                                                "Fuel",
+                                                                Icons.Default.LocalGasStation,
+                                                                "PSO"
+                                                        ),
+                                                        Triple(
+                                                                "Food",
+                                                                Icons.Default.Restaurant,
+                                                                "Restaurant"
+                                                        ),
+                                                        Triple(
+                                                                "Hospital",
+                                                                Icons.Default.LocalHospital,
+                                                                "Hospital"
+                                                        ),
+                                                        Triple(
+                                                                "Pharmacy",
+                                                                Icons.Default.LocalPharmacy,
+                                                                "Pharmacy"
+                                                        ),
+                                                        Triple(
+                                                                "Masjid",
+                                                                Icons.Default.Place,
+                                                                "Masjid"
+                                                        )
+                                                )
+                                        items(quickPois) { (label, icon, queryStr) ->
+                                                Surface(
+                                                        onClick = {
+                                                                searchQuery = queryStr
+                                                                screenState =
+                                                                        MapScreenState.SEARCHING
+                                                        },
+                                                        shape = RoundedCornerShape(50),
+                                                        color =
+                                                                MaterialTheme.colorScheme.surface
+                                                                        .copy(alpha = 0.94f),
+                                                        border =
+                                                                BorderStroke(
+                                                                        1.dp,
+                                                                        MaterialTheme.colorScheme
+                                                                                .outline.copy(
+                                                                                        alpha = 0.3f
+                                                                                )
+                                                                ),
+                                                        shadowElevation = 2.dp
+                                                ) {
+                                                        Row(
+                                                                modifier =
+                                                                        Modifier.padding(
+                                                                                horizontal = 11.dp,
+                                                                                vertical = 6.dp
+                                                                        ),
+                                                                verticalAlignment =
+                                                                        Alignment.CenterVertically
+                                                        ) {
+                                                                Icon(
+                                                                        icon,
+                                                                        contentDescription = null,
+                                                                        tint =
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .primary,
+                                                                        modifier =
+                                                                                Modifier.size(15.dp)
+                                                                )
+                                                                Spacer(Modifier.width(5.dp))
+                                                                Text(
+                                                                        label,
+                                                                        style =
+                                                                                MaterialTheme
+                                                                                        .typography
+                                                                                        .labelSmall,
+                                                                        fontWeight =
+                                                                                FontWeight.SemiBold,
+                                                                        color =
+                                                                                MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .onSurface
+                                                                )
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
                 }
 
                 // === SEARCH RESULTS (Below search bar) ===
@@ -2779,6 +3333,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 ) {
                         SearchResultsCard(
                                 query = searchQuery,
+                                onQueryChange = { searchQuery = it },
                                 onResultClick = { result ->
                                         if (searchPurpose == SearchPurpose.STOP) {
                                                 addStop(result)
@@ -2816,17 +3371,25 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         .padding(16.dp)
                                         .padding(bottom = 80.dp)
                 ) {
-                        FloatingActionButton(
+                        Surface(
                                 onClick = { showVehiclePicker = true },
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                contentColor = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(48.dp)
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface,
+                                border =
+                                        BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                        ),
+                                shadowElevation = 4.dp,
+                                modifier = Modifier.size(50.dp)
                         ) {
-                                Icon(
-                                        Icons.Default.DirectionsCar,
-                                        "Change vehicle icon",
-                                        modifier = Modifier.size(22.dp)
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                        Image(
+                                                painter = painterResource(vehicleIcon.drawable),
+                                                contentDescription = "Change vehicle icon",
+                                                modifier = Modifier.size(36.dp)
+                                        )
+                                }
                         }
                 }
 
@@ -2911,7 +3474,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
 
                 // === FLOOD LEGEND (bottom-left, above the car button) ===
                 AnimatedVisibility(
-                        visible = activeFloodSector != null,
+                        visible = activeFloodSector != null && !inPip,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier =
@@ -2936,7 +3499,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
         previewRoute?.let {
                 Box(modifier = Modifier.fillMaxSize()) {
                         AnimatedVisibility(
-                                visible = screenState == MapScreenState.ROUTE_PREVIEW,
+                                visible = screenState == MapScreenState.ROUTE_PREVIEW && !inPip,
                                 enter = slideInVertically { it },
                                 exit = slideOutVertically { it },
                                 modifier =
@@ -2975,17 +3538,18 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                 routeStops = newStops
                                                 planTrip(selectedProfile)
                                         },
-                                        alternatives =
-                                                if (selectedProfile == "driving-car" ||
-                                                                isMotorcycleMode
-                                                )
-                                                        routeAlternatives
-                                                else emptyList(),
+                                        alternatives = routeAlternatives,
                                         selectedAlternativeIndex = selectedAlternativeIndex,
                                         onAlternativeSelected = { index ->
                                                 routeAlternatives.getOrNull(index)?.let {
                                                         alternative ->
-                                                        routeResult = alternative
+                                                        if (isWalkingProfile(selectedProfile)) {
+                                                                walkRouteResult = alternative
+                                                        } else if (isBikeProfile(selectedProfile)) {
+                                                                bikeRouteResult = alternative
+                                                        } else {
+                                                                routeResult = alternative
+                                                        }
                                                         selectedAlternativeIndex = index
                                                         navigationInstructions =
                                                                 alternative.instructions
@@ -3058,7 +3622,7 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                                 )
                                                                         }
                                                         CameraTransitionManager
-                                                                .executeNavigationStartTransition(
+                                                                 .executeNavigationStartTransition(
                                                                         map = map,
                                                                         currentPosition =
                                                                                 LatLng(
@@ -3074,7 +3638,8 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 coordinates = activeRoute.coordinates,
                                                                 speedMps = selectedSimSpeed.speedMps,
                                                                 profile = selectedProfile,
-                                                                scope = MapSessionState.simulationScope
+                                                                scope = MapSessionState.simulationScope,
+                                                                expectedDurationSeconds = activeRoute.durationSeconds
                                                         )
                                                 }
 
@@ -3089,6 +3654,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 style.removeLayer("route-casing")
                                                                 style.removeLayer("route-layer")
                                                                 style.removeSource("route-source")
+                                                        } catch (_: Exception) {}
+                                                        try {
+                                                                style.removeLayer("alt-routes-casing")
+                                                                style.removeLayer("alt-routes-layer")
+                                                                style.removeSource("alt-routes-source")
                                                         } catch (_: Exception) {}
                                                         try {
                                                                 style.removeLayer("stops-marker")
@@ -3267,6 +3837,11 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                         } catch (_: Exception) {}
                                         try {
                                                 style.removeSource("route-source")
+                                        } catch (_: Exception) {}
+                                        try {
+                                                style.removeLayer("turn-arrow-casing")
+                                                style.removeLayer("turn-arrow-layer")
+                                                style.removeSource("turn-arrow-source")
                                         } catch (_: Exception) {}
                                 }
                                 routeSource = null

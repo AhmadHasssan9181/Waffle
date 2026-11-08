@@ -46,8 +46,10 @@ object GraphHopperRouteMapper {
         val instructions = mutableListOf<String>()
         val steps = mutableListOf<NavigationStep>()
         val instructionList = path.instructions
+        var totalStepSeconds = 0.0
         for (index in 0 until instructionList.size) {
             val instruction = instructionList.get(index)
+            if (instruction.sign == Instruction.REACHED_VIA) continue
             val text = describe(instruction)
             val wayPointIndex =
                     if (instruction.points.size > 0) {
@@ -58,22 +60,62 @@ object GraphHopperRouteMapper {
                         )
                     } else 0
 
+            val maneuver = maneuverFor(instruction.sign)
+            val rawStepSec = (instruction.time / 1000.0).coerceAtLeast(0.0)
+            // GraphHopper 1.0's free-flow edge weights ignore intersection/signal deceleration.
+            // Add a realistic maneuver penalty and slight urban friction so step & total durations
+            // match real-world driving pace.
+            val turnPenaltySec =
+                    when (maneuver) {
+                        ManeuverType.U_TURN_LEFT,
+                        ManeuverType.U_TURN_RIGHT -> 14.0
+                        ManeuverType.ROUNDABOUT_LEFT,
+                        ManeuverType.ROUNDABOUT_RIGHT -> 10.0
+                        ManeuverType.TURN_LEFT,
+                        ManeuverType.TURN_RIGHT,
+                        ManeuverType.TURN_SHARP_LEFT,
+                        ManeuverType.TURN_SHARP_RIGHT -> 8.0
+                        ManeuverType.TURN_SLIGHT_LEFT,
+                        ManeuverType.TURN_SLIGHT_RIGHT,
+                        ManeuverType.KEEP_LEFT,
+                        ManeuverType.KEEP_RIGHT -> 3.0
+                        else -> 0.0
+                    }
+            val avgSpeedMps =
+                    if (rawStepSec > 0.5) instruction.distance / rawStepSec else 11.0
+            // Urban/local streets (< 50 km/h free-flow) experience signal/traffic friction (~14%),
+            // whereas expressways (> 70 km/h) flow closer to nominal speed (~5%).
+            val frictionFactor =
+                    when {
+                        avgSpeedMps < 2.2 -> 1.0 // walking
+                        avgSpeedMps < 6.0 -> 1.05 // cycling
+                        avgSpeedMps < 14.0 -> 1.14 // city street
+                        avgSpeedMps < 19.5 -> 1.09 // arterial
+                        else -> 1.05 // highway
+                    }
+            val stepDurationSec = rawStepSec * frictionFactor + turnPenaltySec
+            totalStepSeconds += stepDurationSec
+
             instructions.add(text)
             steps.add(
                     NavigationStep(
                             instruction = text,
                             distance = instruction.distance,
-                            duration = 0.0,
+                            duration = stepDurationSec,
                             type = instruction.sign,
                             wayPointIndex = wayPointIndex,
-                            maneuver = maneuverFor(instruction.sign)
+                            maneuver = maneuver
                     )
             )
         }
 
+        val rawTotalSec = (path.time / 1000.0).coerceAtLeast(1.0)
+        val calibratedDurationSec =
+                if (totalStepSeconds >= rawTotalSec) totalStepSeconds else rawTotalSec
+
         return RouteResult(
                 distanceMeters = path.distance,
-                durationSeconds = path.time / 1000.0,
+                durationSeconds = calibratedDurationSec,
                 coordinates = coordinates,
                 instructions = instructions,
                 steps = steps,

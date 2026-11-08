@@ -57,16 +57,14 @@ object GltfCarRenderer {
     private data class Model(
             val triangles: List<Triangle>,
             val textures: List<Bitmap>,
-            val bodyPaint: Int,
-            val wheelPaint: Int,
-            val bodyTarget: Int,
-            val yawOffset: Float,
-            val cameraX: Float
+            val targetY: Float,
+            val targetZ: Float,
+            val isNarrow: Boolean
     )
 
     private val modelCache = HashMap<String, Model?>()
     private val bitmapCache =
-            object : LruCache<String, Bitmap>(24) {
+            object : LruCache<String, Bitmap>(8 * 1024) {
                 override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
             }
 
@@ -92,10 +90,12 @@ object GltfCarRenderer {
             sizePx: Float,
             bearingDegrees: Float,
             modelKey: String,
-            lights: VehicleLights = VehicleLights()
+            lights: VehicleLights = VehicleLights(),
+            topDown: Boolean = false
     ): Boolean {
-        val bitmap = renderBitmap(context, modelKey, sizePx, bearingDegrees, lights) ?: return false
-        drawShadow(canvas, centerX, centerY, sizePx)
+        val bitmap =
+                renderBitmap(context, modelKey, sizePx, bearingDegrees, lights, topDown)
+                        ?: return false
         val rect =
                 RectF(
                         centerX - sizePx / 2f,
@@ -112,27 +112,88 @@ object GltfCarRenderer {
             modelKey: String,
             sizePx: Float,
             bearingDegrees: Float,
-            lights: VehicleLights = VehicleLights()
+            lights: VehicleLights = VehicleLights(),
+            topDown: Boolean = false
     ): Bitmap? {
         val model = modelFor(context, modelKey) ?: return null
         val roundedBearing = (bearingDegrees / 3f).roundToInt() * 3f
         val key =
-                "${modelKey.uppercase()}|$roundedBearing|${sizePx.roundToInt()}|" +
+                "${modelKey.uppercase()}|$roundedBearing|${sizePx.roundToInt()}|$topDown|" +
                         "${lights.headlights}|${lights.braking}|${lights.turnSignal}|${lights.blinkOn}"
         bitmapCache.get(key)?.let { return it }
-        val bitmap = render(model, sizePx, roundedBearing) ?: return null
-        val canvas = Canvas(bitmap)
+        val meshBitmap = render(model, sizePx, roundedBearing, topDown) ?: return null
+        val out = Bitmap.createBitmap(meshBitmap.width, meshBitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val cx = out.width / 2f
+        val cy = out.height / 2f
+        val spriteScale = out.width.toFloat()
+        drawShadow(canvas, cx, cy, spriteScale, roundedBearing, model.isNarrow)
+        drawHeadlightBeams(canvas, cx, cy, spriteScale, roundedBearing, modelKey, lights)
+        canvas.drawBitmap(meshBitmap, 0f, 0f, null)
         drawVehicleLights(
                 canvas,
-                bitmap.width / 2f,
-                bitmap.height / 2f,
-                sizePx,
+                cx,
+                cy,
+                spriteScale,
                 roundedBearing,
                 modelKey,
                 lights
         )
-        bitmapCache.put(key, bitmap)
-        return bitmap
+        bitmapCache.put(key, out)
+        return out
+    }
+
+    private fun drawHeadlightBeams(
+            canvas: Canvas,
+            centerX: Float,
+            centerY: Float,
+            sizePx: Float,
+            bearingDegrees: Float,
+            modelKey: String,
+            lights: VehicleLights
+    ) {
+        if (!lights.headlights ||
+                        modelKey.equals("BICYCLE", ignoreCase = true) ||
+                        modelKey.equals("WALKER", ignoreCase = true)) {
+            return
+        }
+        val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
+        canvas.save()
+        canvas.rotate(bearingDegrees, centerX, centerY)
+        fun beam(dx: Float, dy: Float, rx: Float, ry: Float) {
+            val x = centerX + dx * sizePx
+            val y = centerY + dy * sizePx
+            val r = max(rx, ry) * sizePx
+            val paint =
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        shader =
+                                android.graphics.RadialGradient(
+                                        x,
+                                        y,
+                                        r,
+                                        intArrayOf(
+                                                Color.argb(145, 255, 248, 210),
+                                                Color.argb(65, 255, 244, 195),
+                                                Color.TRANSPARENT
+                                        ),
+                                        floatArrayOf(0f, 0.55f, 1f),
+                                        android.graphics.Shader.TileMode.CLAMP
+                                )
+                    }
+            canvas.save()
+            canvas.translate(x, y)
+            canvas.scale(rx / max(rx, ry), ry / max(rx, ry))
+            canvas.drawCircle(0f, 0f, r, paint)
+            canvas.restore()
+        }
+        if (motorcycle) {
+            beam(0f, -0.32f, 0.08f, 0.14f)
+        } else {
+            for (side in listOf(-1f, 1f)) {
+                beam(side * 0.12f, -0.31f, 0.075f, 0.13f)
+            }
+        }
+        canvas.restore()
     }
 
     private fun drawVehicleLights(
@@ -149,10 +210,6 @@ object GltfCarRenderer {
             return
         }
         val motorcycle = modelKey.equals("MOTORCYCLE", ignoreCase = true)
-        // The 3/4 camera sits slightly to the right of the model, so the rear of the
-        // body projects a little right of the bitmap centre. Nudge the rear lamp
-        // cluster to match the car instead of the bitmap.
-        val rearShift = 0.06f
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
         fun bar(dx: Float, dy: Float, halfWidth: Float, halfHeight: Float, color: Int, radius: Float) {
@@ -192,64 +249,70 @@ object GltfCarRenderer {
         canvas.save()
         canvas.rotate(bearingDegrees, centerX, centerY)
 
-        if (lights.headlights) {
-            if (motorcycle) {
-                bar(0f, -0.26f, 0.05f, 0.035f, Color.rgb(255, 246, 205), 0.02f)
-                glow(0f, -0.26f, 0.10f, Color.argb(130, 255, 246, 205))
-            } else {
-                for (side in listOf(-1f, 1f)) {
-                    bar(side * 0.18f, -0.21f, 0.09f, 0.035f, Color.rgb(255, 246, 205), 0.02f)
-                    glow(side * 0.18f, -0.21f, 0.11f, Color.argb(120, 255, 246, 205))
-                }
-            }
-        }
-
         if (motorcycle) {
-            val rearX = rearShift * 0.8f
             if (lights.braking) {
-                glow(rearX, 0.10f, 0.20f, Color.argb(110, 255, 25, 20))
+                glow(0f, 0.16f, 0.14f, Color.argb(120, 255, 25, 20))
             }
-            bar(rearX, 0.10f, 0.075f, 0.035f, if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(190, 230, 28, 28), 0.02f)
-            glow(rearX, 0.10f, if (lights.braking) 0.16f else 0.06f, if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25))
+            bar(
+                    0f,
+                    0.16f,
+                    0.045f,
+                    0.022f,
+                    if (lights.braking) Color.rgb(255, 55, 45) else Color.argb(195, 230, 28, 28),
+                    0.012f
+            )
+            glow(
+                    0f,
+                    0.16f,
+                    if (lights.braking) 0.11f else 0.045f,
+                    if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(90, 255, 30, 25)
+            )
         } else {
             if (lights.braking) {
-                // High-mount stop lamp on the rear window makes braking unmistakable.
-                val highX = rearShift
-                bar(highX, 0.12f, 0.11f, 0.022f, Color.rgb(255, 45, 35), 0.01f)
-                glow(highX, 0.12f, 0.12f, Color.argb(160, 255, 25, 20))
+                bar(0f, 0.05f, 0.075f, 0.014f, Color.rgb(255, 45, 35), 0.008f)
+                glow(0f, 0.05f, 0.085f, Color.argb(150, 255, 25, 20))
             }
             for (side in listOf(-1f, 1f)) {
-                val lampX = side * 0.15f + rearShift
+                val lampX = side * 0.135f
+                val lampY = 0.195f
                 if (lights.braking) {
-                    glow(lampX, 0.26f, 0.15f, Color.argb(120, 255, 25, 20))
+                    glow(lampX, lampY, 0.11f, Color.argb(115, 255, 25, 20))
                 }
-                bar(lampX, 0.26f, 0.07f, 0.035f, if (lights.braking) Color.rgb(255, 45, 35) else Color.argb(190, 230, 28, 28), 0.02f)
-                glow(lampX, 0.26f, if (lights.braking) 0.13f else 0.05f, if (lights.braking) Color.argb(220, 255, 30, 25) else Color.argb(85, 255, 30, 25))
+                bar(
+                        lampX,
+                        lampY,
+                        0.052f,
+                        0.022f,
+                        if (lights.braking) Color.rgb(255, 45, 35) else Color.argb(195, 230, 28, 28),
+                        0.012f
+                )
+                glow(
+                        lampX,
+                        lampY,
+                        if (lights.braking) 0.095f else 0.04f,
+                        if (lights.braking) Color.argb(210, 255, 30, 25) else Color.argb(85, 255, 30, 25)
+                )
             }
         }
 
         if (lights.turnSignal != TurnSignal.NONE) {
             val side = if (lights.turnSignal == TurnSignal.LEFT) -1f else 1f
-            // Keep the amber housing faintly lit between blinks so the indicator never
-            // looks dead, then flash it brightly on the blink phase.
             val amber =
                     if (lights.blinkOn) Color.rgb(255, 175, 35)
                     else Color.argb(120, 255, 150, 20)
             if (motorcycle) {
-                val rearX = side * 0.12f + rearShift * 0.8f
-                bar(side * 0.12f, -0.14f, 0.05f, 0.04f, amber, 0.02f)
-                bar(rearX, 0.08f, 0.05f, 0.04f, amber, 0.02f)
+                bar(side * 0.11f, -0.14f, 0.032f, 0.024f, amber, 0.012f)
+                bar(side * 0.09f, 0.15f, 0.032f, 0.024f, amber, 0.012f)
                 if (lights.blinkOn) {
-                    glow(side * 0.12f, -0.14f, 0.085f, Color.argb(160, 255, 175, 35))
-                    glow(rearX, 0.08f, 0.085f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.11f, -0.14f, 0.065f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.09f, 0.15f, 0.065f, Color.argb(160, 255, 175, 35))
                 }
             } else {
-                val rearX = side * 0.26f + rearShift
-                bar(side * 0.24f, -0.13f, 0.065f, 0.04f, amber, 0.02f)
-                bar(rearX, 0.26f, 0.045f, 0.035f, amber, 0.02f)
+                bar(side * 0.135f, -0.22f, 0.038f, 0.024f, amber, 0.012f)
+                bar(side * 0.175f, 0.195f, 0.034f, 0.022f, amber, 0.012f)
                 if (lights.blinkOn) {
-                    glow(side * 0.24f, -0.13f, 0.085f, Color.argb(160, 255, 175, 35))
-                    glow(rearX, 0.26f, 0.075f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.135f, -0.22f, 0.065f, Color.argb(160, 255, 175, 35))
+                    glow(side * 0.175f, 0.195f, 0.065f, Color.argb(160, 255, 175, 35))
                 }
             }
         }
@@ -257,27 +320,40 @@ object GltfCarRenderer {
         canvas.restore()
     }
 
-    private fun drawShadow(canvas: Canvas, centerX: Float, centerY: Float, sizePx: Float) {
+    private fun drawShadow(
+            canvas: Canvas,
+            centerX: Float,
+            centerY: Float,
+            sizePx: Float,
+            bearingDegrees: Float,
+            isNarrow: Boolean
+    ) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        val halfW = sizePx * (if (isNarrow) 0.12f else 0.21f)
+        val halfH = sizePx * 0.26f
+        val yOff = sizePx * 0.02f
+        canvas.save()
+        canvas.rotate(bearingDegrees, centerX, centerY)
         for (layer in 0..5) {
-            val expansion = sizePx * (0.050f * layer)
-            paint.color = Color.argb(16 - layer * 2, 0, 0, 0)
+            val exp = sizePx * (0.024f * layer)
+            paint.color = Color.argb(20 - layer * 3, 0, 0, 0)
             canvas.drawOval(
-                    centerX - sizePx * 0.34f - expansion,
-                    centerY + sizePx * 0.25f - expansion * 0.4f,
-                    centerX + sizePx * 0.34f + expansion,
-                    centerY + sizePx * 0.43f + expansion * 0.4f,
+                    centerX - halfW - exp,
+                    centerY - halfH + yOff - exp,
+                    centerX + halfW + exp,
+                    centerY + halfH + yOff + exp,
                     paint
             )
         }
         paint.color = Color.argb(55, 0, 0, 0)
         canvas.drawOval(
-                centerX - sizePx * 0.24f,
-                centerY + sizePx * 0.30f,
-                centerX + sizePx * 0.24f,
-                centerY + sizePx * 0.37f,
+                centerX - halfW * 0.82f,
+                centerY - halfH * 0.82f + yOff,
+                centerX + halfW * 0.82f,
+                centerY + halfH * 0.82f + yOff,
                 paint
         )
+        canvas.restore()
     }
 
     private fun modelFor(context: Context, modelKey: String): Model? {
@@ -629,23 +705,16 @@ object GltfCarRenderer {
         }
         val isBicycle = modelKey == "BICYCLE"
         val isWalker = modelKey == "WALKER"
-        // Cars and the motorcycle are normalised by their length along Z. The bicycle
-        // is authored with its length along X, and a person has to be normalised by
-        // height instead, otherwise the software camera frames them at the wrong size.
+        val isMotorcycle = modelKey == "MOTORCYCLE"
         val targetLength =
                 when {
-                    isWalker -> 1.4f
-                    isBicycle -> 2.2f
-                    modelKey == "MOTORCYCLE" -> 2.2f
+                    isWalker -> 2.05f
+                    isBicycle || isMotorcycle -> 2.45f
                     else -> 2.55f
                 }
         val sourceLength =
-                when {
-                    isWalker -> (maxY - minY).coerceAtLeast(0.001f)
-                    isBicycle ->
-                            max(maxX - minX, maxZ - minZ).coerceAtLeast(0.001f)
-                    else -> (maxZ - minZ).coerceAtLeast(0.001f)
-                }
+                if (isWalker) (maxY - minY).coerceAtLeast(0.001f)
+                else (maxZ - minZ).coerceAtLeast(0.001f)
         val factor = targetLength / sourceLength
         val centerX = (minX + maxX) / 2f
         val centerZ = (minZ + maxZ) / 2f
@@ -666,94 +735,55 @@ object GltfCarRenderer {
                     )
                 }
 
-        val primaryTexture = textures.first()
-        val bodyHistogram = HashMap<Int, Int>()
-        val wheelHistogram = HashMap<Int, Int>()
-        fun sample(u: Float, v: Float): Int {
-            val tx =
-                    ((u - floor(u)) * (primaryTexture.width - 1))
-                            .toInt()
-                            .coerceIn(0, primaryTexture.width - 1)
-            val ty =
-                    ((v - floor(v)) * (primaryTexture.height - 1))
-                            .toInt()
-                            .coerceIn(0, primaryTexture.height - 1)
-            return primaryTexture.getPixel(tx, ty)
-        }
-        for (triangle in scaledTriangles) {
-            val u = (triangle.a.u + triangle.b.u + triangle.c.u) / 3f
-            val v = (triangle.a.v + triangle.b.v + triangle.c.v) / 3f
-            val color = sample(u, v)
-            val histogram = if (triangle.isWheel) wheelHistogram else bodyHistogram
-            histogram[color] = (histogram[color] ?: 0) + 1
-        }
-        fun dominant(histogram: Map<Int, Int>, requireBright: Boolean): Int? =
-                histogram.entries
-                        .filter { entry ->
-                            if (!requireBright) true
-                            else {
-                                val luminance =
-                                        (Color.red(entry.key) * 0.3f +
-                                                Color.green(entry.key) * 0.59f +
-                                                Color.blue(entry.key) * 0.11f) / 255f
-                                luminance > 0.28f
-                            }
-                        }
-                        .maxByOrNull { it.value }
-                        ?.key
-        val isMotorcycle = modelKey == "MOTORCYCLE"
-        val preservePaint = isMotorcycle || isBicycle || isWalker
-        val bodyTarget =
-                when (modelKey.uppercase()) {
-                    "SUV" -> Color.rgb(232, 174, 38)
-                    "PICKUP" -> Color.rgb(42, 126, 176)
-                    "MOTORCYCLE" -> Color.rgb(205, 65, 44)
-                    else -> Color.rgb(205, 65, 44)
-                }
         return Model(
                 triangles = scaledTriangles,
                 textures = textures,
-                bodyPaint =
-                        if (preservePaint) 0
-                        else dominant(bodyHistogram, requireBright = true) ?: 0,
-                wheelPaint =
-                        if (preservePaint) 0
-                        else dominant(wheelHistogram, requireBright = false) ?: 0,
-                bodyTarget = bodyTarget,
-                yawOffset =
+                targetY =
                         when {
-                            isWalker -> 0f
-                            isBicycle -> 270f
-                            isMotorcycle -> 180f
-                            else -> 0f
+                            isWalker -> 0.78f
+                            isBicycle || isMotorcycle -> 0.56f
+                            else -> 0.40f
                         },
-                cameraX = if (isBicycle || isWalker) 2.4f else 0.9f
+                targetZ =
+                        when {
+                            isWalker -> -0.05f
+                            isBicycle || isMotorcycle -> -0.14f
+                            else -> -0.22f
+                        },
+                isNarrow = isBicycle || isMotorcycle || isWalker
         )
     }
 
-    private fun render(model: Model, sizePx: Float, bearingDegrees: Float): Bitmap? {
-        val renderSize = (sizePx * 1.6f).roundToInt().coerceIn(128, 512)
-        val width = renderSize
-        val height = renderSize
+    private fun render(
+            model: Model,
+            sizePx: Float,
+            bearingDegrees: Float,
+            topDown: Boolean = false
+    ): Bitmap? {
+        val outSize = (sizePx * 1.5f).roundToInt().coerceIn(128, 320)
+        val ssaa = 2
+        val width = outSize * ssaa
+        val height = outSize * ssaa
         val pixels = IntArray(width * height)
         val depth = FloatArray(width * height) { Float.MAX_VALUE }
-        val yaw = Math.toRadians((bearingDegrees + model.yawOffset).toDouble())
+        val yaw = Math.toRadians(bearingDegrees.toDouble())
         val cosYaw = cos(yaw).toFloat()
         val sinYaw = sin(yaw).toFloat()
-        val eye = V3(model.cameraX, 3.2f, -6.4f)
-        val target = V3(0f, 0.62f, 0f)
+        val eye = if (topDown) V3(0f, 5.65f, -3.55f) else V3(0f, 4.5f, -5.0f)
+        val target = V3(0f, model.targetY, model.targetZ)
         val forward = normalize(sub(target, eye))
-        val right = normalize(cross(forward, V3(0f, 1f, 0f)))
-        val up = cross(right, forward)
+        val right = normalize(cross(V3(0f, 1f, 0f), forward))
+        val up = cross(forward, right)
         val focal = (1.0 / kotlin.math.tan(Math.toRadians(30.0) / 2.0)).toFloat()
-        val scale = renderSize * 0.50f
-        val light = normalize(V3(-0.45f, 0.85f, -0.30f))
+        val scale = width * 0.50f
+        val light = normalize(V3(-0.38f, 0.84f, -0.38f))
+        val halfVec = normalize(V3(-0.22f, 0.78f, -0.58f))
         data class TexturePixels(val width: Int, val height: Int, val pixels: IntArray)
         val texturePixels =
                 model.textures.map { texture ->
-                    val pixels = IntArray(texture.width * texture.height)
+                    val texPixels = IntArray(texture.width * texture.height)
                     texture.getPixels(
-                            pixels,
+                            texPixels,
                             0,
                             texture.width,
                             0,
@@ -761,23 +791,22 @@ object GltfCarRenderer {
                             texture.width,
                             texture.height
                     )
-                    TexturePixels(texture.width, texture.height, pixels)
+                    TexturePixels(texture.width, texture.height, texPixels)
                 }
-        val remap = HashMap<Int, Int>(4)
-        if (model.bodyPaint != 0) remap[model.bodyPaint] = model.bodyTarget
-        if (model.wheelPaint != 0) remap[model.wheelPaint] = Color.rgb(24, 28, 32)
 
-        data class P(val x: Float, val y: Float, val z: Float, val depth: Float)
+        data class P(val x: Float, val y: Float, val z: Float, val nx: Float, val ny: Float, val nz: Float)
 
         fun project(v: V): P? {
             val rx = v.x * cosYaw + v.z * sinYaw
             val rz = -v.x * sinYaw + v.z * cosYaw
+            val rnx = v.nx * cosYaw + v.nz * sinYaw
+            val rnz = -v.nx * sinYaw + v.nz * cosYaw
             val relative = sub(V3(rx, v.y, rz), eye)
             val d = dot(relative, forward)
             if (d <= 0.05f) return null
             val sx = width / 2f + (dot(relative, right) * focal / d) * scale
             val sy = height / 2f - (dot(relative, up) * focal / d) * scale
-            return P(sx, sy, d, d)
+            return P(sx, sy, d, rnx, v.ny, rnz)
         }
 
         for (triangle in model.triangles) {
@@ -814,18 +843,21 @@ object GltfCarRenderer {
                             ((v - floor(v)) * (texture.height - 1))
                                     .toInt()
                                     .coerceIn(0, texture.height - 1)
-                    val tex = texture.pixels[ty * texture.width + tx]
-                    val finalTex = remap[tex] ?: tex
+                    val finalTex = texture.pixels[ty * texture.width + tx]
                     if (Color.alpha(finalTex) < 8) continue
-                    val nx = w0 * triangle.a.nx + w1 * triangle.b.nx + w2 * triangle.c.nx
-                    val ny = w0 * triangle.a.ny + w1 * triangle.b.ny + w2 * triangle.c.ny
-                    val nz = w0 * triangle.a.nz + w1 * triangle.b.nz + w2 * triangle.c.nz
+                    val nx = w0 * a.nx + w1 * b.nx + w2 * c.nx
+                    val ny = w0 * a.ny + w1 * b.ny + w2 * c.ny
+                    val nz = w0 * a.nz + w1 * b.nz + w2 * c.nz
                     val normal = normalize(V3(nx, ny, nz))
-                    val shade = 0.56f + 0.44f * abs(dot(normal, light))
+                    val ndotl = max(0f, dot(normal, light))
+                    val shade = (0.54f + 0.16f * normal.y) + 0.36f * ndotl
                     val r = (Color.red(finalTex) * shade).toInt().coerceIn(0, 255)
                     val g = (Color.green(finalTex) * shade).toInt().coerceIn(0, 255)
                     val b = (Color.blue(finalTex) * shade).toInt().coerceIn(0, 255)
-                    val spec = max(0f, dot(normal, normalize(V3(-0.4f, 0.8f, -0.4f)))) * 0.10f
+                    val specDot = max(0f, dot(normal, halfVec))
+                    val s2 = specDot * specDot
+                    val s4 = s2 * s2
+                    val spec = s4 * s4 * s4 * s2 * 0.16f
                     pixels[index] =
                             Color.argb(
                                     Color.alpha(finalTex),
@@ -838,8 +870,32 @@ object GltfCarRenderer {
             }
         }
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        val outPixels = IntArray(outSize * outSize)
+        for (oy in 0 until outSize) {
+            val y0 = oy * 2 * width
+            val y1 = (oy * 2 + 1) * width
+            val outRow = oy * outSize
+            for (ox in 0 until outSize) {
+                val x0 = ox * 2
+                val p00 = pixels[y0 + x0]
+                val p01 = pixels[y0 + x0 + 1]
+                val p10 = pixels[y1 + x0]
+                val p11 = pixels[y1 + x0 + 1]
+                val a00 = Color.alpha(p00)
+                val a01 = Color.alpha(p01)
+                val a10 = Color.alpha(p10)
+                val a11 = Color.alpha(p11)
+                val aSum = a00 + a01 + a10 + a11
+                if (aSum == 0) continue
+                val rAvg = (Color.red(p00) * a00 + Color.red(p01) * a01 + Color.red(p10) * a10 + Color.red(p11) * a11) / aSum
+                val gAvg = (Color.green(p00) * a00 + Color.green(p01) * a01 + Color.green(p10) * a10 + Color.green(p11) * a11) / aSum
+                val bAvg = (Color.blue(p00) * a00 + Color.blue(p01) * a01 + Color.blue(p10) * a10 + Color.blue(p11) * a11) / aSum
+                outPixels[outRow + ox] = Color.argb(aSum shr 2, rAvg, gAvg, bAvg)
+            }
+        }
+
+        val bitmap = Bitmap.createBitmap(outSize, outSize, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(outPixels, 0, outSize, 0, 0, outSize, outSize)
         return bitmap
     }
 

@@ -1,10 +1,13 @@
 package com.noobdev.waffle
 
 import android.Manifest
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -92,15 +95,60 @@ class MainActivity : ComponentActivity() {
         enterSystemPip()
     }
 
+    private fun buildPipParams(): PictureInPictureParams {
+        val navSnap = NavigationSession.state.value
+        val voiceEnabled = !navSnap.muted
+        val mutePending =
+                PendingIntent.getService(
+                        this,
+                        9101,
+                        Intent(this, NavigationService::class.java).apply {
+                            action = NavigationService.ACTION_TOGGLE_VOICE
+                        },
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+        val stopPending =
+                PendingIntent.getService(
+                        this,
+                        9102,
+                        Intent(this, NavigationService::class.java).apply {
+                            action = NavigationService.ACTION_STOP
+                        },
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+        val muteAction =
+                RemoteAction(
+                        Icon.createWithResource(
+                                this,
+                                if (voiceEnabled) android.R.drawable.ic_lock_silent_mode_off
+                                else android.R.drawable.ic_lock_silent_mode
+                        ),
+                        if (voiceEnabled) "Mute voice" else "Unmute voice",
+                        if (voiceEnabled) "Mute voice guidance" else "Unmute voice guidance",
+                        mutePending
+                )
+        val stopAction =
+                RemoteAction(
+                        Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
+                        "End route",
+                        "Stop turn-by-turn navigation",
+                        stopPending
+                )
+        val builder =
+                PictureInPictureParams.Builder()
+                        .setAspectRatio(Rational(3, 4))
+                        .setActions(listOf(muteAction, stopAction))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val activeNav = navSnap.active || SimulationState.active.value
+            val autoEnterPip = activeNav && !Settings.canDrawOverlays(this)
+            builder.setSeamlessResizeEnabled(true).setAutoEnterEnabled(autoEnterPip)
+        }
+        return builder.build()
+    }
+
     private fun enterSystemPip() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching {
-            enterPictureInPictureMode(
-                    PictureInPictureParams.Builder()
-                            .setAspectRatio(Rational(3, 4))
-                            .build()
-            )
-        }
+        runCatching { enterPictureInPictureMode(buildPipParams()) }
     }
 
     private fun enterPipIfRequested() {
@@ -114,13 +162,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         val entered =
-                runCatching {
-                            enterPictureInPictureMode(
-                                    PictureInPictureParams.Builder()
-                                            .setAspectRatio(Rational(3, 4))
-                                            .build()
-                            )
-                        }
+                runCatching { enterPictureInPictureMode(buildPipParams()) }
                         .getOrDefault(false)
         if (entered) pendingPip = false
     }
@@ -180,6 +222,19 @@ class MainActivity : ComponentActivity() {
         }
         if (intent?.getBooleanExtra("open_navigation", false) == true) {
             NavigationSession.requestOpenMap()
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            lifecycleScope.launch {
+                NavigationSession.state.collect {
+                    runCatching { setPictureInPictureParams(buildPipParams()) }
+                }
+            }
+            lifecycleScope.launch {
+                SimulationState.active.collect {
+                    runCatching { setPictureInPictureParams(buildPipParams()) }
+                }
+            }
         }
 
         lifecycleScope.launch(Dispatchers.IO) {

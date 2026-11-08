@@ -38,14 +38,18 @@ their own licenses. This file is a practical notice list, not legal advice. Keep
 
 ## 3D and visual assets
 
-- **Kenney Car Kit** — CC0 1.0. Cars in `assets/cars`.
-  https://kenney.nl/assets/car-kit
-- **Quaternius** — CC0 motorcycle model.
-  https://quaternius.com/
-- **Poly by Google** — bicycle model, CC-BY 3.0; attribution is required.
-  https://poly.pizza/
-- **Waffle hoodie walker** — project-specific asset; walk frames in `assets/walker`.
+- **Waffle 3D vehicle, bike, motorcycle and pedestrian models** — original Waffle assets,
+  generated procedurally by `tools/cars/generate_models.py`. The `.glb` models in `assets/cars`,
+  the palette atlas (`colormap.png`), the navigation puck sprites in `res/drawable-nodpi` and the
+  12-frame pedestrian walk cycle in `assets/walker` are all produced by that script, so they carry
+  the same licence as the rest of Waffle's original artwork.
 - **Material Icons** — Apache License 2.0 (Android/Compose Material components).
+
+### Previous third-party models (no longer bundled)
+
+Earlier builds used the Kenney Car Kit (CC0 1.0), a Quaternius motorcycle (CC0) and a Poly by
+Google bicycle (CC BY 3.0). Those files have been replaced by the generated models above, so no
+third-party model licence applies to the current APK. The credit is kept here for history.
 
 ## SDKs and services
 

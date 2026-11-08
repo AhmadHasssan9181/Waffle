@@ -179,6 +179,7 @@ object MapStyleResolver {
                 (if (protomapsFile != null) listOf(protomapsFile) else emptyList()) +
                         dirs.flatMap { dir ->
                             listOf(
+                                    File(dir, "pakistan_vector.pmtiles"),
                                     File(dir, "pakistan.pmtiles"),
                                     File(dir, "rawalpindi.pmtiles")
                             )
@@ -309,6 +310,191 @@ object MapStyleResolver {
                 ?: installed.firstOrNull {
                     it.complete && !it.styleUrl.isNullOrBlank()
                 }
+    }
+
+    /**
+     * Sprite-free vector style JSON for [org.maplibre.android.snapshotter.MapSnapshotter] in the
+     * floating navigation overlay.
+     *
+     * Matches the main map's tile source and color theme ([styleIndex]: Light, Dark, or Outdoor /
+     * Field) instead of falling back to MapTiler's rate-limited tiles/v3 endpoint:
+     * 1. Uses the local `pakistan_vector.pmtiles` / `pakistan.pmtiles` archive when installed.
+     * 2. Uses OpenFreeMap's keyless Planet vector tiles when online without a local PMTiles pack.
+     * 3. Falls back to cached MapTiler vector tiles only when offline without PMTiles.
+     *
+     * Remote sprite sheets are omitted so a network error can never trigger MapLibre Native's
+     * sprite-error abort inside the snapshotter; local glyphs are included when present on disk so
+     * road and place names still render cleanly.
+     */
+    fun snapshotStyleJson(context: Context, styleIndex: Int): String {
+        val dirs = listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
+        val localPmtiles =
+                dirs.flatMap { dir ->
+                            listOf(
+                                    File(dir, "pakistan_vector.pmtiles"),
+                                    File(dir, "pakistan.pmtiles"),
+                                    File(dir, "rawalpindi.pmtiles")
+                            )
+                        }
+                        .firstOrNull { it.isFile }
+        val fontRoot = dirs.map { File(it, "fonts") }.firstOrNull { it.isDirectory }
+        val online = NetworkState.isOnline(context)
+
+        val requestedName = mapTilerStyles.keys.elementAtOrNull(styleIndex) ?: OFFLINE_STYLE_NAME
+        val isDark = requestedName == "Dark"
+        val isField = requestedName == "Outdoor"
+
+        val bg =
+                when {
+                    isDark -> "#0E1621"
+                    isField -> "#F1EFE7"
+                    else -> "#F8F5EE"
+                }
+        val landuse =
+                when {
+                    isDark -> "#131F2E"
+                    isField -> "#E7E4D8"
+                    else -> "#EFECE4"
+                }
+        val park =
+                when {
+                    isDark -> "#112A22"
+                    isField -> "#CFE3C8"
+                    else -> "#D9EAD3"
+                }
+        val water =
+                when {
+                    isDark -> "#0B293B"
+                    isField -> "#8CC5DE"
+                    else -> "#9FD3E8"
+                }
+        val waterway =
+                when {
+                    isDark -> "#125E7A"
+                    isField -> "#5AA9C8"
+                    else -> "#6CB7D4"
+                }
+        val building =
+                when {
+                    isDark -> "#1B2838"
+                    isField -> "#DFDBD0"
+                    else -> "#E5E0D5"
+                }
+        val minorRoadCasing =
+                when {
+                    isDark -> "#091019"
+                    isField -> "#D5CFC2"
+                    else -> "#DCD6C9"
+                }
+        val minorRoad =
+                when {
+                    isDark -> "#33475E"
+                    isField -> "#FFFFFF"
+                    else -> "#FFFFFF"
+                }
+        val majorRoadCasing =
+                when {
+                    isDark -> "#091019"
+                    isField -> "#C8B89A"
+                    else -> "#D1C2A5"
+                }
+        val majorRoad =
+                when {
+                    isDark -> "#4F6885"
+                    isField -> "#FFF8E8"
+                    else -> "#FFF9EB"
+                }
+        val highwayCasing =
+                when {
+                    isDark -> "#0A1018"
+                    else -> "#C48A2C"
+                }
+        val highway =
+                when {
+                    isDark -> "#D99B38"
+                    else -> "#F6C26B"
+                }
+        val textPrimary = if (isDark) "#E2E8F0" else "#1E293B"
+        val textSecondary = if (isDark) "#94A3B8" else "#475569"
+        val textHalo = if (isDark) "#0E1621" else "#FFFFFF"
+
+        val sourceBlock =
+                if (localPmtiles != null) {
+                    """
+                    "base": {
+                      "type": "vector",
+                      "url": "pmtiles://file://${localPmtiles.absolutePath}"
+                    }
+                    """.trimIndent()
+                } else if (online) {
+                    """
+                    "base": {
+                      "type": "vector",
+                      "url": "https://tiles.openfreemap.org/planet"
+                    }
+                    """.trimIndent()
+                } else {
+                    val tiles = "https://api.maptiler.com/tiles/v3/{z}/{x}/{y}?key=$apikey"
+                    """
+                    "base": {
+                      "type": "vector",
+                      "tiles": ["$tiles"],
+                      "minzoom": 0,
+                      "maxzoom": 14
+                    }
+                    """.trimIndent()
+                }
+
+        val glyphsLine =
+                when {
+                    fontRoot != null ->
+                            "\"glyphs\": \"file://${fontRoot.absolutePath}/{fontstack}/{range}.pbf\","
+                    online && localPmtiles == null ->
+                            "\"glyphs\": \"https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf\","
+                    else -> ""
+                }
+
+        val hasGlyphs = glyphsLine.isNotEmpty()
+        val labelLayers =
+                if (hasGlyphs) {
+                    """
+                    ,
+                    {"id":"road-labels","type":"symbol","source":"base","source-layer":"transportation_name","minzoom":13,
+                     "layout":{"text-field":["coalesce",["get","name:en"],["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],"text-size":["interpolate",["linear"],["zoom"],13,9.5,16,12],"symbol-placement":"line","text-rotation-alignment":"map"},
+                     "paint":{"text-color":"$textSecondary","text-halo-color":"$textHalo","text-halo-width":1.4}},
+                    {"id":"place-labels","type":"symbol","source":"base","source-layer":"place","minzoom":8,
+                     "layout":{"text-field":["coalesce",["get","name:en"],["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],"text-size":["interpolate",["linear"],["zoom"],8,10,15,14],"text-anchor":"center"},
+                     "paint":{"text-color":"$textPrimary","text-halo-color":"$textHalo","text-halo-width":1.5}}
+                    """.trimIndent()
+                } else ""
+
+        return """
+        {
+          "version": 8,
+          "name": "Waffle floating map",
+          $glyphsLine
+          "sources": {
+            $sourceBlock
+          },
+          "layers": [
+            {"id":"background","type":"background","paint":{"background-color":"$bg"}},
+            {"id":"landcover","type":"fill","source":"base","source-layer":"landcover","paint":{"fill-color":"$park","fill-opacity":0.55}},
+            {"id":"landuse","type":"fill","source":"base","source-layer":"landuse","paint":{"fill-color":"$landuse","fill-opacity":0.85}},
+            {"id":"park","type":"fill","source":"base","source-layer":"park","paint":{"fill-color":"$park","fill-opacity":0.85}},
+            {"id":"water","type":"fill","source":"base","source-layer":"water","paint":{"fill-color":"$water"}},
+            {"id":"waterway","type":"line","source":"base","source-layer":"waterway","paint":{"line-color":"$waterway","line-width":["interpolate",["linear"],["zoom"],8,0.6,15,2.2]}},
+            {"id":"building","type":"fill","source":"base","source-layer":"building","minzoom":13,"paint":{"fill-color":"$building","fill-opacity":0.78}},
+            {"id":"road-minor-casing","type":"line","source":"base","source-layer":"transportation","filter":["!in","class","motorway","trunk","primary","secondary"],"paint":{"line-color":"$minorRoadCasing","line-width":["interpolate",["linear"],["zoom"],11,1.2,16,7]}},
+            {"id":"road-minor","type":"line","source":"base","source-layer":"transportation","filter":["!in","class","motorway","trunk","primary","secondary"],"paint":{"line-color":"$minorRoad","line-width":["interpolate",["linear"],["zoom"],11,0.6,16,4.8]}},
+            {"id":"road-major-casing","type":"line","source":"base","source-layer":"transportation","filter":["in","class","primary","secondary"],"paint":{"line-color":"$majorRoadCasing","line-width":["interpolate",["linear"],["zoom"],9,1.8,16,10]}},
+            {"id":"road-major","type":"line","source":"base","source-layer":"transportation","filter":["in","class","primary","secondary"],"paint":{"line-color":"$majorRoad","line-width":["interpolate",["linear"],["zoom"],9,1.1,16,7.2]}},
+            {"id":"road-highway-casing","type":"line","source":"base","source-layer":"transportation","filter":["in","class","motorway","trunk"],"paint":{"line-color":"$highwayCasing","line-width":["interpolate",["linear"],["zoom"],7,1.8,16,12]}},
+            {"id":"road-highway","type":"line","source":"base","source-layer":"transportation","filter":["in","class","motorway","trunk"],"paint":{"line-color":"$highway","line-width":["interpolate",["linear"],["zoom"],7,1.1,16,8.5]}},
+            {"id":"boundary","type":"line","source":"base","source-layer":"boundary","paint":{"line-color":"#F59E0B","line-opacity":0.28,"line-width":1}}
+            $labelLayers
+          ]
+        }
+        """.trimIndent()
     }
 }
 

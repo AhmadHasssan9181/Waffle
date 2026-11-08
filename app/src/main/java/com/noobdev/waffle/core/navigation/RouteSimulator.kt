@@ -65,8 +65,10 @@ class RouteSimulator {
     private var segmentProgress = 0.0 // 0.0 to 1.0 within segment
     private var targetSpeed = SPEED_CITY
     private var useVariableSpeed = false
-    /** Last non-zero pace, so a simulated red light does not make the ETA read 0 min. */
+    /** Smoothed rolling pace so simulated braking/stops/pulls do not make the ETA swing wildly. */
     private var lastMovingSpeed = SPEED_CITY
+    private var rollingPaceMps = SPEED_CITY.toDouble()
+    private var smoothedRemainingSec = 0.0
     private var expectedPaceMps = SPEED_CITY
     private var variablePhaseStartMs = 0L
     private var variablePhaseIndex = 0
@@ -99,7 +101,8 @@ class RouteSimulator {
             coordinates: List<Pair<Double, Double>>,
             speedMps: Float = SPEED_CITY,
             profile: String = "driving-car",
-            scope: CoroutineScope
+            scope: CoroutineScope,
+            expectedDurationSeconds: Double = 0.0
     ) {
         // Always clear the previous loop first, even when the new route is invalid.
         stopSimulation()
@@ -118,13 +121,23 @@ class RouteSimulator {
                         "cycling-regular" -> 0.28f
                         else -> 1f
                 }
+        val totalRouteMeters = getRemainingDistance()
+        val routeAvgMps =
+                if (expectedDurationSeconds > 1.0 && totalRouteMeters > 1.0)
+                        (totalRouteMeters / expectedDurationSeconds).toFloat().coerceIn(0.8f, 35f)
+                else null
         expectedPaceMps =
-                when (profile) {
-                        "foot-walking" -> 1.4f
-                        "cycling-regular" -> 5.0f
-                        else -> SPEED_CITY
-                }
+                routeAvgMps
+                        ?: when (profile) {
+                                "foot-walking" -> 1.4f
+                                "cycling-regular" -> 5.0f
+                                else -> SPEED_CITY
+                        }
         lastMovingSpeed = if (useVariableSpeed) expectedPaceMps else speedMps
+        rollingPaceMps = lastMovingSpeed.toDouble().coerceAtLeast(1.0)
+        smoothedRemainingSec =
+                if (useVariableSpeed && expectedDurationSeconds > 1.0) expectedDurationSeconds
+                else 0.0
         targetSpeed = if (useVariableSpeed) 0f else speedMps
         _currentSpeed.value = if (useVariableSpeed) 0f else speedMps
         variablePhaseStartMs = 0L
@@ -226,7 +239,17 @@ class RouteSimulator {
                     _currentSpeed.value = targetSpeed
                     targetSpeed
                 }
-        if (speedNow > 0.5f) lastMovingSpeed = speedNow
+        if (speedNow > 0.5f) {
+            lastMovingSpeed = speedNow
+            val base = expectedPaceMps.toDouble().coerceAtLeast(1.0)
+            val clamped =
+                    if (useVariableSpeed) speedNow.toDouble().coerceIn(base * 0.65, base * 1.45)
+                    else speedNow.toDouble().coerceAtLeast(0.5)
+            // Update at 10 Hz with a very slow alpha so variable-speed pulls & stops never whipsaw ETA.
+            rollingPaceMps = rollingPaceMps * 0.985 + clamped * 0.015
+        } else {
+            rollingPaceMps = rollingPaceMps * 0.995 + expectedPaceMps.toDouble() * 0.005
+        }
 
         // Calculate how far we move this tick
         val distanceThisTick = speedNow * (UPDATE_INTERVAL_MS / 1000.0)
@@ -367,15 +390,33 @@ class RouteSimulator {
         return remaining
     }
 
-    /** Get estimated time remaining based on current speed. */
+    /** Get estimated time remaining based on smoothed rolling pace. */
     fun getRemainingTime(): Double {
         val distance = getRemainingDistance()
-        // Hold the last moving pace at a simulated stop. Using 0 m/s made the ETA collapse
-        // to "0 min" at every red light and during the variable-speed stop phase.
-        val speed =
-                if (_currentSpeed.value > 0.5f) _currentSpeed.value
-                else lastMovingSpeed.coerceAtLeast(expectedPaceMps * 0.3f)
-        return if (speed > 0.1f) distance / speed else 0.0
+        if (distance <= 1.0) {
+            smoothedRemainingSec = 0.0
+            return 0.0
+        }
+        val pace =
+                if (useVariableSpeed) {
+                    rollingPaceMps.coerceIn(
+                            (expectedPaceMps * 0.75f).toDouble(),
+                            (expectedPaceMps * 1.35f).toDouble()
+                    )
+                } else {
+                    targetSpeed.coerceAtLeast(expectedPaceMps * 0.3f).toDouble()
+                }
+        val rawSec = if (pace > 0.1) distance / pace else 0.0
+        smoothedRemainingSec =
+                if (smoothedRemainingSec <= 0.0 || abs(rawSec - smoothedRemainingSec) > 180.0) {
+                    rawSec
+                } else {
+                    (smoothedRemainingSec * 0.92 + rawSec * 0.08).coerceIn(
+                            smoothedRemainingSec - 1.2,
+                            smoothedRemainingSec + 0.35
+                    )
+                }
+        return smoothedRemainingSec.coerceAtLeast(0.0)
     }
 }
 

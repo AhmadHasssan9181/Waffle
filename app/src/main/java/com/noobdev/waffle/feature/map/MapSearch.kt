@@ -1,11 +1,16 @@
 package com.noobdev.waffle.feature.map
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.speech.RecognizerIntent
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -92,8 +97,26 @@ fun GoogleSearchBar(
         onClick: () -> Unit,
         placeholder: String = "Search here"
 ) {
+        val context = LocalContext.current
         val focusRequester = remember { FocusRequester() }
         val focusManager = LocalFocusManager.current
+        val voiceLauncher =
+                rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                        if (result.resultCode == Activity.RESULT_OK) {
+                                val spoken =
+                                        result.data
+                                                ?.getStringArrayListExtra(
+                                                        RecognizerIntent.EXTRA_RESULTS
+                                                )
+                                                ?.firstOrNull()
+                                                ?.trim()
+                                if (!spoken.isNullOrEmpty()) {
+                                        onQueryChange(spoken)
+                                }
+                        }
+                }
 
         LaunchedEffect(isSearching) {
                 if (isSearching) {
@@ -102,22 +125,30 @@ fun GoogleSearchBar(
         }
 
         Card(
-                modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(28.dp)),
+                modifier = Modifier.fillMaxWidth().shadow(5.dp, RoundedCornerShape(28.dp)),
                 shape = RoundedCornerShape(28.dp),
+                border =
+                        BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        ),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
                 Row(
                         modifier = Modifier.fillMaxWidth().padding(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                 ) {
-                        // Back/Menu button
+                        // Back/Search button
                         IconButton(onClick = if (isSearching) onBack else onClick) {
                                 Icon(
                                         imageVector =
                                                 if (isSearching) Icons.Default.ArrowBack
-                                                else Icons.Default.Menu,
+                                                else Icons.Default.Search,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint =
+                                                if (isSearching)
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                else MaterialTheme.colorScheme.primary
                                 )
                         }
 
@@ -157,9 +188,48 @@ fun GoogleSearchBar(
                                 )
                         }
 
-                        // Clear button
+                        // Clear or Voice Search button
                         if (query.isNotEmpty()) {
                                 IconButton(onClick = onClear) { Icon(Icons.Default.Clear, "Clear") }
+                        } else {
+                                IconButton(
+                                        onClick = {
+                                                runCatching {
+                                                        val intent =
+                                                                Intent(
+                                                                                RecognizerIntent
+                                                                                        .ACTION_RECOGNIZE_SPEECH
+                                                                        )
+                                                                        .apply {
+                                                                                putExtra(
+                                                                                        RecognizerIntent
+                                                                                                .EXTRA_LANGUAGE_MODEL,
+                                                                                        RecognizerIntent
+                                                                                                .LANGUAGE_MODEL_FREE_FORM
+                                                                                )
+                                                                                putExtra(
+                                                                                        RecognizerIntent
+                                                                                                .EXTRA_PROMPT,
+                                                                                        "Speak destination or place"
+                                                                                )
+                                                                        }
+                                                        voiceLauncher.launch(intent)
+                                                }.onFailure {
+                                                        Toast.makeText(
+                                                                        context,
+                                                                        "Voice search unavailable on this device",
+                                                                        Toast.LENGTH_SHORT
+                                                                )
+                                                                .show()
+                                                }
+                                        }
+                                ) {
+                                        Icon(
+                                                Icons.Default.Mic,
+                                                contentDescription = "Voice search",
+                                                tint = MaterialTheme.colorScheme.primary
+                                        )
+                                }
                         }
                 }
         }
@@ -170,7 +240,11 @@ fun GoogleSearchBar(
 // ============================================
 
 @Composable
-fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
+fun SearchResultsCard(
+        query: String,
+        onResultClick: (GeoSearchResult) -> Unit,
+        onQueryChange: (String) -> Unit = {}
+) {
         val context = LocalContext.current
         var suggestions by remember { mutableStateOf<List<GeoSearchResult>>(emptyList()) }
         var isLoading by remember { mutableStateOf(false) }
@@ -249,24 +323,34 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
                                         horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
                                         QuickActionChip(
-                                                Icons.Default.LocalGasStation,
-                                                "Petrol",
-                                                Color(0xFFFF9800)
+                                                icon = Icons.Default.LocalGasStation,
+                                                label = "Petrol",
+                                                color = Color(0xFFFF9800),
+                                                onClick = { onQueryChange("PSO") }
                                         )
                                         QuickActionChip(
-                                                Icons.Default.Restaurant,
-                                                "Food",
-                                                Color(0xFF4CAF50)
+                                                icon = Icons.Default.Restaurant,
+                                                label = "Food",
+                                                color = Color(0xFF4CAF50),
+                                                onClick = { onQueryChange("Restaurant") }
                                         )
                                         QuickActionChip(
-                                                Icons.Default.LocalHospital,
-                                                "Hospital",
-                                                DangerRed
+                                                icon = Icons.Default.LocalHospital,
+                                                label = "Hospital",
+                                                color = DangerRed,
+                                                onClick = { onQueryChange("Hospital") }
                                         )
                                         QuickActionChip(
-                                                Icons.Default.LocalPharmacy,
-                                                "Pharmacy",
-                                                Color(0xFF2196F3)
+                                                icon = Icons.Default.LocalPharmacy,
+                                                label = "Pharmacy",
+                                                color = Color(0xFF2196F3),
+                                                onClick = { onQueryChange("Pharmacy") }
+                                        )
+                                        QuickActionChip(
+                                                icon = Icons.Default.Place,
+                                                label = "Masjid",
+                                                color = Color(0xFF009688),
+                                                onClick = { onQueryChange("Masjid") }
                                         )
                                 }
                                 HorizontalDivider()
@@ -440,20 +524,32 @@ fun SearchResultsCard(query: String, onResultClick: (GeoSearchResult) -> Unit) {
 }
 
 @Composable
-fun QuickActionChip(icon: ImageVector, label: String, color: Color) {
+fun QuickActionChip(
+        icon: ImageVector,
+        label: String,
+        color: Color,
+        onClick: () -> Unit = {}
+) {
         Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable {}
+                modifier =
+                        Modifier.clip(RoundedCornerShape(12.dp))
+                                .clickable { onClick() }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
         ) {
                 Box(
                         modifier =
-                                Modifier.size(48.dp)
+                                Modifier.size(46.dp)
                                         .clip(CircleShape)
-                                        .background(color.copy(alpha = 0.1f)),
+                                        .background(color.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
-                ) { Icon(icon, null, tint = color, modifier = Modifier.size(24.dp)) }
+                ) { Icon(icon, null, tint = color, modifier = Modifier.size(22.dp)) }
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(label, style = MaterialTheme.typography.labelSmall)
+                Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium
+                )
         }
 }
 

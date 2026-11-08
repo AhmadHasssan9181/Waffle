@@ -211,46 +211,27 @@ class NavigationController(
                         snap.snappedLng
                 )
         val routeAverage =
-                if (activeRoute.durationSeconds > 0)
+                if (activeRoute.durationSeconds > 0 && activeRoute.distanceMeters > 0)
                         activeRoute.distanceMeters / activeRoute.durationSeconds
                 else if (profile == "foot-walking") 1.4 else 11.0
-        // Blend the current pace with the route estimate. Pure route-average ETA is
-        // wildly optimistic when traffic is slower than the router assumed; pure
-        // instantaneous speed makes a red light send the ETA to the moon.
-        val movingThreshold =
-                when (profile) {
-                        "foot-walking" -> 0.5
-                        "cycling-regular" -> 1.5
-                        else -> 3.0
-                }
-        if (speedMps > movingThreshold) lastMovingPaceMps = speedMps.toDouble()
-        // If TomTom has a flow sample for this road, use it as the expected pace.
-        // The router's free-flow average is too optimistic in congestion.
-        val trafficPace = TrafficState.paceMps
-        val expectedPace =
-                if (trafficPace != null && trafficPace > 0.8)
-                        (routeAverage * 0.35 + trafficPace * 0.65)
-                                .coerceAtMost(routeAverage * 1.3)
-                else routeAverage
-        val pace =
-                when {
-                        speedMps > movingThreshold ->
-                                speedMps.toDouble() * 0.9 + expectedPace * 0.1
-                        speedMps > movingThreshold * 0.3 ->
-                                speedMps.toDouble() * 0.5 +
-                                        (if (lastMovingPaceMps > movingThreshold)
-                                                        lastMovingPaceMps
-                                                else expectedPace) *
-                                                0.5
-                        else ->
-                                if (lastMovingPaceMps > movingThreshold) lastMovingPaceMps
-                                else expectedPace
-                }
-                        .coerceAtLeast(0.8)
-        val newDuration = remainingDistance / pace
+        lastMovingPaceMps =
+                RouteEtaCalculator.updateRollingSpeed(
+                        currentRollingMps = lastMovingPaceMps,
+                        rawSpeedMps = speedMps,
+                        expectedRouteMps = routeAverage,
+                        profile = profile
+                )
         remainingDuration =
-                if (remainingDuration > 0) remainingDuration * 0.25 + newDuration * 0.75
-                else newDuration
+                RouteEtaCalculator.estimateRemainingSeconds(
+                        route = activeRoute,
+                        remainingDistanceMeters = remainingDistance,
+                        rollingSpeedMps = lastMovingPaceMps,
+                        currentStepIndex = instructionIndex,
+                        distanceToNextTurnMeters = distanceToNextTurn,
+                        trafficPaceMps = TrafficState.paceMps,
+                        profile = profile,
+                        previousRemainingSeconds = remainingDuration
+                )
         arrived = remainingDistance < 25.0
         if (arrived && !arrivalAnnounced) {
             arrivalAnnounced = true

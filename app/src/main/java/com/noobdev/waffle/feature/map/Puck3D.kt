@@ -53,6 +53,7 @@ internal fun AnimatedPuck3D(
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
         isNavigating: Boolean = false,
+        inPip: Boolean = false,
         lights: VehicleLights = VehicleLights(),
         speedMps: Double = 0.0
 ) {
@@ -87,6 +88,7 @@ internal fun AnimatedPuck3D(
             travelMode = travelMode,
             vehicleIcon = vehicleIcon,
             isNavigating = isNavigating,
+            inPip = inPip,
             lights = lights,
             speedMps = speedMps
     )
@@ -109,6 +111,7 @@ internal fun Puck3D(
         travelMode: String,
         vehicleIcon: VehicleIcon = VehicleIcon.SEDAN,
         isNavigating: Boolean = false,
+        inPip: Boolean = false,
         lights: VehicleLights = VehicleLights(),
         speedMps: Double = 0.0
 ) {
@@ -132,11 +135,7 @@ internal fun Puck3D(
             }
     val iconName =
             "puck-3d-$travelMode-${vehicleIcon.storageKey}-${if (isNavigating) "nav" else "dot"}"
-    // The baked walker frames were shot from a 3/4 rear camera, so the body reads a
-    // few degrees to the right of the actual route tangent. Counter-rotate the
-    // bitmap slightly for walk mode only.
-    val visualBearing =
-            if (isWalkMode) (bearing + 15.0 + 360.0) % 360.0 else bearing
+    val visualBearing = bearing
     val drawableRes =
             when {
                 !isNavigating -> R.drawable.ic_puck_dot
@@ -145,13 +144,14 @@ internal fun Puck3D(
                 isCarMode && vehicleIcon == VehicleIcon.ARROW -> R.drawable.ic_puck_arrow_3d
                 else -> vehicleIcon.drawable
             }
-    val iconSize =
+    val baseIconSize =
             when {
                 !isNavigating -> 0.30f
-                isWalkMode -> 0.42f
-                isBikeMode -> 0.85f
+                isWalkMode -> 0.50f
+                isBikeMode -> 0.55f
                 else -> 0.55f
             }
+    val iconSize = if (inPip) baseIconSize * 0.72f else baseIconSize
     val fallbackBitmap =
             remember(drawableRes) {
                 BitmapFactory.decodeResource(context.resources, drawableRes)
@@ -163,7 +163,7 @@ internal fun Puck3D(
     var threeDBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var frameIndex by remember { mutableStateOf(0) }
     val renderLights = if (isCarMode) lights else VehicleLights()
-    LaunchedEffect(context, modelKey, renderLights, use3DModel, isWalkMode) {
+    LaunchedEffect(context, modelKey, renderLights, use3DModel, isWalkMode, inPip) {
         if (use3DModel && isWalkMode) {
             val frames =
                     withContext(Dispatchers.IO) {
@@ -193,7 +193,8 @@ internal fun Puck3D(
                                     modelKey = modelKey,
                                     sizePx = with(density) { 100.dp.toPx() },
                                     bearingDegrees = 0f,
-                                    lights = renderLights
+                                    lights = renderLights,
+                                    topDown = inPip
                             )
                         }
                     } else null

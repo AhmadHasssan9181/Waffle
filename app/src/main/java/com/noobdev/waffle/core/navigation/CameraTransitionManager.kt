@@ -135,6 +135,39 @@ object CameraTransitionManager {
     }
 
     /**
+     * Frame the camera for Android's compact system PiP window: clear the full-screen 400px top
+     * padding (which otherwise pushes the 3D vehicle behind the bottom PiP bar), apply a small
+     * bottom padding for the PiP HUD bar, and use a flat course-up view shifted slightly ahead.
+     */
+    fun updatePipCamera(
+            map: MapLibreMap,
+            currentPosition: LatLng,
+            bearing: Double,
+            bottomPaddingPx: Int = 140,
+            animate: Boolean = true
+    ) {
+        map.setPadding(0, 0, 0, bottomPaddingPx)
+        val lookAhead =
+                GeoGeometry.destinationMeters(
+                        GeoPoint(currentPosition.latitude, currentPosition.longitude),
+                        bearing,
+                        55.0
+                )
+        val cameraPosition =
+                CameraPosition.Builder()
+                        .target(LatLng(lookAhead.latitude, lookAhead.longitude))
+                        .zoom(15.6)
+                        .tilt(0.0)
+                        .bearing(bearing)
+                        .build()
+        if (animate) {
+            map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 450)
+        } else {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+        }
+    }
+
+    /**
      * Re-center camera on position with smooth animation. Called when user taps "Re-center" button
      * or after inactivity timeout.
      */

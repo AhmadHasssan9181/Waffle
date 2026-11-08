@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,9 +24,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Directions
+import androidx.compose.material.icons.rounded.LocalGasStation
+import androidx.compose.material.icons.rounded.LocalHospital
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.Thermostat
@@ -98,40 +102,99 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = viewMode
         Row(verticalAlignment = Alignment.CenterVertically) {
             WaffleWordmark(markSize = 32.dp, subtitle = "Stay found")
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
-                Icon(
-                        Icons.Rounded.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Surface(
+                    onClick = { navController.navigate(Screen.Settings.route) },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    border =
+                            BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                            )
+            ) {
+                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                            Icons.Rounded.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
         Spacer(Modifier.height(WaffleSpace.xl))
 
-        // === GREETING ===
+        // === GREETING + LOCATION PILL ===
         Text(
                 text = "${state.greeting}.",
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                    Icons.Rounded.LocationOn,
-                    null,
-                    Modifier.size(15.dp),
-                    tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                    text = state.locationName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Spacer(Modifier.height(8.dp))
+        Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surface,
+                    border =
+                            BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                            )
+            ) {
+                Row(
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                            Icons.Rounded.LocationOn,
+                            null,
+                            Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                            text = state.locationName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Surface(
+                    shape = RoundedCornerShape(50),
+                    color = SafeGreen.copy(alpha = 0.14f)
+            ) {
+                Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(SafeGreen))
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                            text = "Offline ready",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafeGreen
+                    )
+                }
+            }
         }
 
-        Spacer(Modifier.height(WaffleSpace.xl))
+        Spacer(Modifier.height(WaffleSpace.lg))
+
+        // === QUICK "WHERE TO?" SEARCH & NAVIGATION LAUNCHER ===
+        QuickNavigateCard(
+                onOpenMap = { navController.navigate(Screen.Map.route) },
+                onOpenNearby = { navController.navigate(Screen.Nearby.route) },
+                onOpenOffline = { navController.navigate(Screen.OfflineMaps.route) }
+        )
+
+        Spacer(Modifier.height(WaffleSpace.md))
 
         // === SAFETY HERO ===
         SafetyHero(
@@ -217,7 +280,12 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = viewMode
                                                     navController.navigate(Screen.Alerts.route)
                                                 },
                                 shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.surface
+                                color = MaterialTheme.colorScheme.surface,
+                                border =
+                                        BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                        )
                         ) {
                             Row(
                                     modifier =
@@ -267,12 +335,148 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = viewMode
         Eyebrow("Emergency")
         Spacer(Modifier.height(WaffleSpace.sm))
         Row(horizontalArrangement = Arrangement.spacedBy(WaffleSpace.sm)) {
-            EmergencyNumber("1122", "Rescue", Modifier.weight(1f))
-            EmergencyNumber("1166", "NDMA", Modifier.weight(1f))
-            EmergencyNumber("15", "Police", Modifier.weight(1f))
+            EmergencyNumber("1122", "Rescue", DangerRed, Modifier.weight(1f))
+            EmergencyNumber("1166", "NDMA", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            EmergencyNumber("15", "Police", Sky, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(110.dp))
+    }
+}
+
+// ============================================
+// QUICK NAVIGATE LAUNCHER
+// ============================================
+
+@Composable
+private fun QuickNavigateCard(
+        onOpenMap: () -> Unit,
+        onOpenNearby: () -> Unit,
+        onOpenOffline: () -> Unit
+) {
+    Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border =
+                    BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                    )
+    ) {
+        Column(modifier = Modifier.padding(WaffleSpace.md)) {
+            Surface(
+                    onClick = onOpenMap,
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            ) {
+                Row(
+                        modifier =
+                                Modifier.fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                            text = "Where to? Search places & routes…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                    )
+                    Box(
+                            modifier =
+                                    Modifier.size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                                Icons.Rounded.Directions,
+                                contentDescription = "Open map",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuickShortcutChip(
+                        icon = Icons.Rounded.LocalGasStation,
+                        label = "Fuel",
+                        tint = MaterialTheme.colorScheme.primary,
+                        onClick = onOpenNearby,
+                        modifier = Modifier.weight(1f)
+                )
+                QuickShortcutChip(
+                        icon = Icons.Rounded.Restaurant,
+                        label = "Food",
+                        tint = SafeGreen,
+                        onClick = onOpenNearby,
+                        modifier = Modifier.weight(1f)
+                )
+                QuickShortcutChip(
+                        icon = Icons.Rounded.LocalHospital,
+                        label = "Health",
+                        tint = DangerRed,
+                        onClick = onOpenNearby,
+                        modifier = Modifier.weight(1f)
+                )
+                QuickShortcutChip(
+                        icon = Icons.Rounded.CloudDownload,
+                        label = "Offline",
+                        tint = Sky,
+                        onClick = onOpenOffline,
+                        modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickShortcutChip(
+        icon: ImageVector,
+        label: String,
+        tint: Color,
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier
+) {
+    Surface(
+            onClick = onClick,
+            modifier = modifier,
+            shape = RoundedCornerShape(14.dp),
+            color = tint.copy(alpha = 0.10f)
+    ) {
+        Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, Modifier.size(14.dp), tint = tint)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+            )
+        }
     }
 }
 
@@ -381,28 +585,48 @@ private fun SafetyHero(state: HomeUiState, onViewAlerts: () -> Unit) {
 // ============================================
 
 @Composable
-private fun WeatherTile(value: String, label: String, icon: ImageVector, tint: Color, modifier: Modifier = Modifier) {
+private fun WeatherTile(
+        value: String,
+        label: String,
+        icon: ImageVector,
+        tint: Color,
+        modifier: Modifier = Modifier
+) {
     Surface(
             modifier = modifier,
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
     ) {
-        Column(Modifier.padding(WaffleSpace.lg)) {
-            Icon(icon, null, Modifier.size(18.dp), tint = tint)
-            Spacer(Modifier.height(WaffleSpace.sm))
-            Text(
-                    text = value,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-            )
+        Row(
+                modifier = Modifier.padding(WaffleSpace.lg),
+                verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                    modifier =
+                            Modifier.size(42.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(tint.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, Modifier.size(21.dp), tint = tint)
+            }
+            Spacer(Modifier.width(WaffleSpace.md))
+            Column {
+                Text(
+                        text = value,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -412,40 +636,51 @@ private fun WeatherTile(value: String, label: String, icon: ImageVector, tint: C
 // ============================================
 
 @Composable
-private fun EmergencyNumber(number: String, label: String, modifier: Modifier = Modifier) {
+private fun EmergencyNumber(
+        number: String,
+        label: String,
+        tint: Color,
+        modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     Surface(
             modifier =
-                    modifier.clip(RoundedCornerShape(16.dp)).clickable {
+                    modifier.clip(RoundedCornerShape(18.dp)).clickable {
                         runCatching {
                             context.startActivity(
                                     Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
                             )
                         }
                     },
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
     ) {
         Column(
-                modifier = Modifier.padding(vertical = WaffleSpace.md),
+                modifier = Modifier.padding(vertical = WaffleSpace.md, horizontal = WaffleSpace.sm),
                 horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                    modifier =
+                            Modifier.size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(tint.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+            ) {
                 Icon(
                         Icons.Rounded.Phone,
                         null,
-                        Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                        text = number,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        Modifier.size(15.dp),
+                        tint = tint
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                    text = number,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+            )
             Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
@@ -476,5 +711,3 @@ private fun previewAlerts(state: HomeUiState): List<DisasterAlert> =
                             .take(1)
                             .filter { it.status != StatusLevel.SAFE }
                 }
-
-

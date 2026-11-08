@@ -5,7 +5,7 @@ data class RouteOptions(
         val avoidTolls: Boolean = false,
         val avoidHighways: Boolean = false,
         val avoidFerries: Boolean = false,
-        val alternatives: Boolean = false
+        val alternatives: Boolean = true
 ) {
     val needsOnline: Boolean
         get() = avoidTolls || avoidHighways || avoidFerries

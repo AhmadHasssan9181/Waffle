@@ -66,12 +66,12 @@ object Car3DRenderer {
         val cosYaw = cos(yaw).toFloat()
         val sinYaw = sin(yaw).toFloat()
 
-        val eye = V3(3.2f, 3.0f, -6.0f)
-        val target = V3(0f, 0.62f, 0f)
+        val eye = V3(0f, 4.5f, -5.0f)
+        val target = V3(0f, 0.40f, -0.22f)
         val up = V3(0f, 1f, 0f)
         val forward = normalize(sub(target, eye))
-        val right = normalize(cross(forward, up))
-        val trueUp = cross(right, forward)
+        val right = normalize(cross(up, forward))
+        val trueUp = cross(forward, right)
         val fov = Math.toRadians(30.0)
         val focal = (1.0 / tan(fov / 2.0)).toFloat()
         val scale = sizePx * 0.70f

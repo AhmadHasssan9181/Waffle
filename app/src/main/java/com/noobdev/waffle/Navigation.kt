@@ -1,7 +1,9 @@
 package com.noobdev.waffle
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -222,9 +224,23 @@ fun WaffleBottomNavBar(navController: NavController, currentRoute: String?) {
             ) {
                 bottomNavItems.forEach { screen ->
                     val selected = currentRoute == screen.route
-                    val tint =
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                    val tint by
+                            animateColorAsState(
+                                    targetValue =
+                                            if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    label = "navTint"
+                            )
+                    val pillColor by
+                            animateColorAsState(
+                                    targetValue =
+                                            if (selected)
+                                                    MaterialTheme.colorScheme.primary.copy(
+                                                            alpha = 0.15f
+                                                    )
+                                            else androidx.compose.ui.graphics.Color.Transparent,
+                                    label = "navPill"
+                            )
 
                     Column(
                             modifier =
@@ -249,13 +265,7 @@ fun WaffleBottomNavBar(navController: NavController, currentRoute: String?) {
                                         Modifier.height(28.dp)
                                                 .width(48.dp)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(
-                                                        if (selected)
-                                                                MaterialTheme.colorScheme.primary
-                                                                        .copy(alpha = 0.14f)
-                                                        else androidx.compose.ui.graphics.Color
-                                                                .Transparent
-                                                ),
+                                                .background(pillColor),
                                 contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -271,6 +281,8 @@ fun WaffleBottomNavBar(navController: NavController, currentRoute: String?) {
                         Text(
                                 text = screen.title,
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight =
+                                        if (selected) FontWeight.Bold else FontWeight.Medium,
                                 color = tint
                         )
                     }

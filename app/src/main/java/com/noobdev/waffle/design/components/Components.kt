@@ -525,30 +525,60 @@ fun ActionTile(
                             MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
                     )
     ) {
-        Column(Modifier.padding(WaffleSpace.lg)) {
-            Box(
-                    modifier =
-                            Modifier.size(42.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(tint.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
+        Column(
+                modifier = Modifier.padding(WaffleSpace.lg),
+                verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, null, Modifier.size(22.dp), tint = tint)
+                Box(
+                        modifier =
+                                Modifier.size(42.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(tint.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, Modifier.size(22.dp), tint = tint)
+                }
+                Box(
+                        modifier =
+                                Modifier.size(26.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                        alpha = 0.55f
+                                                )
+                                        ),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                            Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             Spacer(Modifier.height(WaffleSpace.md))
-            Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-            )
+            Column {
+                Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

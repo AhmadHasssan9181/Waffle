@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Message
 import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Water
 import androidx.compose.material3.Icon
@@ -379,12 +380,31 @@ fun RescueScreen(navController: NavController) {
 
         Spacer(Modifier.height(WaffleSpace.md))
 
-        WaffleSecondaryButton(
-                text = "Send by SMS",
-                onClick = { sendSms(context, message) },
-                modifier = Modifier.fillMaxWidth(),
-                icon = Icons.Rounded.Message
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(WaffleSpace.sm)) {
+            WaffleSecondaryButton(
+                    text = "Send SMS",
+                    onClick = { sendSms(context, message) },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.Message
+            )
+            WaffleSecondaryButton(
+                    text = "Share SOS",
+                    onClick = {
+                        runCatching {
+                            val send =
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, message)
+                                    }
+                            context.startActivity(
+                                    Intent.createChooser(send, "Share SOS location")
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.Share
+            )
+        }
 
         Spacer(Modifier.height(WaffleSpace.xl))
 
