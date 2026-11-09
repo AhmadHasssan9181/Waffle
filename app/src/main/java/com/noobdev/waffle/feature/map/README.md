@@ -4,7 +4,7 @@ The map tab. This is the most stateful screen in the app.
 
 | File | Responsibility |
 | --- | --- |
-| `MapScreen.kt` | Orchestrator: MapLibre instance, route state, hazard layers, camera, screen state. |
+| `MapScreen.kt` | Orchestrator: MapLibre instance, route state, camera, screen state. |
 | `MapSearch.kt` | Search bar, live offline results card with online OpenCage fallback, quick chips. |
 | `RoutePreview.kt` | Route summary card: time, distance, hazard warnings, Drive/Bike/Walk, Tolls/Highways/Ferries/Alts chips, Best/Alt cards, Via stops with edit/reorder, and category shortcuts (Fuel/Food/Rest/Health/Grocery). |
 | `StopPicker.kt` | Bottom sheet that lists actual shops along the route, sorted by detour, with photos, category filters, 24/7 badges and a search fallback. |
@@ -71,8 +71,11 @@ The map tab. This is the most stateful screen in the app.
   light). `autoStyleIndex()` resolves it; Settings still lets people pin an explicit style.
 - Offline style fallback: when offline, `MapStyleResolver.resolve` picks a downloaded layer instead
   of returning a style the device cannot load.
-- Hazards: `LaunchedEffect(hazards, ...)` draws blast-radius polygons from `hazard-source`. The
-  radius is already in metres.
+- Hazards: routing input only, never drawn. `HazardRegistry` turns alerts into blast-radius
+  circles for the router, and drops resolved alerts plus anything older than seven days so a
+  historical import cannot reroute every trip. The route preview still says "avoiding N
+  hazard(s)" and navigation still announces a hazard detour, so the user sees the outcome rather
+  than a red circle on the map.
 - Live rerouting: `OffRouteMonitor` judges the **raw** fix against the active route (three fixes
   beyond 45 m, or one beyond 110 m). It also catches a wrong-way driver who is still exactly on the
   line: four fixes at more than 120° against the route segment's bearing, above 3 m/s. `MapScreen`

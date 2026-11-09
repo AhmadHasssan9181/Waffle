@@ -96,7 +96,6 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -2452,91 +2451,17 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                 }
         }
 
-        // === ACTIVE HAZARD ZONES (blast radius circles) ===
-        LaunchedEffect(hazards, selectedStyleIndex, mapInstance) {
+        // Hazards feed the router and the "avoiding N hazard(s)" line in the route preview, but
+        // they are not drawn. A blast-radius circle over a stale import read as a broken map, so
+        // the geometry stays invisible and only the reroute itself is surfaced.
+        LaunchedEffect(selectedStyleIndex, mapInstance) {
                 val map = mapInstance ?: return@LaunchedEffect
+                // Clear anything a previous build may have left in this style.
                 map.getStyle { style ->
-                        try {
-                                val features = JSONArray()
-                                hazards.forEach { hazard ->
-                                        val ring = JSONArray()
-                                        GeoGeometry.circlePolygon(
-                                                        hazard.center,
-                                                        hazard.radiusMeters,
-                                                        48
-                                                )
-                                                .forEach { point ->
-                                                        ring.put(
-                                                                JSONArray()
-                                                                        .put(point.longitude)
-                                                                        .put(point.latitude)
-                                                        )
-                                                }
-                                        features.put(
-                                                JSONObject()
-                                                        .put("type", "Feature")
-                                                        .put(
-                                                                "geometry",
-                                                                JSONObject()
-                                                                        .put("type", "Polygon")
-                                                                        .put(
-                                                                                "coordinates",
-                                                                                JSONArray().put(ring)
-                                                                        )
-                                                        )
-                                                        .put(
-                                                                "properties",
-                                                                JSONObject()
-                                                                        .put("id", hazard.id)
-                                                                        .put("title", hazard.title)
-                                                                        .put(
-                                                                                "severity",
-                                                                                hazard.severity
-                                                                        )
-                                                                        .put("type", hazard.type)
-                                                        )
-                                        )
-                                }
-                                val geoJson =
-                                        JSONObject()
-                                                .put("type", "FeatureCollection")
-                                                .put("features", features)
-                                                .toString()
-
-                                val existing =
-                                        style.getSourceAs<GeoJsonSource>("hazard-source")
-                                if (existing != null) {
-                                        existing.setGeoJson(geoJson)
-                                } else {
-                                        style.addSource(
-                                                GeoJsonSource("hazard-source", geoJson)
-                                        )
-                                        style.addLayer(
-                                                FillLayer("hazard-fill", "hazard-source")
-                                                        .withProperties(
-                                                                fillColor(
-                                                                        AndroidColor.parseColor(
-                                                                                "#E53935"
-                                                                        )
-                                                                ),
-                                                                fillOpacity(0.16f)
-                                                        )
-                                        )
-                                        style.addLayer(
-                                                LineLayer("hazard-outline", "hazard-source")
-                                                        .withProperties(
-                                                                lineColor(
-                                                                        AndroidColor.parseColor(
-                                                                                "#B71C1C"
-                                                                        )
-                                                                ),
-                                                                lineWidth(1.5f),
-                                                                lineOpacity(0.75f)
-                                                        )
-                                        )
-                                }
-                        } catch (_: Exception) {
-                                // Style was mid-reload; the next recomposition retries.
+                        runCatching {
+                                style.removeLayer("hazard-fill")
+                                style.removeLayer("hazard-outline")
+                                style.removeSource("hazard-source")
                         }
                 }
         }

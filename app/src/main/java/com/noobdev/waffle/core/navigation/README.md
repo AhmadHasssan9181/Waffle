@@ -8,7 +8,7 @@ controller and store are the pieces that keep a trip alive when the map screen i
 | --- | --- |
 | `GeoGeometry.kt` | Distance, bearing, point-in-polygon, circle polygons, route-length helpers. |
 | `BlastRadius.kt` | Converts an alert into a danger radius. Earthquakes use `10^(0.43M - 0.8)` km; floods use the explicit radius, otherwise severity defaults. Routing radius = 65% of the display radius. |
-| `HazardRegistry.kt` | Normalises live alerts into `HazardZone`s (id, centre, radius, severity) for the map and router. |
+| `HazardRegistry.kt` | Normalises live alerts into `HazardZone`s (id, centre, radius, severity) for the router. Routing input only — hazards are not drawn on the map. Drops resolved alerts and anything older than seven days. |
 | `HazardDetourPlanner.kt` | Builds via-points so a route goes around a hazard, and picks the shorter valid detour. |
 | `OffRouteMonitor.kt` | Decides when live GPS is genuinely off the line (accuracy gate, consecutive fixes, retry cooldown). |
 | `NavigationManager.kt` | Session facade for the map screen: route state, road closures, hazard proximity. |
