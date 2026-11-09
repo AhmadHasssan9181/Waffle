@@ -2976,7 +2976,10 @@ fun MapScreen(navController: NavController, currentStyleIndex: Int) {
                                                                 id = "overture:$placeName:${latLng.latitude}:${latLng.longitude}",
                                                                 name = placeName,
                                                                 category =
-                                                                        ShopCategory.fromOfflineType(type),
+                                                                        ShopCategory.fromOfflineType(
+                                                                                type,
+                                                                                placeName
+                                                                        ),
                                                                 lat = latLng.latitude,
                                                                 lon = latLng.longitude,
                                                                 address =

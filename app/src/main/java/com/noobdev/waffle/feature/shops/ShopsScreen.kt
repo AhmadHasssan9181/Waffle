@@ -104,7 +104,8 @@ fun ShopsScreen(
     LaunchedEffect(Unit) {
         val fix = lastKnownLocation(context)
         if (fix != null) {
-            viewModel.load(fix.first, fix.second)
+            val city = resolveCityLabel(context, fix.first, fix.second)
+            viewModel.load(fix.first, fix.second, city)
         } else {
             // No permission or no fix yet: start from the capital rather than showing an empty app.
             viewModel.load(33.6844, 73.0479, "Islamabad")
@@ -367,7 +368,7 @@ private fun CategoryRow(selected: ShopCategory?, onSelect: (ShopCategory?) -> Un
                     onClick = { onSelect(null) }
             )
         }
-        items(ShopCategory.entries) { category ->
+        items(ShopCategory.entries.filter { it != ShopCategory.OTHER }) { category ->
             CategoryChip(
                     label = category.shortLabel,
                     icon = category.icon,
@@ -690,6 +691,28 @@ private fun EmptyShops(filtered: Boolean, onClear: () -> Unit) {
 // ============================================
 // LOCATION
 // ============================================
+
+private suspend fun resolveCityLabel(context: Context, lat: Double, lon: Double): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                        @Suppress("DEPRECATION")
+                        val addresses =
+                                android.location.Geocoder(context, java.util.Locale.ENGLISH)
+                                        .getFromLocation(lat, lon, 1)
+                        val first = addresses?.firstOrNull()
+                        val sub = first?.subLocality?.takeIf { it.isNotBlank() }
+                        val city =
+                                first?.locality?.takeIf { it.isNotBlank() }
+                                        ?: first?.subAdminArea?.takeIf { it.isNotBlank() }
+                        when {
+                            sub != null && city != null && !sub.equals(city, ignoreCase = true) ->
+                                    "$sub, $city"
+                            city != null -> city
+                            else -> sub
+                        }
+                    }
+                    .getOrNull()
+        }
 
 private suspend fun lastKnownLocation(context: Context): Pair<Double, Double>? {
     val granted =

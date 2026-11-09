@@ -145,16 +145,20 @@ class ShopRepository(context: Context) {
     ): List<Shop> {
         OfflineGeocoder.load(appContext)
         return OfflineGeocoder.nearbyAmenities(lat, lon, radiusMeters, limit = 200)
-                .mapIndexed { index, result ->
+                .mapIndexedNotNull { index, result ->
+                    val category = ShopCategory.fromOfflineType(result.type, result.name)
+                    if (category == ShopCategory.OTHER) return@mapIndexedNotNull null
                     Shop(
                             // Overture can contain two different named features at the same
                             // coordinate/type. Include the index so LazyColumn keys stay unique.
                             id = "offline:$index:${result.type}:${result.lat}:${result.lng}",
                             name = result.name,
-                            category = ShopCategory.fromOfflineType(result.type),
+                            category = category,
                             lat = result.lat,
                             lon = result.lng,
                             address = result.address.ifBlank { null },
+                            phone = result.phone,
+                            website = result.website,
                             distanceMeters =
                                     haversineMeters(lat, lon, result.lat, result.lng).toInt()
                     )

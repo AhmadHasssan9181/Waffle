@@ -277,7 +277,10 @@ internal fun ShopFilterRow(
         onSelect: (ShopCategory?) -> Unit
 ) {
     val counts = shops.groupingBy { it.category }.eachCount()
-    val categories = counts.entries.sortedByDescending { it.value }.map { it.key }
+    val categories =
+            ShopCategory.entries.filter {
+                it != ShopCategory.OTHER && (counts[it] ?: 0) > 0
+            }
 
     LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),

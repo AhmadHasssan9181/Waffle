@@ -36,6 +36,7 @@ class ShopPhotoRepository(context: Context) {
                     .build()
 
     private data class GeoPhoto(
+            val title: String,
             val url: String,
             val credit: String?,
             val lat: Double,
@@ -71,6 +72,7 @@ class ShopPhotoRepository(context: Context) {
                             val match =
                                     photos.asSequence()
                                             .filter { it.url !in used }
+                                            .filter { photoMatchesShop(it.title, shop.name) }
                                             .map { photo ->
                                                 photo to
                                                         distanceMeters(
@@ -147,6 +149,7 @@ class ShopPhotoRepository(context: Context) {
                 val lonValue = coords.get("lon")?.asDouble ?: return@mapNotNull null
 
                 GeoPhoto(
+                        title = title,
                         url = url,
                         credit = credit(info.getAsJsonObject("extmetadata")),
                         lat = latValue,
@@ -159,6 +162,24 @@ class ShopPhotoRepository(context: Context) {
     /** Commons titles that are maps, diagrams or logos make terrible shop photos. */
     private fun isPhotoTitle(title: String): Boolean =
             !NOISY_TITLE.containsMatchIn(title) && !title.endsWith(".svg", ignoreCase = true)
+
+    /**
+     * Prevents random street/monument photos from Wikimedia Commons from being attached to an
+     * unrelated nearby shop purely because they are within 70 m.
+     */
+    private fun photoMatchesShop(fileTitle: String, shopName: String): Boolean {
+        val cleanTitle =
+                fileTitle
+                        .removePrefix("File:")
+                        .substringBeforeLast('.')
+                        .lowercase(Locale.ROOT)
+        val tokens =
+                shopName.lowercase(Locale.ROOT)
+                        .split(Regex("[^\\p{L}\\p{N}]+"))
+                        .filter { it.length >= 4 && it !in PHOTO_STOPWORDS }
+        if (tokens.isEmpty()) return false
+        return tokens.any { cleanTitle.contains(it) }
+    }
 
     private fun credit(metadata: com.google.gson.JsonObject?): String? {
         if (metadata == null) return "Wikimedia Commons"
@@ -198,6 +219,31 @@ class ShopPhotoRepository(context: Context) {
         val NOISY_TITLE =
                 Regex(
                         """(?i)\b(map|plan|diagram|chart|logo|flag|coat[ _]of[ _]arms|sign|screenshot|drawing|sketch)\b"""
+                )
+        val PHOTO_STOPWORDS =
+                setOf(
+                        "rawalpindi",
+                        "islamabad",
+                        "pakistan",
+                        "lahore",
+                        "karachi",
+                        "peshawar",
+                        "road",
+                        "street",
+                        "lane",
+                        "main",
+                        "shop",
+                        "store",
+                        "mart",
+                        "mall",
+                        "plaza",
+                        "center",
+                        "centre",
+                        "market",
+                        "branch",
+                        "cantt",
+                        "colony",
+                        "town"
                 )
     }
 }
