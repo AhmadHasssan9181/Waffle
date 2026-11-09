@@ -53,6 +53,25 @@ Useful flags:
 The script extracts `fonts.zip` and `sprite.zip` on the host and pushes the resulting trees, so the
 phone never needs an unzip binary.
 
+## Regenerating the manifest
+
+The pack is rebuilt often (tiles, place index, fonts), and a stale `MANIFEST.json` makes
+`--verify` fail for the wrong reason. After any rebuild:
+
+```powershell
+python tools/maps/build_manifest.py
+```
+
+It rewrites `MANIFEST.json` and `SHA256SUMS.txt` for every release artefact in the pack directory,
+in a stable order, and prints the size and hash of each file.
+
+To confirm the phone matches the pack, hash it on the device — Android's toybox `sha256sum` is
+fast enough for the 200 MB index:
+
+```bash
+adb shell sha256sum /sdcard/Android/data/com.noobdev.waffle/files/places_search.db
+```
+
 ## Manual install
 
 ```bash
