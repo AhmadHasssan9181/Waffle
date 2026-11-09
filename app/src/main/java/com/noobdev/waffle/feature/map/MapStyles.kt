@@ -129,13 +129,19 @@ object MapStyleResolver {
         val dirs = listOfNotNull(context.getExternalFilesDir(null), context.filesDir)
         fun first(name: String): File? = dirs.map { File(it, name) }.firstOrNull { it.isFile }
 
-        val vector = first("pakistan_vector.pmtiles") ?: return null
-        val places = first("pakistan_places.pmtiles") ?: return null
-        val fontRoot = dirs.map { File(it, "fonts") }.firstOrNull { it.isDirectory } ?: return null
+        val vector =
+                first("pakistan_vector.pmtiles")
+                        ?: return logMissingPack(context, "pakistan_vector.pmtiles")
+        val places =
+                first("pakistan_places.pmtiles")
+                        ?: return logMissingPack(context, "pakistan_places.pmtiles")
+        val fontRoot =
+                dirs.map { File(it, "fonts") }.firstOrNull { it.isDirectory }
+                        ?: return logMissingPack(context, "fonts/ (extract fonts.zip)")
         val spriteRoot =
                 dirs.map { File(it, "style") }
                         .firstOrNull { File(it, "sprite.json").isFile }
-                        ?: return null
+                        ?: return logMissingPack(context, "style/sprite.json (extract sprite.zip)")
 
         val requestedName = mapTilerStyles.keys.elementAtOrNull(styleIndex) ?: OFFLINE_STYLE_NAME
         val theme =
@@ -168,6 +174,20 @@ object MapStyleResolver {
                         "assets/sprite/sprite",
                         "file://${spriteRoot.absolutePath}/sprite"
                 )
+    }
+
+    /** Logs which pack piece is missing, so `adb logcat` explains the online fallback. */
+    private fun logMissingPack(context: Context, missing: String): String? {
+        val status = MapPackStatus.read(context)
+        Log.i(
+                "MapStyles",
+                "Local map pack incomplete (missing $missing); using the online basemap. " +
+                        "vector=${MapPackStatus.formatSize(status.vectorBytes)} " +
+                        "places=${MapPackStatus.formatSize(status.placesBytes)} " +
+                        "search=${MapPackStatus.formatSize(status.searchBytes)} " +
+                        "fonts=${status.hasFonts} sprite=${status.hasSprite}"
+        )
+        return null
     }
 
     fun localPmtilesStyle(context: Context): String? {

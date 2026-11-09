@@ -30,7 +30,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BrightnessMedium
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -94,8 +96,10 @@ import com.noobdev.waffle.design.components.statusColor
 import com.noobdev.waffle.design.theme.AppTheme
 import com.noobdev.waffle.design.theme.DangerRed
 import com.noobdev.waffle.design.theme.SafeGreen
+import com.noobdev.waffle.design.theme.WarningOrange
 import com.noobdev.waffle.feature.map.autoStyleIndex
 import com.noobdev.waffle.feature.map.mapTilerStyles
+import com.noobdev.waffle.feature.map.MapPackStatus
 import com.noobdev.waffle.feature.map.VehicleIcon
 import com.noobdev.waffle.feature.map.VehicleIconPicker
 import com.noobdev.waffle.feature.shops.data.ShopDatabase
@@ -150,6 +154,8 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
     var showMapStylePicker by remember { mutableStateOf(false) }
     var showVehiclePicker by remember { mutableStateOf(false) }
     var showLicences by remember { mutableStateOf(false) }
+    var showMapPack by remember { mutableStateOf(false) }
+    val mapPack = remember(showMapPack) { MapPackStatus.read(context) }
 
     Column(
             modifier =
@@ -302,6 +308,26 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                         title = "Offline maps",
                         subtitle = "Streets, satellite and terrain with no signal",
                         onClick = { navController.navigate(Screen.OfflineMaps.route) }
+                )
+                SettingsDivider()
+                SettingsItem(
+                        icon = Icons.Rounded.Public,
+                        title = "Pakistan map pack",
+                        subtitle = mapPack.summary,
+                        trailing = {
+                            Box(
+                                    Modifier.size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                    if (mapPack.complete) SafeGreen
+                                                    else if (mapPack.basemapReady ||
+                                                                    mapPack.searchReady)
+                                                            WarningOrange
+                                                    else MaterialTheme.colorScheme.outline
+                                            )
+                            )
+                        },
+                        onClick = { showMapPack = true }
                 )
             }
         }
@@ -477,6 +503,102 @@ fun SettingsScreen(navController: NavController, preferencesManager: Preferences
                 confirmButton = {
                     TextButton(onClick = { showLicences = false }) { Text("Close") }
                 }
+        )
+    }
+
+    if (showMapPack) {
+        AlertDialog(
+                onDismissRequest = { showMapPack = false },
+                title = { Text("Pakistan map pack") },
+                text = {
+                    Column(
+                            modifier =
+                                    Modifier.heightIn(max = 420.dp)
+                                            .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(WaffleSpace.sm)
+                    ) {
+                        Text(
+                                text =
+                                        if (mapPack.complete)
+                                                "Installed. Waffle renders the local vector basemap, labels and Overture places, online or offline."
+                                        else
+                                                "Side-loaded from the release bundle. Waffle falls back to the online basemap until every piece is present.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(WaffleSpace.xs))
+                        MapPackRow(
+                                label = "Vector basemap",
+                                detail = MapPackStatus.formatSize(mapPack.vectorBytes),
+                                present = mapPack.hasVector
+                        )
+                        MapPackRow(
+                                label = "Places layer",
+                                detail = MapPackStatus.formatSize(mapPack.placesBytes),
+                                present = mapPack.hasPlaces
+                        )
+                        MapPackRow(
+                                label = "Search index",
+                                detail = MapPackStatus.formatSize(mapPack.searchBytes),
+                                present = mapPack.hasSearchIndex
+                        )
+                        MapPackRow(
+                                label = "Label fonts",
+                                detail = if (mapPack.hasFonts) "Noto Sans" else "missing",
+                                present = mapPack.hasFonts
+                        )
+                        MapPackRow(
+                                label = "POI sprite",
+                                detail = if (mapPack.hasSprite) "sprite.json" else "missing",
+                                present = mapPack.hasSprite
+                        )
+                        Spacer(Modifier.height(WaffleSpace.xs))
+                        Text(
+                                text =
+                                        "Install with tools/maps/install_offline_pack.py, " +
+                                                "or push the files into Android/data/com.noobdev.waffle/files/.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showMapPack = false }) { Text("Close") }
+                }
+        )
+    }
+}
+
+@Composable
+private fun MapPackRow(label: String, detail: String, present: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+                Modifier.size(16.dp)
+                        .clip(CircleShape)
+                        .background(
+                                if (present) SafeGreen.copy(alpha = 0.18f)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                        ),
+                contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                    if (present) Icons.Rounded.Check else Icons.Rounded.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(11.dp),
+                    tint = if (present) SafeGreen else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(WaffleSpace.sm))
+        Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+        )
+        Text(
+                text = detail,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
